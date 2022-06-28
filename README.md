@@ -9,6 +9,43 @@
 
 `flatjsonl` renders structured logs as table.
 
+## Why?
+
+Logs, structured as [`JSON Lines`](https://jsonlines.org/) (and sometimes prefixed with non-JSON message), are very 
+common source of information for ad-hoc analytics and investigations. 
+
+They can be processed with `jq` and grepped for a variety of data checks, however there are much more powerful and 
+convenient tools that operate on columnar table data, rather than hierarchical structures.
+
+This tool converts structured logs into tabular data (`CSV`, `SQLite`) with flexible mapping options.
+
+## How it works?
+
+In simplest case this tool iterates log file two times, first pass to collect all available keys and 
+second pass to actually fill the table with already known keys (columns).
+
+During each pass, each line is decoded and traversed recursively.
+Keys for nested elements are declared with dot-separated syntax (same as in `jq`), array indexes are enclosed in `[x]`, 
+e.g. `.deeper.subProperty.[0].foo`.
+
+String values are checked for JSON contents and are also traversed if JSON is found.
+
+If `includeKeys` is not empty in [configuration file](#configurationfile), first pass is skipped.
+
+## Install
+
+```
+go install github.com/vearutop/flatjsonl@latest
+$(go env GOPATH)/bin/flatjsonl --help
+```
+
+Or download binary from [releases](https://github.com/vearutop/flatjsonl/releases).
+
+```
+wget https://github.com/vearutop/flatjsonl/releases/download/v0.1.0/linux_amd64.tar.gz && tar xf linux_amd64.tar.gz && rm linux_amd64.tar.gz
+./flatjsonl -version
+```
+
 ## Usage
 
 ```
