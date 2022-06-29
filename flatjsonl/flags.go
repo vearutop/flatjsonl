@@ -19,6 +19,7 @@ type Flags struct {
 	Config          string
 	ReplaceKeys     bool
 	SkipZeroCols    bool
+	AddSequence     bool
 	MatchLinePrefix string
 
 	ShowKeysFlat bool
@@ -39,6 +40,7 @@ func (f *Flags) Register() {
 	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
 	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")
 	flag.BoolVar(&f.SkipZeroCols, "skip-zero-cols", false, "Skip columns with zero values.")
+	flag.BoolVar(&f.AddSequence, "add-sequence", false, "Add auto incremented sequence number.")
 	flag.StringVar(&f.MatchLinePrefix, "match-line-prefix", "", "Regular expression to capture parts of line prefix (preceding JSON).")
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
@@ -51,7 +53,7 @@ func (f *Flags) Parse() {
 	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat {
 		inputs := f.Inputs()
 
-		if len(inputs) > 0 {
+		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" {
 			f.Output = inputs[0] + ".csv"
 		}
 	}
