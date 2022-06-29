@@ -7,16 +7,20 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/valyala/fastjson"
 )
 
 // Reader scans lines and decodes JSON in them.
 type Reader struct {
+	AddSequence bool
 	MaxLines    int64
 	OnDecodeErr func(err error)
 	Progress    *Progress
 	Buf         []byte
+
+	Sequence int64
 
 	MatchPrefix *regexp.Regexp
 }
@@ -90,6 +94,10 @@ func (rd *Reader) Read(fn string, walkFn func(path []string, value interface{}),
 
 		line := sess.scanner.Bytes()
 		n := sess.pr.CountLine()
+
+		if rd.AddSequence {
+			walkFn([]string{"_sequence"}, float64(atomic.AddInt64(&rd.Sequence, 1)))
+		}
 
 		if len(line) < 2 || line[0] != '{' {
 			if line = rd.prefixedLine(line, walkFn); line == nil {

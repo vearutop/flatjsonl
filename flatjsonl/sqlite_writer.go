@@ -3,6 +3,7 @@ package flatjsonl
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 
 	_ "modernc.org/sqlite" // Database driver.
 )
@@ -15,6 +16,7 @@ type SQLiteWriter struct {
 	row          []string
 	tx           *sql.Tx
 	rowsTx       int
+	seq          int
 }
 
 // NewSQLiteWriter creates an instance of SQLiteWriter.
@@ -44,9 +46,24 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []interface{}) error {
 
 	c.row = c.row[:0]
 
-	res := `INSERT INTO "` + c.tableName + `" VALUES (`
+	c.seq++
+	tableName := c.tableName
+	res := `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(c.seq) + `,`
+	part := 1
 
-	for _, v := range values {
+	for i, v := range values {
+		if i > 0 && i%sqliteMaxKeys == 0 {
+			res = res[:len(res)-1] + ")"
+
+			if err := c.execTx(res); err != nil {
+				return err
+			}
+
+			part++
+			tableName = c.tableName + "_part" + strconv.Itoa(part)
+			res = `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(c.seq) + `,`
+		}
+
 		if v != nil {
 			res += `"` + Format(v) + `",`
 		} else {
@@ -56,6 +73,31 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []interface{}) error {
 
 	res = res[:len(res)-1] + ")"
 
+	if err := c.execTx(res); err != nil {
+		return err
+	}
+
+	c.rowsTx++
+
+	if c.rowsTx >= 1000 {
+		return c.commitTx()
+	}
+
+	return nil
+}
+
+func (c *SQLiteWriter) commitTx() error {
+	if err := c.tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit SQLite transaction: %w", err)
+	}
+
+	c.tx = nil
+	c.rowsTx = 0
+
+	return nil
+}
+
+func (c *SQLiteWriter) execTx(res string) error {
 	if c.tx == nil {
 		tx, err := c.db.Begin()
 		if err != nil {
@@ -71,27 +113,32 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []interface{}) error {
 		return fmt.Errorf("failed to insert SQLite row: %w", err)
 	}
 
-	c.rowsTx++
-
-	if c.rowsTx >= 1000 {
-		err = c.tx.Commit()
-		if err != nil {
-			return fmt.Errorf("failed to commit SQLite transaction: %w", err)
-		}
-
-		c.tx = nil
-		c.rowsTx = 0
-	}
-
 	return nil
 }
+
+const sqliteMaxKeys = 1999 // 2000-1 for _seq_id.
 
 func (c *SQLiteWriter) createTable(keys []string) error {
 	c.tableCreated = true
 
-	createTable := `CREATE TABLE "` + c.tableName + `" (`
+	tableName := c.tableName
+	createTable := `CREATE TABLE "` + tableName + `" (_seq_id integer primary key,`
+	part := 1
 
-	for _, k := range keys {
+	for i, k := range keys {
+		if i > 0 && i%sqliteMaxKeys == 0 {
+			createTable = createTable[:len(createTable)-1] + ")"
+
+			_, err := c.db.Exec(createTable)
+			if err != nil {
+				return fmt.Errorf("failed to create SQLite table with %d keys: %w", len(keys), err)
+			}
+
+			part++
+			tableName = c.tableName + "_part" + strconv.Itoa(part)
+			createTable = `CREATE TABLE "` + tableName + `" (_seq_id integer primary key,`
+		}
+
 		createTable += `"` + k + `",`
 	}
 
@@ -99,7 +146,7 @@ func (c *SQLiteWriter) createTable(keys []string) error {
 
 	_, err := c.db.Exec(createTable)
 	if err != nil {
-		return fmt.Errorf("failed to create SQLite table: %w", err)
+		return fmt.Errorf("failed to create SQLite table with %d keys: %w", len(keys), err)
 	}
 
 	return nil

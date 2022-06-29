@@ -5,6 +5,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"unicode"
 
 	"github.com/swaggest/assertjson"
@@ -40,6 +41,7 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor {
 		pr: pr,
 		w:  &Writer{},
 		rd: &Reader{
+			AddSequence: f.AddSequence,
 			OnDecodeErr: func(err error) {
 				println(err.Error())
 			},
@@ -87,6 +89,8 @@ func (p *Processor) scanKey(k string, path []string, value interface{}) {
 
 func (p *Processor) scanAvailableKeys() error {
 	println("scanning keys...")
+
+	atomic.StoreInt64(&p.rd.Sequence, 0)
 
 	if p.f.MaxLines > 0 {
 		p.rd.MaxLines = int64(p.f.MaxLines)
@@ -200,6 +204,7 @@ func (p *Processor) setupWriters() error {
 
 func (p *Processor) iterateForWriters() error {
 	p.rd.MaxLines = 0
+	atomic.StoreInt64(&p.rd.Sequence, 0)
 
 	if p.f.MaxLines > 0 {
 		p.rd.MaxLines = int64(p.f.MaxLines)
