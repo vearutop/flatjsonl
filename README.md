@@ -30,7 +30,7 @@ e.g. `.deeper.subProperty.[0].foo`.
 
 String values are checked for JSON contents and are also traversed if JSON is found.
 
-If `includeKeys` is not empty in [configuration file](#configurationfile), first pass is skipped.
+If `includeKeys` is not empty in [configuration file](#configuration-file), first pass is skipped.
 
 ## Install
 
