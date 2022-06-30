@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 
 	_ "modernc.org/sqlite" // Database driver.
 )
@@ -17,6 +18,7 @@ type SQLiteWriter struct {
 	tx           *sql.Tx
 	rowsTx       int
 	seq          int
+	replacer     *strings.Replacer
 }
 
 // NewSQLiteWriter creates an instance of SQLiteWriter.
@@ -31,6 +33,7 @@ func NewSQLiteWriter(fn string, tableName string) (*SQLiteWriter, error) {
 	c := &SQLiteWriter{
 		db:        db,
 		tableName: tableName,
+		replacer:  strings.NewReplacer(`"`, `""`),
 	}
 
 	return c, nil
@@ -65,7 +68,7 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []interface{}) error {
 		}
 
 		if v != nil {
-			res += `"` + Format(v) + `",`
+			res += `"` + c.replacer.Replace(Format(v)) + `",`
 		} else {
 			res += `NULL,`
 		}

@@ -40,7 +40,7 @@ func TestNewProcessor(t *testing.T) {
 
 	assert.Equal(t, `_sequence,host,timestamp,name,wins_0_0,wins_0_1,wins_1_0,wins_1_1
 1,host-13,2022/06/24 14:13:36.393275,Gilbert,straight,7♣,one pair,10♥
-2,host-14,2022/06/24 14:13:37.393275,Alexa,two pair,4♠,two pair,9♠
+2,host-14,2022/06/24 14:13:37.393275,"""'Alexa'""",two pair,4♠,two pair,9♠
 3,host-13,2022/06/24 14:13:38.393275,May,,,,
 `, string(b))
 }
