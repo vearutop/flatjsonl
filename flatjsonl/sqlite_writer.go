@@ -125,30 +125,36 @@ func (c *SQLiteWriter) createTable(keys []string) error {
 	c.tableCreated = true
 
 	tableName := c.tableName
-	createTable := `CREATE TABLE "` + tableName + `" (_seq_id integer primary key,`
+	createTable := `CREATE TABLE "` + tableName + `" (
+_seq_id integer primary key,
+`
 	part := 1
 
 	for i, k := range keys {
 		if i > 0 && i%sqliteMaxKeys == 0 {
-			createTable = createTable[:len(createTable)-1] + ")"
+			createTable = createTable[:len(createTable)-2] + "\n)"
 
 			_, err := c.db.Exec(createTable)
 			if err != nil {
+				println(createTable)
 				return fmt.Errorf("failed to create SQLite table with %d keys: %w", len(keys), err)
 			}
 
 			part++
 			tableName = c.tableName + "_part" + strconv.Itoa(part)
-			createTable = `CREATE TABLE "` + tableName + `" (_seq_id integer primary key,`
+			createTable = `CREATE TABLE "` + tableName + `" (
+_seq_id integer primary key,
+`
 		}
 
-		createTable += `"` + k + `",`
+		createTable += `"` + k + `",` + "\n"
 	}
 
-	createTable = createTable[:len(createTable)-1] + ")"
+	createTable = createTable[:len(createTable)-2] + "\n)"
 
 	_, err := c.db.Exec(createTable)
 	if err != nil {
+		println(createTable)
 		return fmt.Errorf("failed to create SQLite table with %d keys: %w", len(keys), err)
 	}
 

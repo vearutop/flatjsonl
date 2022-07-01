@@ -64,27 +64,29 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor {
 }
 
 func (p *Processor) scanKey(k string, path []string, value interface{}) {
-	if !p.flKeysMap[k] {
-		p.flKeysMap[k] = true
+	mk := p.k(k)
+
+	if !p.flKeysMap[mk] {
+		p.flKeysMap[mk] = true
 		p.flKeysList = append(p.flKeysList, k)
+
+		p.keyHierarchy.Add(path)
 	}
 
 	switch v := value.(type) {
 	case string:
 		if v != "" {
-			p.nonZeroKeys[k] = true
+			p.nonZeroKeys[mk] = true
 		}
 	case float64:
 		if v != 0 {
-			p.nonZeroKeys[k] = true
+			p.nonZeroKeys[mk] = true
 		}
 	case bool:
 		if v {
-			p.nonZeroKeys[k] = true
+			p.nonZeroKeys[mk] = true
 		}
 	}
-
-	p.keyHierarchy.Add(path)
 }
 
 func (p *Processor) scanAvailableKeys() error {
@@ -202,6 +204,14 @@ func (p *Processor) setupWriters() error {
 	return nil
 }
 
+func (p *Processor) k(k string) string {
+	if p.f.CaseSensitiveKeys {
+		return k
+	}
+
+	return strings.ToLower(k)
+}
+
 func (p *Processor) iterateForWriters() error {
 	p.rd.MaxLines = 0
 	atomic.StoreInt64(&p.rd.Sequence, 0)
@@ -210,14 +220,20 @@ func (p *Processor) iterateForWriters() error {
 		p.rd.MaxLines = int64(p.f.MaxLines)
 	}
 
+	includeKeys := make(map[string]int, len(p.includeKeys))
+	for k, i := range p.includeKeys {
+		includeKeys[p.k(k)] = i
+	}
+
 	for _, input := range p.inputs {
 		values := make([]interface{}, len(p.includeKeys))
 		keys := p.prepareKeys()
 
 		err := p.rd.Read(input, func(path []string, value interface{}) {
 			k := KeyFromPath(path)
+			mk := p.k(k)
 
-			if i, ok := p.includeKeys[k]; ok {
+			if i, ok := includeKeys[mk]; ok {
 				values[i] = value
 			}
 		}, func(n int64) error {
@@ -242,13 +258,18 @@ func (p *Processor) iterateForWriters() error {
 func (p *Processor) prepareKeys() []string {
 	keys := make([]string, len(p.includeKeys))
 
+	replaceKeys := make(map[string]string)
 	replaceByKey := make(map[string]string)
+
 	for k, r := range p.cfg.ReplaceKeys {
-		replaceByKey[r] = k
+		mk := p.k(k)
+
+		replaceByKey[r] = mk
+		replaceKeys[mk] = r
 	}
 
 	for k, i := range p.includeKeys {
-		if rep, ok := p.cfg.ReplaceKeys[k]; ok {
+		if rep, ok := replaceKeys[k]; ok {
 			k = rep
 		} else if p.f.ReplaceKeys {
 			sk := strings.Split(k, ".")
