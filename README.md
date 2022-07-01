@@ -95,14 +95,22 @@ Usage of flatjsonl:
 ```
 
 Configuration file can also have [regexp replaces](https://pkg.go.dev/regexp#Regexp.ReplaceAllString) as a map of 
-regular expression to replace:
+regular expression as keys and replace patterns as values.
+
+It is also possible to use simplified syntax with `*`, where `*` means key segment between two dots.
+
 ```json
 {
   "replaceKeysRegex": {
     "^\\.foo\\.([^.]+)$": "f00_${1} VARCHAR(255)",
-    "^\\.foo\\.([^.]+)\\.([^.]+)$": "f00_${2}_${1} VARCHAR(255)"
+    ".foo.*.*": "f00_${2}_${1} VARCHAR(255)"
   }
 }
+```
+This example would produce such transformation.
+```
+.foo.bar => f00_bar VARCHAR(255)
+.foo.baz.qux => f00_qux_baz VARCHAR(255)
 ```
 
 Regular expression replaces are applied to keys that have no matches in `replaceKeys`.

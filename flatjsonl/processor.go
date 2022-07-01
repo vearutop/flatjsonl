@@ -62,7 +62,13 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor {
 	}
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
+	starRepl := strings.NewReplacer(".", "\\.", "*", "([^.]+)")
+
 	for reg, rep := range p.cfg.ReplaceKeysRegex {
+		if strings.Contains(reg, "*") {
+			reg = "^" + starRepl.Replace(reg) + "$"
+		}
+
 		r, err := regexp.Compile(reg)
 		if err != nil {
 			println(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
