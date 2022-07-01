@@ -136,7 +136,6 @@ _seq_id integer primary key,
 
 			_, err := c.db.Exec(createTable)
 			if err != nil {
-				println(createTable)
 				return fmt.Errorf("failed to create SQLite table with %d keys: %w", len(keys), err)
 			}
 
@@ -154,7 +153,6 @@ _seq_id integer primary key,
 
 	_, err := c.db.Exec(createTable)
 	if err != nil {
-		println(createTable)
 		return fmt.Errorf("failed to create SQLite table with %d keys: %w", len(keys), err)
 	}
 
