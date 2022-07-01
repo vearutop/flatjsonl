@@ -16,11 +16,12 @@ type Flags struct {
 	MaxLines     int
 	MaxLinesKeys int
 
-	Config          string
-	ReplaceKeys     bool
-	SkipZeroCols    bool
-	AddSequence     bool
-	MatchLinePrefix string
+	Config            string
+	ReplaceKeys       bool
+	SkipZeroCols      bool
+	AddSequence       bool
+	MatchLinePrefix   string
+	CaseSensitiveKeys bool
 
 	ShowKeysFlat bool
 	ShowKeysHier bool
@@ -41,6 +42,7 @@ func (f *Flags) Register() {
 	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")
 	flag.BoolVar(&f.SkipZeroCols, "skip-zero-cols", false, "Skip columns with zero values.")
 	flag.BoolVar(&f.AddSequence, "add-sequence", false, "Add auto incremented sequence number.")
+	flag.BoolVar(&f.CaseSensitiveKeys, "case-sensitive-keys", false, "Use case-sensitive keys (can fail for SQLite).")
 	flag.StringVar(&f.MatchLinePrefix, "match-line-prefix", "", "Regular expression to capture parts of line prefix (preceding JSON).")
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
