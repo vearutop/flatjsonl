@@ -94,6 +94,25 @@ Usage of flatjsonl:
 }
 ```
 
+Configuration file can also have [regexp replaces](https://pkg.go.dev/regexp#Regexp.ReplaceAllString) as a map of 
+regular expression to replace:
+```json
+{
+  "replaceKeysRegex": {
+    "^\\.foo\\.([^.]+)$": "f00_${1} VARCHAR(255)",
+    "^\\.foo\\.([^.]+)\\.([^.]+)$": "f00_${2}_${1} VARCHAR(255)"
+  }
+}
+```
+
+Regular expression replaces are applied to keys that have no matches in `replaceKeys`.
+
+Regular expressions are checked in no particular order, when replaced key is different from original checks are 
+stopped and replaced key is used.
+
+Multiple regular expression could match and replace a key, this can lead to undefined behavior, to avoid it is 
+recommended to use mutually exclusive expressions and match against full key by having `^` and `$` at the edges of exp.
+
 ## Examples
 
 Import data from `events.jsonl` as columns described in `events.json` config file to 

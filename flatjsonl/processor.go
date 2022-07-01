@@ -21,7 +21,8 @@ type Processor struct {
 	w  *Writer
 	rd *Reader
 
-	includeKeys map[string]int
+	includeKeys  map[string]int
+	replaceRegex map[*regexp.Regexp]string
 
 	flKeysMap    map[string]bool
 	flKeysList   []string
@@ -58,6 +59,16 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor {
 
 	if f.MatchLinePrefix != "" {
 		p.rd.MatchPrefix = regexp.MustCompile(f.MatchLinePrefix)
+	}
+
+	p.replaceRegex = map[*regexp.Regexp]string{}
+	for reg, rep := range p.cfg.ReplaceKeysRegex {
+		r, err := regexp.Compile(reg)
+		if err != nil {
+			println(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
+		}
+
+		p.replaceRegex[r] = rep
 	}
 
 	return p
@@ -269,32 +280,47 @@ func (p *Processor) prepareKeys() []string {
 	}
 
 	for k, i := range p.includeKeys {
-		if rep, ok := replaceKeys[k]; ok {
-			k = rep
-		} else if p.f.ReplaceKeys {
-			sk := strings.Split(k, ".")
-			i := len(sk) - 1
-			snk := strings.Trim(strings.ToLower(sk[i]), "[]")
-
-			for {
-				if _, ok := replaceByKey[snk]; !ok && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
-					replaceByKey[snk] = k
-					k = snk
-
-					break
-				}
-				i--
-
-				if i == 0 {
-					break
-				}
-
-				snk = strings.Trim(strings.ToLower(sk[i]), "[]") + "_" + snk
-			}
-		}
-
-		keys[i] = k
+		keys[i] = p.prepareKey(k, replaceKeys, replaceByKey)
 	}
 
 	return keys
+}
+
+func (p *Processor) prepareKey(k string, replaceKeys, replaceByKey map[string]string) string {
+	if rep, ok := replaceKeys[k]; ok {
+		return rep
+	}
+
+	for reg, rep := range p.replaceRegex {
+		kr := reg.ReplaceAllString(k, rep)
+		if kr != k {
+			return kr
+		}
+	}
+
+	if !p.f.ReplaceKeys {
+		return k
+	}
+
+	sk := strings.Split(k, ".")
+	i := len(sk) - 1
+	snk := strings.Trim(strings.ToLower(sk[i]), "[]")
+
+	for {
+		if _, ok := replaceByKey[snk]; !ok && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
+			replaceByKey[snk] = k
+			k = snk
+
+			break
+		}
+		i--
+
+		if i == 0 {
+			break
+		}
+
+		snk = strings.Trim(strings.ToLower(sk[i]), "[]") + "_" + snk
+	}
+
+	return k
 }
