@@ -22,16 +22,40 @@ type Processor struct {
 	rd *Reader
 
 	includeKeys  map[string]int
+	includeRegex []*regexp.Regexp
 	replaceRegex map[*regexp.Regexp]string
 
 	flKeysMap    map[string]bool
 	flKeysList   []string
 	keyHierarchy Key
 	nonZeroKeys  map[string]bool
+
+	// keyTypes contains cumulative types of data using Processor.k mutations as key.
+	keyTypes map[string]Type
+
+	replaceKeys  map[string]string
+	replaceByKey map[string]string
+
+	// keys are ordered replaced column names, indexes match values of includeKeys.
+	keys []string
+
+	// types are ordered types of respective keys.
+	types []Type
 }
 
+// Type is a scalar type.
+type Type string
+
+// Type enumeration.
+const (
+	TypeString = "string"
+	TypeInt    = "int"
+	TypeFloat  = "float"
+	TypeBool   = "bool"
+)
+
 // NewProcessor creates an instance of Processor.
-func NewProcessor(f Flags, cfg Config, inputs []string) *Processor {
+func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: funlen // Yeah, that's what she said.
 	pr := &Progress{}
 
 	p := &Processor{
@@ -55,6 +79,7 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor {
 		flKeysList:   make([]string, 0),
 		keyHierarchy: Key{Name: "."},
 		nonZeroKeys:  map[string]bool{},
+		keyTypes:     map[string]Type{},
 	}
 
 	if f.MatchLinePrefix != "" {
@@ -62,7 +87,27 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor {
 	}
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
-	starRepl := strings.NewReplacer(".", "\\.", "*", "([^.]+)")
+	starRepl := strings.NewReplacer(
+		".", "\\.",
+		"[", "\\[",
+		"]", "\\]",
+		"{", "\\{",
+		"}", "\\}",
+		"*", "([^.]+)",
+	)
+
+	for _, reg := range p.cfg.IncludeKeysRegex {
+		if strings.Contains(reg, "*") {
+			reg = "^" + starRepl.Replace(reg) + "$"
+		}
+
+		r, err := regexp.Compile(reg)
+		if err != nil {
+			println(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
+		}
+
+		p.includeRegex = append(p.includeRegex, r)
+	}
 
 	for reg, rep := range p.cfg.ReplaceKeysRegex {
 		if strings.Contains(reg, "*") {
@@ -90,20 +135,66 @@ func (p *Processor) scanKey(k string, path []string, value interface{}) {
 		p.keyHierarchy.Add(path)
 	}
 
+	t := p.keyTypes[mk]
+
 	switch v := value.(type) {
 	case string:
+		p.keyTypes[mk] = t.Update(TypeString)
 		if v != "" {
 			p.nonZeroKeys[mk] = true
 		}
 	case float64:
+		isInt := float64(int(v)) == v
+		if isInt {
+			p.keyTypes[mk] = t.Update(TypeInt)
+		} else {
+			p.keyTypes[mk] = t.Update(TypeFloat)
+		}
+
 		if v != 0 {
 			p.nonZeroKeys[mk] = true
 		}
 	case bool:
+		p.keyTypes[mk] = t.Update(TypeBool)
+
 		if v {
 			p.nonZeroKeys[mk] = true
 		}
 	}
+}
+
+// Update merges original type with updated.
+func (t Type) Update(u Type) Type {
+	// Undefined type is replaced by update.
+	if t == "" {
+		return u
+	}
+
+	// Same type is not updated.
+	if t == u {
+		return t
+	}
+
+	// String replaces any type.
+	if u == TypeString || t == TypeString {
+		return TypeString
+	}
+
+	// Bool and non-bool make unconstrained type: string.
+	if t == TypeBool && u != TypeBool {
+		return TypeString
+	}
+
+	// Float overrides Int.
+	if t == TypeInt && u == TypeFloat {
+		return TypeFloat
+	}
+
+	if t == TypeFloat && u == TypeInt {
+		return TypeFloat
+	}
+
+	panic("don't know how to update " + t + " with " + u)
 }
 
 func (p *Processor) scanAvailableKeys() error {
@@ -131,13 +222,33 @@ func (p *Processor) scanAvailableKeys() error {
 
 	i := 0
 
+	for _, k := range p.cfg.IncludeKeys {
+		p.includeKeys[k] = i
+		i++
+	}
+
 	for _, k := range p.flKeysList {
-		if !p.f.SkipZeroCols {
-			p.includeKeys[k] = i
-			i++
-		} else if p.nonZeroKeys[k] {
-			p.includeKeys[k] = i
-			i++
+		if _, ok := p.includeKeys[k]; ok {
+			continue
+		}
+
+		if len(p.includeRegex) > 0 && len(p.cfg.IncludeKeys) > 0 {
+			for _, r := range p.includeRegex {
+				if r.MatchString(k) {
+					p.includeKeys[k] = i
+					i++
+
+					break
+				}
+			}
+		} else {
+			if !p.f.SkipZeroCols {
+				p.includeKeys[k] = i
+				i++
+			} else if p.nonZeroKeys[k] {
+				p.includeKeys[k] = i
+				i++
+			}
 		}
 	}
 
@@ -156,7 +267,7 @@ func (p *Processor) Process() error {
 		return err
 	}
 
-	if len(p.cfg.IncludeKeys) != 0 {
+	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) != 0 {
 		for i, k := range p.cfg.IncludeKeys {
 			p.includeKeys[k] = i
 		}
@@ -180,10 +291,32 @@ func (p *Processor) Process() error {
 
 func (p *Processor) maybeShowKeys() error {
 	if p.f.ShowKeysFlat {
-		println("keys:")
+		fmt.Println("keys:")
 
 		for _, k := range p.flKeysList {
-			println(`"` + k + `",`)
+			fmt.Println(`"` + k + `",`)
+		}
+	}
+
+	if p.f.ShowKeysInfo {
+		fmt.Println("keys info:")
+
+		keyByIndex := map[int]string{}
+
+		for k, i := range p.includeKeys {
+			keyByIndex[i] = k
+		}
+
+		for i, k := range p.keys {
+			orig := keyByIndex[i]
+			t := p.types[i]
+
+			line := k + ", TYPE " + string(t)
+			if orig != k {
+				line = orig + " REPLACED WITH " + line
+			}
+
+			fmt.Println(line)
 		}
 	}
 
@@ -193,7 +326,7 @@ func (p *Processor) maybeShowKeys() error {
 			return err
 		}
 
-		println(string(b))
+		fmt.Println(string(b))
 	}
 
 	return nil
@@ -210,7 +343,7 @@ func (p *Processor) setupWriters() error {
 	}
 
 	if p.f.SQLite != "" {
-		cw, err := NewSQLiteWriter(p.f.SQLite, p.f.SQLTable)
+		cw, err := NewSQLiteWriter(p.f.SQLite, p.f.SQLTable, p)
 		if err != nil {
 			return fmt.Errorf("failed to open SQLite file: %w", err)
 		}
@@ -244,7 +377,7 @@ func (p *Processor) iterateForWriters() error {
 
 	for _, input := range p.inputs {
 		values := make([]interface{}, len(p.includeKeys))
-		keys := p.prepareKeys()
+		p.prepareKeys()
 
 		err := p.rd.Read(input, func(path []string, value interface{}) {
 			k := KeyFromPath(path)
@@ -254,7 +387,7 @@ func (p *Processor) iterateForWriters() error {
 				values[i] = value
 			}
 		}, func(n int64) error {
-			if err := p.w.ReceiveRow(keys, values); err != nil {
+			if err := p.w.ReceiveRow(p.keys, values); err != nil {
 				return err
 			}
 
@@ -272,49 +405,56 @@ func (p *Processor) iterateForWriters() error {
 	return nil
 }
 
-func (p *Processor) prepareKeys() []string {
-	keys := make([]string, len(p.includeKeys))
+func (p *Processor) prepareKeys() {
+	p.keys = make([]string, len(p.includeKeys))
+	p.types = make([]Type, len(p.includeKeys))
 
-	replaceKeys := make(map[string]string)
-	replaceByKey := make(map[string]string)
+	p.replaceKeys = make(map[string]string)
+	p.replaceByKey = make(map[string]string)
 
 	for k, r := range p.cfg.ReplaceKeys {
 		mk := p.k(k)
 
-		replaceByKey[r] = mk
-		replaceKeys[mk] = r
+		p.replaceByKey[r] = mk
+		p.replaceKeys[mk] = r
 	}
 
 	for k, i := range p.includeKeys {
-		keys[i] = p.prepareKey(k, replaceKeys, replaceByKey)
+		p.keys[i], p.types[i] = p.prepareKey(k)
 	}
-
-	return keys
 }
 
-func (p *Processor) prepareKey(k string, replaceKeys, replaceByKey map[string]string) string {
-	if rep, ok := replaceKeys[k]; ok {
-		return rep
+func (p *Processor) prepareKey(k string) (string, Type) {
+	mk := p.k(k)
+	t := p.keyTypes[mk]
+
+	if rep, ok := p.replaceKeys[mk]; ok {
+		return rep, t
 	}
 
 	for reg, rep := range p.replaceRegex {
 		kr := reg.ReplaceAllString(k, rep)
 		if kr != k {
-			return kr
+			if strings.HasSuffix(kr, "|to_snake_case") {
+				kr = toSnakeCase(strings.TrimSuffix(kr, "|to_snake_case"))
+			}
+
+			return kr, t
 		}
 	}
 
 	if !p.f.ReplaceKeys {
-		return k
+		return k, t
 	}
 
 	sk := strings.Split(k, ".")
 	i := len(sk) - 1
-	snk := strings.Trim(strings.ToLower(sk[i]), "[]")
+	ski := toSnakeCase(sk[i])
+	snk := strings.Trim(ski, "[]")
 
 	for {
-		if _, ok := replaceByKey[snk]; !ok && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
-			replaceByKey[snk] = k
+		if _, ok := p.replaceByKey[snk]; !ok && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
+			p.replaceByKey[snk] = k
 			k = snk
 
 			break
@@ -325,8 +465,21 @@ func (p *Processor) prepareKey(k string, replaceKeys, replaceByKey map[string]st
 			break
 		}
 
-		snk = strings.Trim(strings.ToLower(sk[i]), "[]") + "_" + snk
+		ski := toSnakeCase(sk[i])
+		snk = strings.Trim(ski, "[]") + "_" + snk
 	}
 
-	return k
+	return k, t
+}
+
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)
+
+func toSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+
+	return strings.ToLower(snake)
 }

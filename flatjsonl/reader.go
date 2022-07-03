@@ -77,7 +77,7 @@ func (rd *Reader) session(fn string) (*readSession, error) {
 }
 
 // Read reads single file with JSON lines.
-func (rd *Reader) Read(fn string, walkFn func(path []string, value interface{}), lineDone func(n int64) error) error { // nolint:cyclop
+func (rd *Reader) Read(fn string, walkFn func(path []string, value interface{}), lineDone func(n int64) error) error {
 	sess, err := rd.session(fn)
 	if err != nil {
 		return err

@@ -25,6 +25,7 @@ type Flags struct {
 
 	ShowKeysFlat bool
 	ShowKeysHier bool
+	ShowKeysInfo bool
 }
 
 // Register registers command-line flags.
@@ -40,6 +41,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.Config, "config", "", "Configuration JSON file.")
 	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
 	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")
+	flag.BoolVar(&f.ShowKeysInfo, "show-keys-info", false, "Show keys, their replaces and types.")
 	flag.BoolVar(&f.SkipZeroCols, "skip-zero-cols", false, "Skip columns with zero values.")
 	flag.BoolVar(&f.AddSequence, "add-sequence", false, "Add auto incremented sequence number.")
 	flag.BoolVar(&f.CaseSensitiveKeys, "case-sensitive-keys", false, "Use case-sensitive keys (can fail for SQLite).")
