@@ -19,10 +19,11 @@ type SQLiteWriter struct {
 	rowsTx       int
 	seq          int
 	replacer     *strings.Replacer
+	p            *Processor
 }
 
 // NewSQLiteWriter creates an instance of SQLiteWriter.
-func NewSQLiteWriter(fn string, tableName string) (*SQLiteWriter, error) {
+func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, error) {
 	var err error
 
 	db, err := sql.Open("sqlite", fn)
@@ -34,6 +35,7 @@ func NewSQLiteWriter(fn string, tableName string) (*SQLiteWriter, error) {
 		db:        db,
 		tableName: tableName,
 		replacer:  strings.NewReplacer(`"`, `""`),
+		p:         p,
 	}
 
 	return c, nil
@@ -146,7 +148,17 @@ _seq_id integer primary key,
 `
 		}
 
-		createTable += `"` + k + `",` + "\n"
+		tp := ""
+
+		t := c.p.types[i]
+		switch t {
+		case TypeInt, TypeBool:
+			tp = " INTEGER"
+		case TypeFloat:
+			tp = " REAL"
+		}
+
+		createTable += `"` + k + `"` + tp + `,` + "\n"
 	}
 
 	createTable = createTable[:len(createTable)-2] + "\n)"

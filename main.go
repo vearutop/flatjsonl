@@ -1,13 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 
 	"github.com/bool64/dev/version"
+	"github.com/swaggest/assertjson/json5"
 	"github.com/vearutop/flatjsonl/flatjsonl"
 )
 
@@ -41,7 +41,7 @@ func main() {
 			log.Fatalf("failed to read config file: %v", err)
 		}
 
-		err = json.Unmarshal(b, &cfg)
+		err = json5.Unmarshal(b, &cfg)
 		if err != nil {
 			log.Fatalf("failed to decode config file: %v", err)
 		}
