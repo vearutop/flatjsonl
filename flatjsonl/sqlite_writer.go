@@ -42,7 +42,7 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 }
 
 // ReceiveRow receives rows.
-func (c *SQLiteWriter) ReceiveRow(keys []string, values []interface{}) error {
+func (c *SQLiteWriter) ReceiveRow(keys []string, values []Value) error {
 	if !c.tableCreated {
 		if err := c.createTable(keys); err != nil {
 			return err
@@ -69,8 +69,8 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []interface{}) error {
 			res = `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(c.seq) + `,`
 		}
 
-		if v != nil {
-			res += `"` + c.replacer.Replace(Format(v)) + `",`
+		if v.Type != TypeNull && v.Type != TypeAbsent {
+			res += `"` + c.replacer.Replace(v.Format()) + `",`
 		} else {
 			res += `NULL,`
 		}

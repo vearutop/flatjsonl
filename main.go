@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"runtime/pprof"
 
 	"github.com/bool64/dev/version"
 	"github.com/swaggest/assertjson/json5"
@@ -24,6 +26,24 @@ func main() {
 		fmt.Println(version.Info().Version)
 
 		return
+	}
+
+	if f.CPUProfile != "" {
+		f, err := os.Create(f.CPUProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	if f.MemProfile != "" {
+		f, err := os.Create(f.MemProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.WriteHeapProfile(f)
+		f.Close()
 	}
 
 	inputs := f.Inputs()

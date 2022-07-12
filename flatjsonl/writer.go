@@ -2,12 +2,14 @@ package flatjsonl
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 )
 
 // WriteReceiver can receive a row for processing.
 type WriteReceiver interface {
-	ReceiveRow(keys []string, values []interface{}) error
+	ReceiveRow(keys []string, values []Value) error
 	Close() error
 }
 
@@ -16,8 +18,38 @@ type Writer struct {
 	receivers []WriteReceiver
 }
 
+// Value encapsulates value of an allowed Type.
+type Value struct {
+	Seq       int64
+	Type      Type
+	String    string
+	Number    float64
+	RawNumber string
+	Bool      bool
+}
+
+func (v Value) Format() string {
+	switch v.Type {
+	case TypeString:
+		return v.String
+	case TypeFloat:
+		if len(v.RawNumber) > 0 {
+			return v.RawNumber
+		}
+		return strconv.FormatFloat(v.Number, 'g', 5, 64)
+	case TypeBool:
+		return strconv.FormatBool(v.Bool)
+	case TypeNull:
+		return "NULL"
+	case TypeAbsent:
+		return "ABSENT"
+	default:
+		panic(fmt.Sprintf("BUG: don't know how to format: %+v", v))
+	}
+}
+
 // ReceiveRow passes row to all receivers.
-func (w *Writer) ReceiveRow(keys []string, values []interface{}) error {
+func (w *Writer) ReceiveRow(keys []string, values []Value) error {
 	var errs []string
 
 	for _, r := range w.receivers {

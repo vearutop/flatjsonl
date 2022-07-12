@@ -26,6 +26,9 @@ type Flags struct {
 	ShowKeysFlat bool
 	ShowKeysHier bool
 	ShowKeysInfo bool
+
+	CPUProfile string
+	MemProfile string
 }
 
 // Register registers command-line flags.
@@ -48,13 +51,16 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.MatchLinePrefix, "match-line-prefix", "", "Regular expression to capture parts of line prefix (preceding JSON).")
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
+
+	flag.StringVar(&f.CPUProfile, "cpu-prof", "", "Write cpu profile to file.")
+	flag.StringVar(&f.MemProfile, "mem-prof", "", "Write mem profile to file.")
 }
 
 // Parse parses and prepares command-line flags.
 func (f *Flags) Parse() {
 	flag.Parse()
 
-	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat {
+	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo {
 		inputs := f.Inputs()
 
 		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" {
