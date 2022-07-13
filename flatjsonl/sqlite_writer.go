@@ -151,7 +151,7 @@ _seq_id integer primary key,
 		tp := ""
 
 		t := c.p.types[i]
-		switch t {
+		switch t { // nolint: exhaustive
 		case TypeInt, TypeBool:
 			tp = " INTEGER"
 		case TypeFloat:

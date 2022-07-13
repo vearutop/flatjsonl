@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// ProgressStatus describes current progress.
 type ProgressStatus struct {
 	Task           string
 	DonePercent    float64
@@ -39,7 +40,7 @@ func (p *Progress) Start(total int64, cr *CountingReader, task string) {
 	if prnt == nil {
 		prnt = func(s ProgressStatus) {
 			if s.Task != "" {
-				s.Task = s.Task + ": "
+				s.Task += ": "
 			}
 
 			println(fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, remaining %s",

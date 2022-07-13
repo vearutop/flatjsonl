@@ -28,14 +28,16 @@ type Value struct {
 	Bool      bool
 }
 
+// Format formats Value as string.
 func (v Value) Format() string {
-	switch v.Type {
+	switch v.Type { // nolint: exhaustive
 	case TypeString:
 		return v.String
 	case TypeFloat:
 		if len(v.RawNumber) > 0 {
 			return v.RawNumber
 		}
+
 		return strconv.FormatFloat(v.Number, 'g', 5, 64)
 	case TypeBool:
 		return strconv.FormatBool(v.Bool)

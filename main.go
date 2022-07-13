@@ -14,12 +14,19 @@ import (
 )
 
 func main() {
-	var showVersion bool
+	var (
+		showVersion bool
+		cpuProfile  string
+		memProfile  string
+	)
 
 	f := flatjsonl.Flags{}
 
 	f.Register()
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit.")
+	flag.StringVar(&cpuProfile, "cpu-prof", "", "Write CPU profile to file.")
+	flag.StringVar(&memProfile, "mem-prof", "", "Write mem profile to file.")
+
 	f.Parse()
 
 	if showVersion {
@@ -28,22 +35,17 @@ func main() {
 		return
 	}
 
-	if f.CPUProfile != "" {
-		f, err := os.Create(f.CPUProfile)
+	if cpuProfile != "" {
+		f, err := os.Create(cpuProfile)
 		if err != nil {
 			log.Fatal(err)
 		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
 
-	if f.MemProfile != "" {
-		f, err := os.Create(f.MemProfile)
-		if err != nil {
+		if err = pprof.StartCPUProfile(f); err != nil {
 			log.Fatal(err)
 		}
-		pprof.WriteHeapProfile(f)
-		f.Close()
+
+		defer pprof.StopCPUProfile()
 	}
 
 	inputs := f.Inputs()
@@ -71,5 +73,20 @@ func main() {
 
 	if err := proc.Process(); err != nil {
 		log.Fatal(err)
+	}
+
+	if memProfile != "" {
+		f, err := os.Create(memProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal(err)
+		}
+
+		if err := f.Close(); err != nil {
+			log.Fatal(err)
+		}
 	}
 }

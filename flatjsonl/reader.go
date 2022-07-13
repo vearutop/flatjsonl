@@ -20,6 +20,7 @@ type Reader struct {
 	OnError     func(err error)
 	Progress    *Progress
 	Buf         []byte
+	Concurrency int
 
 	Sequence int64
 
@@ -34,8 +35,6 @@ type readSession struct {
 	setupWalker  func(w *FastWalker)
 	lineStarted  func(seq, n int64) error
 	lineFinished func(seq, n int64) error
-	async        bool
-	onError      func(err error)
 }
 
 func (rs *readSession) Close() {
@@ -93,7 +92,12 @@ type syncWorker struct {
 
 // Read reads single file with JSON lines.
 func (rd *Reader) Read(sess *readSession) error {
-	semaphore := make(chan *syncWorker, 2*runtime.NumCPU())
+	concurrency := rd.Concurrency
+	if concurrency == 0 {
+		concurrency = 2 * runtime.NumCPU()
+	}
+
+	semaphore := make(chan *syncWorker, concurrency)
 	for i := 0; i < cap(semaphore); i++ {
 		w := &FastWalker{}
 		sess.setupWalker(w)
@@ -182,11 +186,9 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 		if rd.OnError != nil {
 			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
 		}
-
-		return nil
+	} else {
+		w.walker.WalkFastJSON(seq, path, pv)
 	}
-
-	w.walker.WalkFastJSON(seq, path, pv)
 
 	if sess.lineFinished != nil {
 		if err := sess.lineFinished(seq, n); err != nil {

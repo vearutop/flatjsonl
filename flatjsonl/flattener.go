@@ -15,6 +15,7 @@ func KeyFromPath(path []string) string {
 
 var pl fastjson.ParserPool
 
+// FastWalker walks JSON with fastjson.
 type FastWalker struct {
 	FnNumber func(seq int64, path []string, value float64, raw []byte)
 	FnString func(seq int64, path []string, value []byte)

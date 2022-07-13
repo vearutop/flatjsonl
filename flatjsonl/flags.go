@@ -2,6 +2,7 @@ package flatjsonl
 
 import (
 	"flag"
+	"runtime"
 	"strings"
 )
 
@@ -27,8 +28,7 @@ type Flags struct {
 	ShowKeysHier bool
 	ShowKeysInfo bool
 
-	CPUProfile string
-	MemProfile string
+	Concurrency int
 }
 
 // Register registers command-line flags.
@@ -52,8 +52,7 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
 
-	flag.StringVar(&f.CPUProfile, "cpu-prof", "", "Write cpu profile to file.")
-	flag.StringVar(&f.MemProfile, "mem-prof", "", "Write mem profile to file.")
+	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
 }
 
 // Parse parses and prepares command-line flags.

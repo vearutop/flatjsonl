@@ -18,9 +18,7 @@ type flKey struct {
 	ck     string
 }
 
-func (p *Processor) scanKey(pathHash []byte, path []string, t Type, isZero bool) {
-	pk := string(pathHash)
-
+func (p *Processor) scanKey(pk string, path []string, t Type, isZero bool) {
 	k, ok := p.flKeys.Load(pk)
 	if !ok {
 		p.mu.Lock()
@@ -48,10 +46,12 @@ func (p *Processor) scanKey(pathHash []byte, path []string, t Type, isZero bool)
 	}
 
 	updType := false
+
 	if k.t != t {
 		k.t = k.t.Update(t)
 		updType = true
 	}
+
 	if updType || (k.isZero && !isZero) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -77,20 +77,9 @@ func newHasher() *hasher {
 	}
 }
 
-func (h hasher) hash(path []string) []byte {
-	h.digest.Reset()
-	for _, s := range path {
-		_, err := h.digest.WriteString(s)
-		if err != nil {
-			panic("hashing failed: " + err.Error())
-		}
-	}
-
-	return h.digest.Sum(h.buf[:0])
-}
-
 func (h hasher) hashString(path []string) string {
 	h.digest.Reset()
+
 	for _, s := range path {
 		_, err := h.digest.WriteString(s)
 		if err != nil {
@@ -98,7 +87,7 @@ func (h hasher) hashString(path []string) string {
 		}
 	}
 
-	return string(h.digest.Sum(h.buf[:0])) // TODO consider unsafe conversion.
+	return string(h.digest.Sum(h.buf[:0]))
 }
 
 func (p *Processor) scanAvailableKeys() error {
@@ -110,7 +99,7 @@ func (p *Processor) scanAvailableKeys() error {
 		p.rd.MaxLines = int64(p.f.MaxLines)
 	}
 
-	if p.f.MaxLinesKeys > 0 && p.f.MaxLinesKeys < int(p.rd.MaxLines) {
+	if p.f.MaxLinesKeys > 0 && (p.rd.MaxLines == 0 || p.f.MaxLinesKeys < int(p.rd.MaxLines)) {
 		p.rd.MaxLines = int64(p.f.MaxLinesKeys)
 	}
 
@@ -126,25 +115,23 @@ func (p *Processor) scanAvailableKeys() error {
 				h := newHasher()
 
 				w.FnString = func(seq int64, path []string, value []byte) {
-					p.scanKey(h.hash(path), path, TypeString, len(value) == 0)
+					p.scanKey(h.hashString(path), path, TypeString, len(value) == 0)
 				}
 				w.FnNumber = func(seq int64, path []string, value float64, _ []byte) {
 					isInt := float64(int(value)) == value
 					if isInt {
-						p.scanKey(h.hash(path), path, TypeInt, value == 0)
+						p.scanKey(h.hashString(path), path, TypeInt, value == 0)
 					} else {
-						p.scanKey(h.hash(path), path, TypeFloat, value == 0)
+						p.scanKey(h.hashString(path), path, TypeFloat, value == 0)
 					}
 				}
 				w.FnBool = func(seq int64, path []string, value bool) {
-					p.scanKey(h.hash(path), path, TypeBool, !value)
+					p.scanKey(h.hashString(path), path, TypeBool, !value)
 				}
 				w.FnNull = func(seq int64, path []string) {
-					p.scanKey(h.hash(path), path, TypeNull, true)
+					p.scanKey(h.hashString(path), path, TypeNull, true)
 				}
 			}
-
-			sess.async = true
 
 			err = p.rd.Read(sess)
 			if err != nil {
@@ -174,6 +161,7 @@ func (p *Processor) iterateIncludeKeys() {
 	p.canonicalKeys = make(map[string]flKey)
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
+
 		for k := range p.includeKeys {
 			path := strings.Split(strings.TrimPrefix(k, "."), ".")
 			pk := h.hashString(path)
@@ -234,7 +222,6 @@ func (p *Processor) iterateIncludeKeys() {
 			}
 		}
 	}
-
 }
 
 func (p *Processor) prepareKeys() {

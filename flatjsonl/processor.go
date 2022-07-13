@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/puzpuzpuz/xsync"
 	"github.com/swaggest/assertjson"
@@ -55,6 +56,7 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 		pr: pr,
 		w:  &Writer{},
 		rd: &Reader{
+			Concurrency: f.Concurrency,
 			AddSequence: f.AddSequence,
 			OnError: func(err error) {
 				println(err.Error())
@@ -234,26 +236,8 @@ func (p *Processor) iterateForWriters() error {
 		includeKeys[p.ck(k)] = i
 	}
 
-	type lineBuf struct {
-		h      *hasher
-		values []Value
-	}
-
-	mu := sync.RWMutex{}
-	pending := map[int64]*lineBuf{}
-	finished := map[int64]bool{}
-
-	lineBufPool := sync.Pool{
-		New: func() interface{} {
-			return &lineBuf{
-				h:      newHasher(),
-				values: make([]Value, len(p.includeKeys)),
-			}
-		},
-	}
-	seqCompleted := int64(1)
-
 	pkIndex := make(map[string]int)
+
 	p.flKeys.Range(func(key string, value flKey) bool {
 		if i, ok := includeKeys[value.ck]; ok {
 			pkIndex[key] = i
@@ -262,6 +246,8 @@ func (p *Processor) iterateForWriters() error {
 		return true
 	})
 
+	wi := newWriteIterator(p, pkIndex)
+
 	for _, input := range p.inputs {
 		err := func() error {
 			sess, err := p.rd.session(input, "flattening data")
@@ -269,117 +255,16 @@ func (p *Processor) iterateForWriters() error {
 				return err
 			}
 
-			sess.lineStarted = func(seq, n int64) error {
-				mu.Lock()
-				defer mu.Unlock()
-
-				pending[seq] = lineBufPool.Get().(*lineBuf)
-
-				return nil
-			}
-
-			sess.setupWalker = func(w *FastWalker) {
-				w.FnString = func(seq int64, path []string, value []byte) {
-					mu.RLock()
-					defer mu.RUnlock()
-
-					l := pending[seq]
-
-					if i, ok := pkIndex[l.h.hashString(path)]; ok {
-						l.values[i] = Value{
-							Seq:    seq,
-							Type:   TypeString,
-							String: string(value),
-						}
-					}
-				}
-				w.FnNumber = func(seq int64, path []string, value float64, raw []byte) {
-					mu.RLock()
-					defer mu.RUnlock()
-
-					l := pending[seq]
-
-					if i, ok := pkIndex[l.h.hashString(path)]; ok {
-						l.values[i] = Value{
-							Seq:       seq,
-							Type:      TypeFloat,
-							Number:    value,
-							RawNumber: string(raw),
-						}
-					}
-				}
-				w.FnBool = func(seq int64, path []string, value bool) {
-					mu.RLock()
-					defer mu.RUnlock()
-
-					l := pending[seq]
-
-					if i, ok := pkIndex[l.h.hashString(path)]; ok {
-						l.values[i] = Value{
-							Seq:  seq,
-							Type: TypeBool,
-							Bool: value,
-						}
-					}
-				}
-				w.FnNull = func(seq int64, path []string) {
-					mu.RLock()
-					defer mu.RUnlock()
-
-					l := pending[seq]
-
-					if i, ok := pkIndex[l.h.hashString(path)]; ok {
-						l.values[i] = Value{
-							Seq:  seq,
-							Type: TypeNull,
-						}
-					}
-				}
-			}
-
-			sess.lineFinished = func(seq, n int64) error {
-				mu.Lock()
-				finished[seq] = true
-				mu.Unlock()
-
-				for {
-					var l *lineBuf
-					isReady := false
-					mu.Lock()
-					if finished[seqCompleted] {
-						isReady = true
-						l = pending[seqCompleted]
-						delete(pending, seqCompleted)
-						delete(finished, seqCompleted)
-					}
-					mu.Unlock()
-
-					if !isReady {
-						break
-					}
-
-					if err := p.w.ReceiveRow(p.keys, l.values); err != nil {
-						return err
-					}
-
-					for i := range l.values {
-						l.values[i] = Value{}
-					}
-
-					lineBufPool.Put(l)
-
-					seqCompleted++
-				}
-
-				return nil
-			}
+			sess.lineStarted = wi.lineStarted
+			sess.setupWalker = wi.setupWalker
+			sess.lineFinished = wi.lineFinished
 
 			err = p.rd.Read(sess)
 			if err != nil {
 				return fmt.Errorf("failed to process file %s: %w", input, err)
 			}
 
-			return nil
+			return wi.waitPending()
 		}()
 		if err != nil {
 			return err
@@ -387,4 +272,190 @@ func (p *Processor) iterateForWriters() error {
 	}
 
 	return nil
+}
+
+type lineBuf struct {
+	h      *hasher
+	values []Value
+}
+
+func newWriteIterator(p *Processor, pkIndex map[string]int) *writeIterator {
+	wi := writeIterator{}
+	wi.pending = map[int64]*lineBuf{}
+	wi.finished = map[int64]bool{}
+
+	wi.lineBufPool = sync.Pool{
+		New: func() interface{} {
+			return &lineBuf{
+				h:      newHasher(),
+				values: make([]Value, len(p.includeKeys)),
+			}
+		},
+	}
+	wi.seqCompleted = 1
+	wi.pkIndex = pkIndex
+	wi.p = p
+
+	return &wi
+}
+
+type writeIterator struct {
+	mu           sync.RWMutex
+	pending      map[int64]*lineBuf
+	finished     map[int64]bool
+	lineBufPool  sync.Pool
+	seqCompleted int64
+	pkIndex      map[string]int
+	p            *Processor
+}
+
+func (wi *writeIterator) setupWalker(w *FastWalker) {
+	w.FnString = func(seq int64, path []string, value []byte) {
+		wi.mu.RLock()
+		defer wi.mu.RUnlock()
+
+		l := wi.pending[seq]
+
+		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
+			l.values[i] = Value{
+				Seq:    seq,
+				Type:   TypeString,
+				String: string(value),
+			}
+		}
+	}
+	w.FnNumber = func(seq int64, path []string, value float64, raw []byte) {
+		wi.mu.RLock()
+		defer wi.mu.RUnlock()
+
+		l := wi.pending[seq]
+
+		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
+			l.values[i] = Value{
+				Seq:       seq,
+				Type:      TypeFloat,
+				Number:    value,
+				RawNumber: string(raw),
+			}
+		}
+	}
+	w.FnBool = func(seq int64, path []string, value bool) {
+		wi.mu.RLock()
+		defer wi.mu.RUnlock()
+
+		l := wi.pending[seq]
+
+		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
+			l.values[i] = Value{
+				Seq:  seq,
+				Type: TypeBool,
+				Bool: value,
+			}
+		}
+	}
+	w.FnNull = func(seq int64, path []string) {
+		wi.mu.RLock()
+		defer wi.mu.RUnlock()
+
+		l := wi.pending[seq]
+
+		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
+			l.values[i] = Value{
+				Seq:  seq,
+				Type: TypeNull,
+			}
+		}
+	}
+}
+
+func (wi *writeIterator) lineStarted(seq, _ int64) error {
+	wi.mu.Lock()
+	defer wi.mu.Unlock()
+
+	wi.pending[seq] = wi.lineBufPool.Get().(*lineBuf) // nolint: errcheck
+
+	return nil
+}
+
+func (wi *writeIterator) lineFinished(seq, n int64) error {
+	wi.mu.Lock()
+	defer wi.mu.Unlock()
+
+	wi.finished[seq] = true
+
+	return wi.checkCompleted()
+}
+
+func (wi *writeIterator) checkCompleted() error {
+	for {
+		seqCompleted := atomic.LoadInt64(&wi.seqCompleted)
+
+		var (
+			l       *lineBuf
+			isReady = false
+		)
+
+		if wi.finished[seqCompleted] {
+			isReady = true
+			l = wi.pending[seqCompleted]
+
+			delete(wi.pending, seqCompleted)
+			delete(wi.finished, seqCompleted)
+		}
+
+		if !isReady {
+			break
+		}
+
+		if err := wi.p.w.ReceiveRow(wi.p.keys, l.values); err != nil {
+			return err
+		}
+
+		for i := range l.values {
+			l.values[i] = Value{}
+		}
+
+		wi.lineBufPool.Put(l)
+
+		atomic.AddInt64(&wi.seqCompleted, 1)
+	}
+
+	return nil
+}
+
+func (wi *writeIterator) waitPending() error {
+	i := 0
+
+	for {
+		var seqLeft []int64
+
+		wi.mu.RLock()
+
+		for seq := range wi.pending {
+			if wi.finished[seq] {
+				continue
+			}
+
+			seqLeft = append(seqLeft, seq)
+		}
+
+		wi.mu.RUnlock()
+
+		if len(seqLeft) == 0 {
+			return nil
+		}
+
+		if err := wi.checkCompleted(); err != nil {
+			return err
+		}
+
+		println("waiting pending", fmt.Sprintf("%v", seqLeft))
+		time.Sleep(time.Second)
+
+		i++
+
+		if i > 10 {
+			return fmt.Errorf("could not wait for lines %v", seqLeft)
+		}
+	}
 }
