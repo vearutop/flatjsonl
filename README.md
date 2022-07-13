@@ -53,8 +53,16 @@ flatjsonl -help
 ```
 ```
 Usage of flatjsonl:
+  -add-sequence
+        Add auto incremented sequence number.
+  -case-sensitive-keys
+        Use case-sensitive keys (can fail for SQLite).
+  -concurrency int
+        Number of concurrent routines in reader. (default <2*number of cores>)
   -config string
         Configuration JSON file.
+  -cpu-prof string
+        Write CPU profile to file.
   -csv string
         Output to CSV file.
   -hide-progress
@@ -67,6 +75,8 @@ Usage of flatjsonl:
         Max number of lines to process.
   -max-lines-keys int
         Max number of lines to process when scanning keys.
+  -mem-prof string
+        Write mem profile to file.
   -output string
         Output to a file (default <input>.csv).
   -replace-keys
@@ -75,6 +85,8 @@ Usage of flatjsonl:
         Show all available keys as flat list.
   -show-keys-hier
         Show all available keys as hierarchy.
+  -show-keys-info
+        Show keys, their replaces and types.
   -skip-zero-cols
         Skip columns with zero values.
   -sql-table string

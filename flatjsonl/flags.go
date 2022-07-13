@@ -2,6 +2,7 @@ package flatjsonl
 
 import (
 	"flag"
+	"runtime"
 	"strings"
 )
 
@@ -26,6 +27,8 @@ type Flags struct {
 	ShowKeysFlat bool
 	ShowKeysHier bool
 	ShowKeysInfo bool
+
+	Concurrency int
 }
 
 // Register registers command-line flags.
@@ -48,13 +51,15 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.MatchLinePrefix, "match-line-prefix", "", "Regular expression to capture parts of line prefix (preceding JSON).")
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
+
+	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
 }
 
 // Parse parses and prepares command-line flags.
 func (f *Flags) Parse() {
 	flag.Parse()
 
-	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat {
+	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo {
 		inputs := f.Inputs()
 
 		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" {

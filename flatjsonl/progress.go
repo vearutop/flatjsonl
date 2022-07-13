@@ -7,16 +7,27 @@ import (
 	"time"
 )
 
+// ProgressStatus describes current progress.
+type ProgressStatus struct {
+	Task           string
+	DonePercent    float64
+	LinesCompleted int64
+	SpeedMBPS      float64
+	SpeedLPS       float64
+	Elapsed        time.Duration
+	Remaining      time.Duration
+}
+
 // Progress reports reading performance.
 type Progress struct {
 	Interval time.Duration
-	Print    func(donePercent float64, lines int64, spdMBPS float64, remaining time.Duration)
+	Print    func(status ProgressStatus)
 	done     chan bool
 	lines    int64
 }
 
 // Start spawns background progress reporter.
-func (p *Progress) Start(total int64, cr *CountingReader) {
+func (p *Progress) Start(total int64, cr *CountingReader, task string) {
 	p.done = make(chan bool)
 	p.lines = 0
 
@@ -27,8 +38,13 @@ func (p *Progress) Start(total int64, cr *CountingReader) {
 
 	prnt := p.Print
 	if prnt == nil {
-		prnt = func(donePercent float64, lines int64, spdMBPS float64, remaining time.Duration) {
-			println(fmt.Sprintf("%.1f%% bytes read, %d lines processed, %.1f MB/s, remaining %s", donePercent, lines, spdMBPS, remaining.String()))
+		prnt = func(s ProgressStatus) {
+			if s.Task != "" {
+				s.Task += ": "
+			}
+
+			println(fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, remaining %s",
+				s.DonePercent, s.LinesCompleted, s.SpeedLPS, s.SpeedMBPS, s.Remaining.String()))
 		}
 	}
 
@@ -40,16 +56,21 @@ func (p *Progress) Start(total int64, cr *CountingReader) {
 		for {
 			select {
 			case <-time.After(interval):
+				s := ProgressStatus{}
+				s.Task = task
+				s.LinesCompleted = atomic.LoadInt64(&p.lines)
+
 				b := float64(cr.Bytes())
-				done := 100 * b / tot
-				elapsed := time.Since(start)
-				spd := (b / elapsed.Seconds()) / (1024 * 1024)
+				s.DonePercent = 100 * b / tot
+				s.Elapsed = time.Since(start)
+				s.SpeedMBPS = (b / s.Elapsed.Seconds()) / (1024 * 1024)
+				s.SpeedLPS = float64(s.LinesCompleted) / s.Elapsed.Seconds()
 
-				remaining := time.Duration(float64(100*elapsed)/done) - elapsed
-				remaining = remaining.Truncate(time.Second)
+				s.Remaining = time.Duration(float64(100*s.Elapsed)/s.DonePercent) - s.Elapsed
+				s.Remaining = s.Remaining.Truncate(time.Second)
 
-				if remaining > 100*time.Millisecond {
-					prnt(done, atomic.LoadInt64(&p.lines), spd, remaining)
+				if s.Remaining > 100*time.Millisecond {
+					prnt(s)
 				}
 
 			case <-done:

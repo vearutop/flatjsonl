@@ -31,7 +31,7 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 }
 
 // ReceiveRow receives rows.
-func (c *CSVWriter) ReceiveRow(keys []string, values []interface{}) error {
+func (c *CSVWriter) ReceiveRow(keys []string, values []Value) error {
 	if !c.headWritten {
 		c.headWritten = true
 
@@ -44,8 +44,8 @@ func (c *CSVWriter) ReceiveRow(keys []string, values []interface{}) error {
 	c.row = c.row[:0]
 
 	for _, v := range values {
-		if v != nil {
-			c.row = append(c.row, Format(v))
+		if v.Type != TypeNull && v.Type != TypeAbsent {
+			c.row = append(c.row, v.Format())
 		} else {
 			c.row = append(c.row, "")
 		}
