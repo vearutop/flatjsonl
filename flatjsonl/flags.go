@@ -16,6 +16,7 @@ type Flags struct {
 	SQLTable     string
 	MaxLines     int
 	MaxLinesKeys int
+	FieldLimit   int
 
 	Config            string
 	ReplaceKeys       bool
@@ -51,6 +52,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.MatchLinePrefix, "match-line-prefix", "", "Regular expression to capture parts of line prefix (preceding JSON).")
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
+	flag.IntVar(&f.FieldLimit, "field-limit", 1000, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
 }
