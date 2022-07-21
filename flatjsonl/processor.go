@@ -295,6 +295,7 @@ func newWriteIterator(p *Processor, pkIndex map[string]int) *writeIterator {
 	wi.seqCompleted = 1
 	wi.pkIndex = pkIndex
 	wi.p = p
+	wi.fieldLimit = p.f.FieldLimit
 
 	return &wi
 }
@@ -307,6 +308,7 @@ type writeIterator struct {
 	seqCompleted int64
 	pkIndex      map[string]int
 	p            *Processor
+	fieldLimit   int
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -315,6 +317,10 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 		defer wi.mu.RUnlock()
 
 		l := wi.pending[seq]
+
+		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
+			value = value[0:wi.fieldLimit]
+		}
 
 		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
 			l.values[i] = Value{
