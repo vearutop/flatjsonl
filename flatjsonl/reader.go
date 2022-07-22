@@ -93,6 +93,7 @@ func (rd *Reader) session(fn string, task string) (sess *readSession, err error)
 		if sess.r, err = gzip.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
+
 	}
 
 	sess.scanner = bufio.NewScanner(sess.r)
