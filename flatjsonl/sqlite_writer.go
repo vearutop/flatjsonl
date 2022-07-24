@@ -41,13 +41,29 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 	return c, nil
 }
 
-// ReceiveRow receives rows.
-func (c *SQLiteWriter) ReceiveRow(keys []string, values []Value) error {
-	if !c.tableCreated {
-		if err := c.createTable(keys); err != nil {
-			return err
-		}
+func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
+	posByDst := map[string][]int{}
+	keysByDst := map[string][]flKey{}
+
+	for i, k := range keys {
+		posByDst[k.transposeDst] = append(posByDst[k.transposeDst], i)
+		keysByDst[k.transposeDst] = append(keysByDst[k.transposeDst], k)
 	}
+
+	//for dst, kk := range keysByDst {
+	//	c.createTable(kk)
+	//}
+
+	return nil
+}
+
+// ReceiveRow receives rows.
+func (c *SQLiteWriter) ReceiveRow(values []Value) error {
+	//if !c.tableCreated {
+	//	if err := c.createTable(keys); err != nil {
+	//		return err
+	//	}
+	//}
 
 	c.row = c.row[:0]
 
@@ -123,12 +139,12 @@ func (c *SQLiteWriter) execTx(res string) error {
 
 const sqliteMaxKeys = 1999 // 2000-1 for _seq_id.
 
-func (c *SQLiteWriter) createTable(keys []string) error {
+func (c *SQLiteWriter) createTable(tn string, keys []flKey) error {
 	c.tableCreated = true
 
-	tableName := c.tableName
+	tableName := tn
 	createTable := `CREATE TABLE "` + tableName + `" (
-_seq_id integer primary key,
+_seq_id integer primary original,
 `
 	part := 1
 
@@ -144,21 +160,20 @@ _seq_id integer primary key,
 			part++
 			tableName = c.tableName + "_part" + strconv.Itoa(part)
 			createTable = `CREATE TABLE "` + tableName + `" (
-_seq_id integer primary key,
+_seq_id integer primary original,
 `
 		}
 
 		tp := ""
 
-		t := c.p.types[i]
-		switch t { // nolint: exhaustive
+		switch k.t { // nolint: exhaustive
 		case TypeInt, TypeBool:
 			tp = " INTEGER"
 		case TypeFloat:
 			tp = " REAL"
 		}
 
-		createTable += `"` + k + `"` + tp + `,` + "\n"
+		createTable += `"` + k.replaced + `"` + tp + `,` + "\n"
 	}
 
 	createTable = createTable[:len(createTable)-2] + "\n)"

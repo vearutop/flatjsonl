@@ -6,4 +6,5 @@ type Config struct {
 	IncludeKeysRegex []string          `json:"includeKeysRegex"`
 	ReplaceKeys      map[string]string `json:"replaceKeys"`
 	ReplaceKeysRegex map[string]string `json:"replaceKeysRegex"`
+	Transpose        map[string]string `json:"transpose"`
 }

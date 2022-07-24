@@ -106,11 +106,12 @@ func (rd *Reader) session(fn string, task string) (sess *readSession, err error)
 }
 
 type syncWorker struct {
-	i      int
-	p      *fastjson.Parser
-	path   []string
-	walker *FastWalker
-	line   []byte
+	i        int
+	p        *fastjson.Parser
+	path     []string
+	flatPath []byte
+	walker   *FastWalker
+	line     []byte
 }
 
 // Read reads single file with JSON lines.
@@ -126,11 +127,12 @@ func (rd *Reader) Read(sess *readSession) error {
 		sess.setupWalker(w)
 
 		semaphore <- &syncWorker{
-			i:      i,
-			p:      &fastjson.Parser{},
-			path:   make([]string, 0, 20),
-			line:   make([]byte, 0, 100),
-			walker: w,
+			i:        i,
+			p:        &fastjson.Parser{},
+			path:     make([]string, 0, 20),
+			flatPath: make([]byte, 0, 500),
+			line:     make([]byte, 0, 100),
+			walker:   w,
 		}
 	}
 
@@ -191,7 +193,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 
 	if rd.AddSequence {
 		seqf := float64(seq)
-		w.walker.FnNumber(seq, []string{"_sequence"}, seqf, []byte(Format(seqf)))
+		w.walker.FnNumber(seq, []byte("._sequence"), []string{"_sequence"}, seqf, []byte(Format(seqf)))
 	}
 
 	line := w.line
@@ -203,6 +205,8 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 
 	p := w.p
 	path := w.path[:0]
+	flatPath := w.flatPath[:0]
+	flatPath = append(flatPath, '.')
 
 	pv, err := p.ParseBytes(line)
 	if err != nil {
@@ -210,7 +214,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
 		}
 	} else {
-		w.walker.WalkFastJSON(seq, path, pv)
+		w.walker.WalkFastJSON(seq, flatPath, path, pv)
 	}
 
 	if sess.lineFinished != nil {
@@ -222,7 +226,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	return nil
 }
 
-func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, path []string, value []byte)) []byte {
+func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, path []string, value []byte)) []byte {
 	pos := bytes.Index(line, []byte("{"))
 
 	if pos == -1 {
@@ -239,7 +243,8 @@ func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, pa
 
 		if len(sm) > 1 {
 			for i, m := range sm[1:] {
-				walkFn(seq, []string{"_prefix", "[" + strconv.Itoa(i) + "]"}, m)
+				si := strconv.Itoa(i)
+				walkFn(seq, []byte("._prefix.["+si+"]"), []string{"_prefix", "[" + si + "]"}, m)
 			}
 		}
 	}

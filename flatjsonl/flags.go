@@ -41,7 +41,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
 
 	flag.BoolVar(&f.HideProgress, "hide-progress", false, "Do not show progress in STDERR.")
-	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as key.")
+	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as original.")
 	flag.StringVar(&f.Config, "config", "", "Configuration JSON file.")
 	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
 	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")

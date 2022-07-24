@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,16 +32,13 @@ type Processor struct {
 	replaceByKey map[string]string
 
 	// keys are ordered replaced column names, indexes match values of includeKeys.
-	keys []string
-
-	// types are ordered types of respective keys.
-	types []Type
+	keys []flKey
 
 	flKeys *xsync.MapOf[flKey]
 
 	mu            sync.Mutex
 	flKeysList    []string
-	keyHierarchy  Key
+	keyHierarchy  KeyHierarchy
 	canonicalKeys map[string]flKey
 }
 
@@ -67,7 +65,7 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 		includeKeys: map[string]int{},
 
 		flKeysList:   make([]string, 0),
-		keyHierarchy: Key{Name: "."},
+		keyHierarchy: KeyHierarchy{Name: "."},
 
 		flKeys: xsync.NewMapOf[flKey](),
 	}
@@ -161,19 +159,13 @@ func (p *Processor) maybeShowKeys() error {
 	if p.f.ShowKeysInfo {
 		fmt.Println("keys info:")
 
-		keyByIndex := map[int]string{}
-
-		for k, i := range p.includeKeys {
-			keyByIndex[i] = k
-		}
-
 		for i, k := range p.keys {
-			orig := keyByIndex[i]
-			t := p.types[i]
-
-			line := k + ", TYPE " + string(t)
-			if orig != k {
-				line = orig + " REPLACED WITH " + line
+			line := strconv.Itoa(i) + ": " + k.replaced + ", TYPE " + string(k.t)
+			if k.replaced != k.original {
+				line = k.original + " REPLACED WITH " + line
+			}
+			if k.transposeDst != "" {
+				line += ", TRANSPOSED TO " + k.transposeDst
 			}
 
 			fmt.Println(line)
@@ -214,7 +206,7 @@ func (p *Processor) setupWriters() error {
 	return nil
 }
 
-// ck coverts original key to canonical.
+// ck coverts original original to canonical.
 func (p *Processor) ck(k string) string {
 	if p.f.CaseSensitiveKeys {
 		return k
@@ -237,38 +229,41 @@ func (p *Processor) iterateForWriters() error {
 	}
 
 	pkIndex := make(map[string]int)
+	pkDst := make(map[string]string)
 
 	p.flKeys.Range(func(key string, value flKey) bool {
-		if i, ok := includeKeys[value.ck]; ok {
+		if i, ok := includeKeys[value.canonical]; ok {
 			pkIndex[key] = i
+			if value.transposeDst != "" {
+				pkDst[key] = value.transposeDst
+			}
 		}
 
 		return true
 	})
 
-	wi := newWriteIterator(p, pkIndex)
+	wi := newWriteIterator(p, pkIndex, pkDst)
+
+	if err := p.w.SetupKeys(p.keys); err != nil {
+		return err
+	}
 
 	for _, input := range p.inputs {
-		err := func() error {
-			sess, err := p.rd.session(input, "flattening data")
-			if err != nil {
-				return err
-			}
-
-			sess.lineStarted = wi.lineStarted
-			sess.setupWalker = wi.setupWalker
-			sess.lineFinished = wi.lineFinished
-
-			err = p.rd.Read(sess)
-			if err != nil {
-				return fmt.Errorf("failed to process file %s: %w", input, err)
-			}
-
-			return wi.waitPending()
-		}()
+		sess, err := p.rd.session(input, "flattening data")
 		if err != nil {
 			return err
 		}
+
+		sess.lineStarted = wi.lineStarted
+		sess.setupWalker = wi.setupWalker
+		sess.lineFinished = wi.lineFinished
+
+		err = p.rd.Read(sess)
+		if err != nil {
+			return fmt.Errorf("failed to process file %s: %w", input, err)
+		}
+
+		return wi.waitPending()
 	}
 
 	return nil
@@ -279,7 +274,7 @@ type lineBuf struct {
 	values []Value
 }
 
-func newWriteIterator(p *Processor, pkIndex map[string]int) *writeIterator {
+func newWriteIterator(p *Processor, pkIndex map[string]int, pkDst map[string]string) *writeIterator {
 	wi := writeIterator{}
 	wi.pending = map[int64]*lineBuf{}
 	wi.finished = map[int64]bool{}
@@ -294,6 +289,7 @@ func newWriteIterator(p *Processor, pkIndex map[string]int) *writeIterator {
 	}
 	wi.seqCompleted = 1
 	wi.pkIndex = pkIndex
+	wi.pkDst = pkDst
 	wi.p = p
 	wi.fieldLimit = p.f.FieldLimit
 
@@ -307,12 +303,13 @@ type writeIterator struct {
 	lineBufPool  sync.Pool
 	seqCompleted int64
 	pkIndex      map[string]int
+	pkDst        map[string]string
 	p            *Processor
 	fieldLimit   int
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
-	w.FnString = func(seq int64, path []string, value []byte) {
+	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
 		wi.mu.RLock()
 		defer wi.mu.RUnlock()
 
@@ -322,30 +319,35 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			value = value[0:wi.fieldLimit]
 		}
 
-		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
+		pk := l.h.hashString(path)
+
+		if i, ok := wi.pkIndex[pk]; ok {
 			l.values[i] = Value{
 				Seq:    seq,
+				Dst:    wi.pkDst[pk],
 				Type:   TypeString,
 				String: string(value),
 			}
 		}
 	}
-	w.FnNumber = func(seq int64, path []string, value float64, raw []byte) {
+	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
 		wi.mu.RLock()
 		defer wi.mu.RUnlock()
 
 		l := wi.pending[seq]
+		pk := l.h.hashString(path)
 
-		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
+		if i, ok := wi.pkIndex[pk]; ok {
 			l.values[i] = Value{
 				Seq:       seq,
+				Dst:       wi.pkDst[pk],
 				Type:      TypeFloat,
 				Number:    value,
 				RawNumber: string(raw),
 			}
 		}
 	}
-	w.FnBool = func(seq int64, path []string, value bool) {
+	w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
 		wi.mu.RLock()
 		defer wi.mu.RUnlock()
 
@@ -359,7 +361,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			}
 		}
 	}
-	w.FnNull = func(seq int64, path []string) {
+	w.FnNull = func(seq int64, flatPath []byte, path []string) {
 		wi.mu.RLock()
 		defer wi.mu.RUnlock()
 
@@ -413,7 +415,7 @@ func (wi *writeIterator) checkCompleted() error {
 			break
 		}
 
-		if err := wi.p.w.ReceiveRow(wi.p.keys, l.values); err != nil {
+		if err := wi.p.w.ReceiveRow(l.values); err != nil {
 			return err
 		}
 
