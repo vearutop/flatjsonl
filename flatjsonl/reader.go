@@ -3,11 +3,14 @@ package flatjsonl
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/valyala/fastjson"
@@ -31,6 +34,7 @@ type readSession struct {
 	pr      *Progress
 	scanner *bufio.Scanner
 	fj      *os.File
+	r       io.Reader
 
 	setupWalker  func(w *FastWalker)
 	lineStarted  func(seq, n int64) error
@@ -45,10 +49,16 @@ func (rs *readSession) Close() {
 			println("failed to close file:", err.Error())
 		}
 	}
+
+	if c, ok := rs.r.(io.Closer); ok {
+		if err := c.Close(); err != nil {
+			println("failed to close reader:", err.Error())
+		}
+	}
 }
 
-func (rd *Reader) session(fn string, task string) (*readSession, error) {
-	sess := &readSession{}
+func (rd *Reader) session(fn string, task string) (sess *readSession, err error) {
+	sess = &readSession{}
 
 	sess.pr = rd.Progress
 	if sess.pr == nil {
@@ -60,12 +70,16 @@ func (rd *Reader) session(fn string, task string) (*readSession, error) {
 		return nil, fmt.Errorf("failed to open file %s: %w", fn, err)
 	}
 
+	defer func() {
+		if err != nil && fj != nil {
+			if clErr := fj.Close(); clErr != nil {
+				err = fmt.Errorf("%w, failed close file (%s)", err, clErr.Error())
+			}
+		}
+	}()
+
 	st, err := fj.Stat()
 	if err != nil {
-		if clErr := fj.Close(); clErr != nil {
-			err = fmt.Errorf("%w, failed close file (%s)", err, clErr.Error())
-		}
-
 		return nil, fmt.Errorf("failed to read file stats %s: %w", fn, err)
 	}
 
@@ -73,7 +87,15 @@ func (rd *Reader) session(fn string, task string) (*readSession, error) {
 
 	sess.pr.Start(st.Size(), cr, task)
 
-	sess.scanner = bufio.NewScanner(cr)
+	sess.r = cr
+
+	if strings.HasSuffix(fn, ".gz") {
+		if sess.r, err = gzip.NewReader(sess.r); err != nil {
+			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
+		}
+	}
+
+	sess.scanner = bufio.NewScanner(sess.r)
 
 	if len(rd.Buf) != 0 {
 		sess.scanner.Buffer(rd.Buf, len(rd.Buf))
