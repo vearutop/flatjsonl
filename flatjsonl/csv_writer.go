@@ -98,10 +98,19 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 }
 
 func (c *CSVWriter) writeHead() error {
-	keys := make([]string, 0, len(c.keyIndexes))
+	var keys []string
 
-	for _, i := range c.keyIndexes {
-		keys = append(keys, c.keys[i].replaced)
+	if c.isTransposed {
+		keys = make([]string, len(c.trimmedKeys))
+		for k, i := range c.trimmedKeys {
+			keys[i] = k
+		}
+	} else {
+		keys = make([]string, 0, len(c.keyIndexes))
+
+		for _, i := range c.keyIndexes {
+			keys = append(keys, c.keys[i].replaced)
+		}
 	}
 
 	err := c.w.Write(keys)

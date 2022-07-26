@@ -44,7 +44,7 @@ func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, i
 
 		for tk, dst := range p.cfg.Transpose {
 			if strings.HasPrefix(k.original, tk) {
-				trimmed := strings.TrimPrefix(k.original, tk)[2:]
+				trimmed := strings.TrimPrefix(k.original, tk)[1:]
 				pos := strings.Index(trimmed, "]")
 				idx := trimmed[0:pos]
 				i, err := strconv.Atoi(idx)
