@@ -65,6 +65,8 @@ Usage of flatjsonl:
         Write CPU profile to file.
   -csv string
         Output to CSV file.
+  -field-limit int
+        Max length of field value, exceeding tail is truncated, 0 for unlimited. (default 1000)
   -hide-progress
         Do not show progress in STDERR.
   -input string
@@ -79,6 +81,8 @@ Usage of flatjsonl:
         Write mem profile to file.
   -output string
         Output to a file (default <input>.csv).
+  -progress-interval duration
+        Progress update interval. (default 5s)
   -replace-keys
         Use unique tail segment converted to snake_case as key.
   -show-keys-flat

@@ -46,7 +46,13 @@ type Processor struct {
 
 // NewProcessor creates an instance of Processor.
 func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: funlen // Yeah, that's what she said.
-	pr := &Progress{}
+	pr := &Progress{
+		Interval: f.ProgressInterval,
+	}
+
+	if f.HideProgress {
+		pr.Print = func(status ProgressStatus) {}
+	}
 
 	p := &Processor{
 		cfg:    cfg,
@@ -64,7 +70,8 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 			Progress: pr,
 			Buf:      make([]byte, 1e7),
 		},
-		includeKeys: map[string]int{},
+		includeKeys:   map[string]int{},
+		canonicalKeys: map[string]flKey{},
 
 		flKeysList:   make([]string, 0),
 		keyHierarchy: Key{Name: "."},
@@ -224,6 +231,8 @@ func (p *Processor) ck(k string) string {
 }
 
 func (p *Processor) iterateForWriters() error {
+	println("flattening data...")
+
 	p.rd.MaxLines = 0
 	atomic.StoreInt64(&p.rd.Sequence, 0)
 
@@ -378,7 +387,7 @@ func (wi *writeIterator) lineStarted(seq, _ int64) error {
 	wi.mu.Lock()
 	defer wi.mu.Unlock()
 
-	wi.pending[seq] = wi.lineBufPool.Get().(*lineBuf) // nolint: errcheck
+	wi.pending[seq] = wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
 
 	return nil
 }
