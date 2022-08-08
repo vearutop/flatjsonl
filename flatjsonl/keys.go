@@ -24,23 +24,27 @@ func (p *Processor) scanKey(pk string, path []string, t Type, isZero bool) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 
-		k, _ = p.flKeys.Load(pk)
+		k, ok = p.flKeys.Load(pk)
+		if !ok {
+			pp := make([]string, len(path))
+			copy(pp, path)
 
-		pp := make([]string, len(path))
-		copy(pp, path)
+			key := KeyFromPath(path)
 
-		key := KeyFromPath(path)
+			k.t = k.t.Update(t)
+			k.isZero = k.isZero && isZero
+			k.path = pp
+			k.key = key
+			k.ck = p.ck(key)
 
-		k.t = k.t.Update(t)
-		k.isZero = k.isZero && isZero
-		k.path = pp
-		k.key = key
-		k.ck = p.ck(key)
+			if _, ok := p.canonicalKeys[k.ck]; !ok {
+				p.flKeysList = append(p.flKeysList, k.key)
+				p.canonicalKeys[k.ck] = k
+			}
 
-		p.flKeysList = append(p.flKeysList, k.key)
-		p.keyHierarchy.Add(path)
-
-		p.flKeys.Store(pk, k)
+			p.keyHierarchy.Add(path)
+			p.flKeys.Store(pk, k)
+		}
 
 		return
 	}
@@ -158,7 +162,6 @@ func (p *Processor) iterateIncludeKeys() {
 		i++
 	}
 
-	p.canonicalKeys = make(map[string]flKey)
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
 

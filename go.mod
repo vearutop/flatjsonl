@@ -3,7 +3,7 @@ module github.com/vearutop/flatjsonl
 go 1.18
 
 require (
-	github.com/bool64/dev v0.2.17
+	github.com/bool64/dev v0.2.19
 	github.com/cespare/xxhash/v2 v2.1.2
 	github.com/puzpuzpuz/xsync v1.3.0
 	github.com/stretchr/testify v1.8.0
