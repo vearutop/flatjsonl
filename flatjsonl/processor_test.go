@@ -27,7 +27,9 @@ func TestNewProcessor(t *testing.T) {
 	f.ShowKeysInfo = true
 	f.PrepareOutput()
 
-	require.NoError(t, os.Remove("_testdata/test.sqlite"))
+	if err := os.Remove("_testdata/test.sqlite"); err != nil {
+		require.NotContains(t, err.Error(), "no such file or directory")
+	}
 
 	cj, err := os.ReadFile("_testdata/config.json")
 	require.NoError(t, err)
