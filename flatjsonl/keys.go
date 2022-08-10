@@ -3,6 +3,7 @@ package flatjsonl
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"unicode"
@@ -246,13 +247,24 @@ func (p *Processor) prepareKeys() {
 	}
 }
 
-func (p *Processor) prepareKey(k string) (string, Type) {
+func (p *Processor) prepareKey(k string) (kk string, t Type) {
 	ck := p.ck(k)
-	t := p.canonicalKeys[ck].t
+	t = p.canonicalKeys[ck].t
 
 	if rep, ok := p.replaceKeys[ck]; ok {
 		return rep, t
 	}
+
+	defer func() {
+		if p.f.KeyLimit > 0 && len(kk) > p.f.KeyLimit {
+			i := p.includeKeys[kk]
+			is := strconv.Itoa(i)
+
+			kk = kk[0:(p.f.KeyLimit-len(is))] + is
+
+			p.replaceKeys[ck] = kk
+		}
+	}()
 
 	for reg, rep := range p.replaceRegex {
 		kr := reg.ReplaceAllString(k, rep)

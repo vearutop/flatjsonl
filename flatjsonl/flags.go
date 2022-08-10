@@ -19,6 +19,7 @@ type Flags struct {
 	MaxLines         int
 	MaxLinesKeys     int
 	FieldLimit       int
+	KeyLimit         int
 
 	Config            string
 	ReplaceKeys       bool
@@ -56,6 +57,7 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
 	flag.IntVar(&f.FieldLimit, "field-limit", 1000, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
+	flag.IntVar(&f.KeyLimit, "key-limit", 0, "Max length of key, exceeding tail is truncated, 0 for unlimited.")
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
 }

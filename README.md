@@ -58,7 +58,7 @@ Usage of flatjsonl:
   -case-sensitive-keys
         Use case-sensitive keys (can fail for SQLite).
   -concurrency int
-        Number of concurrent routines in reader. (default <2*number of cores>)
+        Number of concurrent routines in reader. (default 24)
   -config string
         Configuration JSON file.
   -cpu-prof string
@@ -71,6 +71,8 @@ Usage of flatjsonl:
         Do not show progress in STDERR.
   -input string
         Input from JSONL files, comma-separated.
+  -key-limit int
+        Max length of key, exceeding tail is truncated, 0 for unlimited.
   -match-line-prefix string
         Regular expression to capture parts of line prefix (preceding JSON).
   -max-lines int
