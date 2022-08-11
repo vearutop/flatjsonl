@@ -51,6 +51,7 @@ issues:
   exclude-use-default: false
   exclude-rules:
     - linters:
+        - testpackage
         - gomnd
         - goconst
         - goerr113
