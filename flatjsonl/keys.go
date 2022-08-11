@@ -307,13 +307,15 @@ func (p *Processor) prepareKey(k string) (kk string, t Type) {
 }
 
 var (
-	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+	matchFirstCap        = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap          = regexp.MustCompile("([a-z0-9])([A-Z])")
+	matchNonAlphaNumeric = regexp.MustCompile(`[^a-z0-9A-Z]+`)
 )
 
 func toSnakeCase(str string) string {
 	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
 	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	snake = matchNonAlphaNumeric.ReplaceAllString(snake, "_")
 
-	return strings.ToLower(snake)
+	return strings.ToLower(strings.Trim(snake, "_"))
 }
