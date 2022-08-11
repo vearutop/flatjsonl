@@ -309,7 +309,7 @@ func (p *Processor) prepareKey(k string) (kk string, t Type) {
 var (
 	matchFirstCap        = regexp.MustCompile("(.)([A-Z][a-z]+)")
 	matchAllCap          = regexp.MustCompile("([a-z0-9])([A-Z])")
-	matchNonAlphaNumeric = regexp.MustCompile(`[^a-z0-9A-Z]+`)
+	matchNonAlphaNumeric = regexp.MustCompile(`[^a-z0-9A-Z\s()]+`)
 )
 
 func toSnakeCase(str string) string {
