@@ -317,5 +317,5 @@ func toSnakeCase(str string) string {
 	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
 	snake = matchNonAlphaNumeric.ReplaceAllString(snake, "_")
 
-	return strings.ToLower(strings.Trim(snake, "_"))
+	return strings.ToLower(strings.Trim(strings.ReplaceAll(snake, "_ ", " "), "_"))
 }
