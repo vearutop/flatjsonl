@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	_ "time/tzdata" // Loading timezones.
 
 	"github.com/puzpuzpuz/xsync"
 	"github.com/swaggest/assertjson"
@@ -317,6 +318,15 @@ func newWriteIterator(p *Processor, pkIndex map[string]int, pkTimeFmt map[string
 		wi.outTimeFmt = time.RFC3339
 	}
 
+	if p.cfg.OutputTimezone != "" {
+		tz, err := time.LoadLocation(p.cfg.OutputTimezone)
+		if err == nil {
+			wi.outputTZ = tz
+		} else {
+			println("failed to load timezone:", err.Error())
+		}
+	}
+
 	return &wi
 }
 
@@ -331,6 +341,7 @@ type writeIterator struct {
 	p            *Processor
 	fieldLimit   int
 	outTimeFmt   string
+	outputTZ     *time.Location
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -356,17 +367,29 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			Type: TypeString,
 		}
 
-		tf, ok := wi.pkTimeFmt[h]
-		if ok {
-			t, err := time.Parse(tf, string(value))
-			if err != nil {
-				v.String = fmt.Sprintf("failed to parse time %s: %s", string(value), err)
-			} else {
-				v.String = t.Format(wi.outTimeFmt)
-			}
-		} else {
-			v.String = string(value)
+		sv := string(value)
+
+		if sv == "" {
+			v.String = ""
+			l.values[i] = v
+
+			return
 		}
+
+		if tf, ok := wi.pkTimeFmt[h]; ok {
+			t, err := time.Parse(tf, sv)
+			if err != nil {
+				sv = fmt.Sprintf("failed to parse time %s: %s", sv, err)
+			} else {
+				if wi.outputTZ != nil {
+					t = t.In(wi.outputTZ)
+				}
+
+				sv = t.Format(wi.outTimeFmt)
+			}
+		}
+
+		v.String = sv
 
 		l.values[i] = v
 	}
