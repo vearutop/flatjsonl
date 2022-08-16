@@ -112,7 +112,8 @@ Usage of flatjsonl:
   "parseTime": {
     "._prefix.[1]": "2006/01/02 15:04:05.99999"
   },
-  "outputTimeFormat": "2006-01-02 15:04:05"
+  "outputTimeFormat": "2006-01-02 15:04:05",
+  "outputTZ": "UTC"
 }
 ```
 
