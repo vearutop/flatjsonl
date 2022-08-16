@@ -108,6 +108,8 @@ func (p *Processor) scanAvailableKeys() error {
 		p.rd.MaxLines = int64(p.f.MaxLinesKeys)
 	}
 
+	p.rd.OffsetLines = int64(p.f.OffsetLines)
+
 	for _, input := range p.inputs {
 		err := func() error {
 			sess, err := p.rd.session(input, "scanning keys")

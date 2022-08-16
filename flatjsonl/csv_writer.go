@@ -32,6 +32,10 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 
 // ReceiveRow receives rows.
 func (c *CSVWriter) ReceiveRow(keys []string, values []Value) error {
+	if len(keys) != len(values) {
+		panic(fmt.Sprintf("BUG: keys and values mismatch:\nKeys:\n%v\nValues:\n%v\n", keys, values))
+	}
+
 	if !c.headWritten {
 		c.headWritten = true
 

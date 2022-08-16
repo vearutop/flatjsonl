@@ -46,8 +46,8 @@ func TestNewProcessor(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, `sequence,host,timestamp,name,wins_0_0,wins_0_1,wins_1_0,wins_1_1,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255)
-1,host-13,2022/06/24 14:13:36.393275,Gilbert,straight,7♣,one pair,10♥,1,abc
-2,host-14,2022/06/24 14:13:37.393275,"""'Alexa'""",two pair,4♠,two pair,9♠,,
-3,host-13,2022/06/24 14:13:38.393275,May,,,,,,
+1,host-13,2022-06-24 14:13:36,Gilbert,straight,7♣,one pair,10♥,1,abc
+2,host-14,2022-06-24 14:13:37,"""'Alexa'""",two pair,4♠,two pair,9♠,,
+3,host-13,2022-06-24 14:13:38,May,,,,,,
 `, string(b))
 }

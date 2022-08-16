@@ -246,16 +246,21 @@ func (p *Processor) iterateForWriters() error {
 	}
 
 	pkIndex := make(map[string]int)
+	pkTimeFmt := make(map[string]string)
 
 	p.flKeys.Range(func(key string, value flKey) bool {
 		if i, ok := includeKeys[value.ck]; ok {
 			pkIndex[key] = i
 		}
 
+		if f, ok := p.cfg.ParseTime[value.key]; ok {
+			pkTimeFmt[key] = f
+		}
+
 		return true
 	})
 
-	wi := newWriteIterator(p, pkIndex)
+	wi := newWriteIterator(p, pkIndex, pkTimeFmt)
 
 	for _, input := range p.inputs {
 		err := func() error {
@@ -288,7 +293,7 @@ type lineBuf struct {
 	values []Value
 }
 
-func newWriteIterator(p *Processor, pkIndex map[string]int) *writeIterator {
+func newWriteIterator(p *Processor, pkIndex map[string]int, pkTimeFmt map[string]string) *writeIterator {
 	wi := writeIterator{}
 	wi.pending = map[int64]*lineBuf{}
 	wi.finished = map[int64]bool{}
@@ -303,8 +308,14 @@ func newWriteIterator(p *Processor, pkIndex map[string]int) *writeIterator {
 	}
 	wi.seqCompleted = 1
 	wi.pkIndex = pkIndex
+	wi.pkTimeFmt = pkTimeFmt
 	wi.p = p
 	wi.fieldLimit = p.f.FieldLimit
+	wi.outTimeFmt = p.cfg.OutputTimeFormat
+
+	if wi.outTimeFmt == "" {
+		wi.outTimeFmt = time.RFC3339
+	}
 
 	return &wi
 }
@@ -316,8 +327,10 @@ type writeIterator struct {
 	lineBufPool  sync.Pool
 	seqCompleted int64
 	pkIndex      map[string]int
+	pkTimeFmt    map[string]string
 	p            *Processor
 	fieldLimit   int
+	outTimeFmt   string
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -331,13 +344,31 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			value = value[0:wi.fieldLimit]
 		}
 
-		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
-			l.values[i] = Value{
-				Seq:    seq,
-				Type:   TypeString,
-				String: string(value),
-			}
+		h := l.h.hashString(path)
+
+		i, ok := wi.pkIndex[h]
+		if !ok {
+			return
 		}
+
+		v := Value{
+			Seq:  seq,
+			Type: TypeString,
+		}
+
+		tf, ok := wi.pkTimeFmt[h]
+		if ok {
+			t, err := time.Parse(tf, string(value))
+			if err != nil {
+				v.String = fmt.Sprintf("failed to parse time %s: %s", string(value), err)
+			} else {
+				v.String = t.Format(wi.outTimeFmt)
+			}
+		} else {
+			v.String = string(value)
+		}
+
+		l.values[i] = v
 	}
 	w.FnNumber = func(seq int64, path []string, value float64, raw []byte) {
 		wi.mu.RLock()

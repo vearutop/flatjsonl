@@ -17,6 +17,7 @@ type Flags struct {
 	SQLite           string
 	SQLTable         string
 	MaxLines         int
+	OffsetLines      int
 	MaxLinesKeys     int
 	FieldLimit       int
 	KeyLimit         int
@@ -55,6 +56,7 @@ func (f *Flags) Register() {
 	flag.BoolVar(&f.CaseSensitiveKeys, "case-sensitive-keys", false, "Use case-sensitive keys (can fail for SQLite).")
 	flag.StringVar(&f.MatchLinePrefix, "match-line-prefix", "", "Regular expression to capture parts of line prefix (preceding JSON).")
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
+	flag.IntVar(&f.OffsetLines, "offset-lines", 0, "Skip a number of first lines.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
 	flag.IntVar(&f.FieldLimit, "field-limit", 1000, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
 	flag.IntVar(&f.KeyLimit, "key-limit", 0, "Max length of key, exceeding tail is truncated, 0 for unlimited.")
