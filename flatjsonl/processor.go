@@ -250,7 +250,7 @@ func (p *Processor) iterateForWriters() error {
 			}
 		}
 
-		if f, ok := p.cfg.ParseTime[value.key]; ok {
+		if f, ok := p.cfg.ParseTime[value.original]; ok {
 			pkTimeFmt[key] = f
 		}
 
@@ -354,14 +354,14 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		pk := l.h.hashString(path)
 
-		i, ok := wi.pkIndex[h]
+		i, ok := wi.pkIndex[pk]
 		if !ok {
 			return
 		}
 
 		v := Value{
-			Seq:  seq,
-			Type: TypeString,
+			Seq:    seq,
+			Type:   TypeString,
 			Dst:    wi.pkDst[pk],
 			String: string(value),
 		}

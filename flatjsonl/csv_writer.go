@@ -124,7 +124,7 @@ func (c *CSVWriter) writeHead() error {
 // ReceiveRow receives rows.
 func (c *CSVWriter) ReceiveRow(values []Value) error {
 	if len(c.keys) != len(values) {
-		panic(fmt.Sprintf("BUG: keys and values mismatch:\nKeys:\n%v\nValues:\n%v\n", keys, values))
+		panic(fmt.Sprintf("BUG: keys and values mismatch:\nKeys:\n%v\nValues:\n%v\n", c.keys, values))
 	}
 
 	c.row = c.row[:0]

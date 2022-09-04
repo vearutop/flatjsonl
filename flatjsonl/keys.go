@@ -51,43 +51,44 @@ func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, i
 					if err != nil {
 						panic("BUG: failed to parse idx " + idx + ": " + err.Error())
 					}
-				trimmed = trimmed[pos+1:]
-				if trimmed == "" {
-					trimmed = "value"
-				}
+					trimmed = trimmed[pos+1:]
+					if trimmed == "" {
+						trimmed = "value"
+					}
 
-				k.transposeDst = dst
-				k.transposeIdx = i
-				k.transposeTrimmed = trimmed
-				break
+					k.transposeDst = dst
+					k.transposeIdx = i
+					k.transposeTrimmed = trimmed
+					break
+				}
 			}
+
+			p.flKeysList = append(p.flKeysList, k.original)
+			p.keyHierarchy.Add(path)
+
+			p.flKeys.Store(pk, k)
+
+			return
 		}
 
-		p.flKeysList = append(p.flKeysList, k.original)
-		p.keyHierarchy.Add(path)
+		updType := false
 
-		p.flKeys.Store(pk, k)
+		if k.t != t {
+			k.t = k.t.Update(t)
+			updType = true
+		}
 
-		return
-	}
+		if updType || (k.isZero && !isZero) {
+			p.mu.Lock()
+			defer p.mu.Unlock()
 
-	updType := false
+			k, _ = p.flKeys.Load(pk)
 
-	if k.t != t {
-		k.t = k.t.Update(t)
-		updType = true
-	}
+			k.t = k.t.Update(t)
+			k.isZero = k.isZero && isZero
 
-	if updType || (k.isZero && !isZero) {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-
-		k, _ = p.flKeys.Load(pk)
-
-		k.t = k.t.Update(t)
-		k.isZero = k.isZero && isZero
-
-		p.flKeys.Store(pk, k)
+			p.flKeys.Store(pk, k)
+		}
 	}
 }
 
@@ -285,7 +286,7 @@ func (p *Processor) prepareKeys() {
 	}
 }
 
-func (p *Processor) prepareKey(origKey string) string {
+func (p *Processor) prepareKey(origKey string) (kk string) {
 	ck := p.ck(origKey)
 
 	if rep, ok := p.replaceKeys[ck]; ok {
