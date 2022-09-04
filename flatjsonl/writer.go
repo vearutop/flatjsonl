@@ -32,7 +32,7 @@ type Value struct {
 
 // Format formats Value as string.
 func (v Value) Format() string {
-	switch v.Type { // nolint: exhaustive
+	switch v.Type { //nolint: exhaustive
 	case TypeString:
 		return v.String
 	case TypeFloat:

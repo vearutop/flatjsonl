@@ -29,29 +29,28 @@ func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, i
 		p.mu.Lock()
 		defer p.mu.Unlock()
 
-		k, _ = p.flKeys.Load(pk)
+		k, ok = p.flKeys.Load(pk)
+		if !ok {
+			pp := make([]string, len(path))
+			copy(pp, path)
 
-		pp := make([]string, len(path))
-		copy(pp, path)
+			key := KeyFromPath(path)
 
-		key := KeyFromPath(path)
+			k.t = k.t.Update(t)
+			k.isZero = k.isZero && isZero
+			k.path = pp
+			k.original = key
+			k.canonical = p.ck(key)
 
-		k.t = k.t.Update(t)
-		k.isZero = k.isZero && isZero
-		k.path = pp
-		k.original = key
-		k.canonical = p.ck(key)
-
-		for tk, dst := range p.cfg.Transpose {
-			if strings.HasPrefix(k.original, tk) {
-				trimmed := strings.TrimPrefix(k.original, tk)[1:]
-				pos := strings.Index(trimmed, "]")
-				idx := trimmed[0:pos]
-				i, err := strconv.Atoi(idx)
-				if err != nil {
-					panic("BUG: failed to parse idx " + idx + ": " + err.Error())
-				}
-
+			for tk, dst := range p.cfg.Transpose {
+				if strings.HasPrefix(k.original, tk) {
+					trimmed := strings.TrimPrefix(k.original, tk)[1:]
+					pos := strings.Index(trimmed, "]")
+					idx := trimmed[0:pos]
+					i, err := strconv.Atoi(idx)
+					if err != nil {
+						panic("BUG: failed to parse idx " + idx + ": " + err.Error())
+					}
 				trimmed = trimmed[pos+1:]
 				if trimmed == "" {
 					trimmed = "value"
@@ -130,6 +129,8 @@ func (p *Processor) scanAvailableKeys() error {
 		p.rd.MaxLines = int64(p.f.MaxLinesKeys)
 	}
 
+	p.rd.OffsetLines = int64(p.f.OffsetLines)
+
 	for _, input := range p.inputs {
 		err := func() error {
 			sess, err := p.rd.session(input, "scanning keys")
@@ -185,7 +186,6 @@ func (p *Processor) iterateIncludeKeys() {
 		i++
 	}
 
-	p.canonicalKeys = make(map[string]flKey)
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
 
@@ -292,6 +292,17 @@ func (p *Processor) prepareKey(origKey string) string {
 		return rep
 	}
 
+	defer func() {
+		if p.f.KeyLimit > 0 && len(kk) > p.f.KeyLimit {
+			i := p.includeKeys[kk]
+			is := strconv.Itoa(i)
+
+			kk = kk[0:(p.f.KeyLimit-len(is))] + is
+
+			p.replaceKeys[ck] = kk
+		}
+	}()
+
 	for reg, rep := range p.replaceRegex {
 		kr := reg.ReplaceAllString(origKey, rep)
 		if kr != origKey {
@@ -333,13 +344,15 @@ func (p *Processor) prepareKey(origKey string) string {
 }
 
 var (
-	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+	matchFirstCap        = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap          = regexp.MustCompile("([a-z0-9])([A-Z])")
+	matchNonAlphaNumeric = regexp.MustCompile(`[^a-z0-9A-Z\s()]+`)
 )
 
 func toSnakeCase(str string) string {
 	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
 	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	snake = matchNonAlphaNumeric.ReplaceAllString(snake, "_")
 
-	return strings.ToLower(snake)
+	return strings.ToLower(strings.Trim(strings.ReplaceAll(snake, "_ ", " "), "_"))
 }

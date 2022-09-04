@@ -16,7 +16,7 @@ const (
 // Update merges original type with updated.
 func (t Type) Update(u Type) Type {
 	// Undefined type is replaced by update.
-	if t == "" {
+	if t == "" || t == TypeNull {
 		return u
 	}
 
@@ -28,6 +28,10 @@ func (t Type) Update(u Type) Type {
 	// String replaces any type.
 	if u == TypeString || t == TypeString {
 		return TypeString
+	}
+
+	if u == TypeNull {
+		return t
 	}
 
 	// Bool and non-bool make unconstrained type: string.

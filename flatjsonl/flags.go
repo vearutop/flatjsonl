@@ -4,19 +4,23 @@ import (
 	"flag"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Flags contains command-line flags.
 type Flags struct {
-	HideProgress bool
-	Input        string
-	Output       string
-	CSV          string
-	SQLite       string
-	SQLTable     string
-	MaxLines     int
-	MaxLinesKeys int
-	FieldLimit   int
+	HideProgress     bool
+	ProgressInterval time.Duration
+	Input            string
+	Output           string
+	CSV              string
+	SQLite           string
+	SQLTable         string
+	MaxLines         int
+	OffsetLines      int
+	MaxLinesKeys     int
+	FieldLimit       int
+	KeyLimit         int
 
 	Config            string
 	ReplaceKeys       bool
@@ -41,6 +45,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
 
 	flag.BoolVar(&f.HideProgress, "hide-progress", false, "Do not show progress in STDERR.")
+	flag.DurationVar(&f.ProgressInterval, "progress-interval", 5*time.Second, "Progress update interval.")
 	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as original.")
 	flag.StringVar(&f.Config, "config", "", "Configuration JSON file.")
 	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
@@ -51,8 +56,10 @@ func (f *Flags) Register() {
 	flag.BoolVar(&f.CaseSensitiveKeys, "case-sensitive-keys", false, "Use case-sensitive keys (can fail for SQLite).")
 	flag.StringVar(&f.MatchLinePrefix, "match-line-prefix", "", "Regular expression to capture parts of line prefix (preceding JSON).")
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
+	flag.IntVar(&f.OffsetLines, "offset-lines", 0, "Skip a number of first lines.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
 	flag.IntVar(&f.FieldLimit, "field-limit", 1000, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
+	flag.IntVar(&f.KeyLimit, "key-limit", 0, "Max length of key, exceeding tail is truncated, 0 for unlimited.")
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
 }

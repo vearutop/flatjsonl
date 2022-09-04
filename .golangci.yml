@@ -51,11 +51,19 @@ issues:
   exclude-use-default: false
   exclude-rules:
     - linters:
+        - testpackage
         - gomnd
         - goconst
         - goerr113
         - noctx
         - funlen
         - dupl
+        - structcheck
+        - unused
+        - unparam
+        - nosnakecase
       path: "_test.go"
+    - linters:
+        - errcheck # Error checking omitted for brevity.
+      path: "example_"
 

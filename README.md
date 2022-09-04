@@ -58,17 +58,21 @@ Usage of flatjsonl:
   -case-sensitive-keys
         Use case-sensitive keys (can fail for SQLite).
   -concurrency int
-        Number of concurrent routines in reader. (default <2*number of cores>)
+        Number of concurrent routines in reader. (default 24)
   -config string
         Configuration JSON file.
   -cpu-prof string
         Write CPU profile to file.
   -csv string
         Output to CSV file.
+  -field-limit int
+        Max length of field value, exceeding tail is truncated, 0 for unlimited. (default 1000)
   -hide-progress
         Do not show progress in STDERR.
   -input string
         Input from JSONL files, comma-separated.
+  -key-limit int
+        Max length of key, exceeding tail is truncated, 0 for unlimited.
   -match-line-prefix string
         Regular expression to capture parts of line prefix (preceding JSON).
   -max-lines int
@@ -79,6 +83,8 @@ Usage of flatjsonl:
         Write mem profile to file.
   -output string
         Output to a file (default <input>.csv).
+  -progress-interval duration
+        Progress update interval. (default 5s)
   -replace-keys
         Use unique tail segment converted to snake_case as key.
   -show-keys-flat
@@ -102,9 +108,18 @@ Usage of flatjsonl:
 ```json
 {
   "includeKeys": [".key1", ".key2", ".keyGroup.[0].key3"],
-  "replaceKeys": {".key1": "key1", ".key2": "created_at"}
+  "replaceKeys": {".key1": "key1", ".key2": "created_at"},
+  "parseTime": {
+    "._prefix.[1]": "2006/01/02 15:04:05.99999"
+  },
+  "outputTimeFormat": "2006-01-02 15:04:05",
+  "outputTZ": "UTC"
 }
 ```
+
+Parse time is a map of original key to time pattern. See https://pkg.go.dev/time#pkg-constants for pattern rules.
+
+Output time format is used to write parsed timestamps.
 
 Configuration file can also have [regexp replaces](https://pkg.go.dev/regexp#Regexp.ReplaceAllString) as a map of 
 regular expression as keys and replace patterns as values.

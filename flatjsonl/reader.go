@@ -20,6 +20,7 @@ import (
 type Reader struct {
 	AddSequence bool
 	MaxLines    int64
+	OffsetLines int64
 	OnError     func(err error)
 	Progress    *Progress
 	Buf         []byte
@@ -146,6 +147,10 @@ func (rd *Reader) Read(sess *readSession) error {
 		line := sess.scanner.Bytes()
 		n := sess.pr.CountLine()
 
+		if rd.OffsetLines > 0 && n <= rd.OffsetLines {
+			continue
+		}
+
 		seq := atomic.AddInt64(&rd.Sequence, 1)
 
 		func() {
@@ -171,7 +176,7 @@ func (rd *Reader) Read(sess *readSession) error {
 			break
 		}
 
-		if rd.MaxLines > 0 && rd.MaxLines <= n {
+		if rd.MaxLines > 0 && rd.MaxLines+rd.OffsetLines <= n {
 			break
 		}
 	}

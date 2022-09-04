@@ -2,7 +2,7 @@ package flatjsonl_test
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -24,9 +24,14 @@ func TestNewProcessor(t *testing.T) {
 	f.SkipZeroCols = true
 	f.ShowKeysFlat = true
 	f.ShowKeysHier = true
+	f.ShowKeysInfo = true
 	f.PrepareOutput()
 
-	cj, err := ioutil.ReadFile("_testdata/config.json")
+	if err := os.Remove("_testdata/test.sqlite"); err != nil {
+		require.Contains(t, err.Error(), "no such file or directory")
+	}
+
+	cj, err := os.ReadFile("_testdata/config.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config
@@ -37,12 +42,12 @@ func TestNewProcessor(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	b, err := ioutil.ReadFile("_testdata/test.csv")
+	b, err := os.ReadFile("_testdata/test.csv")
 	require.NoError(t, err)
 
-	assert.Equal(t, `_sequence,host,timestamp,name,wins_0_0,wins_0_1,wins_1_0,wins_1_1,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255)
-1,host-13,2022/06/24 14:13:36.393275,Gilbert,straight,7♣,one pair,10♥,1,abc
-2,host-14,2022/06/24 14:13:37.393275,"""'Alexa'""",two pair,4♠,two pair,9♠,,
-3,host-13,2022/06/24 14:13:38.393275,May,,,,,,
+	assert.Equal(t, `sequence,host,timestamp,name,wins_0_0,wins_0_1,wins_1_0,wins_1_1,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255)
+1,host-13,2022-06-24 14:13:36,Gilbert,straight,7♣,one pair,10♥,1,abc
+2,host-14,2022-06-24 14:13:37,"""'Alexa'""",two pair,4♠,two pair,9♠,,
+3,host-13,2022-06-24 14:13:38,May,,,,,,
 `, string(b))
 }

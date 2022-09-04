@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	_ "time/tzdata" // Loading timezones.
 
 	"github.com/puzpuzpuz/xsync"
 	"github.com/swaggest/assertjson"
@@ -44,7 +45,13 @@ type Processor struct {
 
 // NewProcessor creates an instance of Processor.
 func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: funlen // Yeah, that's what she said.
-	pr := &Progress{}
+	pr := &Progress{
+		Interval: f.ProgressInterval,
+	}
+
+	if f.HideProgress {
+		pr.Print = func(status ProgressStatus) {}
+	}
 
 	p := &Processor{
 		cfg:    cfg,
@@ -62,7 +69,8 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 			Progress: pr,
 			Buf:      make([]byte, 1e7),
 		},
-		includeKeys: map[string]int{},
+		includeKeys:   map[string]int{},
+		canonicalKeys: map[string]flKey{},
 
 		flKeysList:   make([]string, 0),
 		keyHierarchy: KeyHierarchy{Name: "."},
@@ -206,7 +214,7 @@ func (p *Processor) setupWriters() error {
 	return nil
 }
 
-// ck coverts original original to canonical.
+// ck coverts original key to canonical.
 func (p *Processor) ck(k string) string {
 	if p.f.CaseSensitiveKeys {
 		return k
@@ -216,6 +224,8 @@ func (p *Processor) ck(k string) string {
 }
 
 func (p *Processor) iterateForWriters() error {
+	println("flattening data...")
+
 	p.rd.MaxLines = 0
 	atomic.StoreInt64(&p.rd.Sequence, 0)
 
@@ -230,6 +240,7 @@ func (p *Processor) iterateForWriters() error {
 
 	pkIndex := make(map[string]int)
 	pkDst := make(map[string]string)
+	pkTimeFmt := make(map[string]string)
 
 	p.flKeys.Range(func(key string, value flKey) bool {
 		if i, ok := includeKeys[value.canonical]; ok {
@@ -239,10 +250,14 @@ func (p *Processor) iterateForWriters() error {
 			}
 		}
 
+		if f, ok := p.cfg.ParseTime[value.key]; ok {
+			pkTimeFmt[key] = f
+		}
+
 		return true
 	})
 
-	wi := newWriteIterator(p, pkIndex, pkDst)
+	wi := newWriteIterator(p, pkIndex, pkDst, pkTimeFmt)
 
 	if err := p.w.SetupKeys(p.keys); err != nil {
 		return err
@@ -274,7 +289,7 @@ type lineBuf struct {
 	values []Value
 }
 
-func newWriteIterator(p *Processor, pkIndex map[string]int, pkDst map[string]string) *writeIterator {
+func newWriteIterator(p *Processor, pkIndex map[string]int, pkDst map[string]string, pkTimeFmt map[string]string) *writeIterator {
 	wi := writeIterator{}
 	wi.pending = map[int64]*lineBuf{}
 	wi.finished = map[int64]bool{}
@@ -290,8 +305,23 @@ func newWriteIterator(p *Processor, pkIndex map[string]int, pkDst map[string]str
 	wi.seqCompleted = 1
 	wi.pkIndex = pkIndex
 	wi.pkDst = pkDst
+	wi.pkTimeFmt = pkTimeFmt
 	wi.p = p
 	wi.fieldLimit = p.f.FieldLimit
+	wi.outTimeFmt = p.cfg.OutputTimeFormat
+
+	if wi.outTimeFmt == "" {
+		wi.outTimeFmt = time.RFC3339
+	}
+
+	if p.cfg.OutputTimezone != "" {
+		tz, err := time.LoadLocation(p.cfg.OutputTimezone)
+		if err == nil {
+			wi.outputTZ = tz
+		} else {
+			println("failed to load timezone:", err.Error())
+		}
+	}
 
 	return &wi
 }
@@ -304,8 +334,11 @@ type writeIterator struct {
 	seqCompleted int64
 	pkIndex      map[string]int
 	pkDst        map[string]string
+	pkTimeFmt    map[string]string
 	p            *Processor
 	fieldLimit   int
+	outTimeFmt   string
+	outputTZ     *time.Location
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -321,14 +354,43 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		pk := l.h.hashString(path)
 
-		if i, ok := wi.pkIndex[pk]; ok {
-			l.values[i] = Value{
-				Seq:    seq,
-				Dst:    wi.pkDst[pk],
-				Type:   TypeString,
-				String: string(value),
+		i, ok := wi.pkIndex[h]
+		if !ok {
+			return
+		}
+
+		v := Value{
+			Seq:  seq,
+			Type: TypeString,
+			Dst:    wi.pkDst[pk],
+			String: string(value),
+		}
+
+		sv := string(value)
+
+		if sv == "" {
+			v.String = ""
+			l.values[i] = v
+
+			return
+		}
+
+		if tf, ok := wi.pkTimeFmt[pk]; ok {
+			t, err := time.Parse(tf, sv)
+			if err != nil {
+				sv = fmt.Sprintf("failed to parse time %s: %s", sv, err)
+			} else {
+				if wi.outputTZ != nil {
+					t = t.In(wi.outputTZ)
+				}
+
+				sv = t.Format(wi.outTimeFmt)
 			}
 		}
+
+		v.String = sv
+
+		l.values[i] = v
 	}
 	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
 		wi.mu.RLock()
@@ -380,7 +442,7 @@ func (wi *writeIterator) lineStarted(seq, _ int64) error {
 	wi.mu.Lock()
 	defer wi.mu.Unlock()
 
-	wi.pending[seq] = wi.lineBufPool.Get().(*lineBuf) // nolint: errcheck
+	wi.pending[seq] = wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
 
 	return nil
 }

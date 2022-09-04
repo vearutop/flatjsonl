@@ -144,7 +144,7 @@ func (c *SQLiteWriter) createTable(tn string, keys []flKey) error {
 
 	tableName := tn
 	createTable := `CREATE TABLE "` + tableName + `" (
-_seq_id integer primary original,
+_seq_id integer primary key,
 `
 	part := 1
 
@@ -160,7 +160,7 @@ _seq_id integer primary original,
 			part++
 			tableName = c.tableName + "_part" + strconv.Itoa(part)
 			createTable = `CREATE TABLE "` + tableName + `" (
-_seq_id integer primary original,
+_seq_id integer primary key,
 `
 		}
 

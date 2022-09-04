@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"runtime/pprof"
@@ -58,7 +57,7 @@ func main() {
 	var cfg flatjsonl.Config
 
 	if f.Config != "" {
-		b, err := ioutil.ReadFile(f.Config)
+		b, err := os.ReadFile(f.Config)
 		if err != nil {
 			log.Fatalf("failed to read config file: %v", err)
 		}
