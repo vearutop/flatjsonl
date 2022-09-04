@@ -217,13 +217,12 @@ func (p *Processor) iterateIncludeKeys() {
 
 	for _, k := range p.flKeysList {
 		if len(p.cfg.Transpose) > 0 {
-			for tk, _ := range p.cfg.Transpose {
+			for tk := range p.cfg.Transpose {
 				if strings.HasPrefix(k, tk) {
 					break
 				}
 			}
 		}
-
 	}
 
 	for _, k := range p.flKeysList {
