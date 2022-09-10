@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/valyala/fastjson"
+	"golang.org/x/sync/errgroup"
 )
 
 // Reader scans lines and decodes JSON in them.
@@ -137,6 +138,7 @@ func (rd *Reader) Read(sess *readSession) error {
 	}
 
 	stop := int64(0)
+	g := new(errgroup.Group)
 
 	for sess.scanner.Scan() {
 		if err := sess.scanner.Err(); err != nil {
@@ -156,19 +158,18 @@ func (rd *Reader) Read(sess *readSession) error {
 			worker := <-semaphore
 			worker.line = append(worker.line[:0], line...)
 
-			go func() {
+			g.Go(func() error {
 				defer func() {
 					semaphore <- worker
 				}()
 
 				if err := rd.doLine(worker, seq, n, sess); err != nil {
-					if rd.OnError != nil {
-						rd.OnError(err)
-					}
-
 					atomic.AddInt64(&stop, 1)
+					return err
 				}
-			}()
+
+				return nil
+			})
 		}()
 
 		if atomic.LoadInt64(&stop) != 0 {
@@ -185,7 +186,7 @@ func (rd *Reader) Read(sess *readSession) error {
 		<-semaphore
 	}
 
-	return nil
+	return g.Wait()
 }
 
 func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {

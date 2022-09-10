@@ -8,7 +8,7 @@ import (
 	"github.com/valyala/fastjson"
 )
 
-// KeyFromPath joins path elements into a dot-separated scalar original.
+// KeyFromPath joins path elements into a dot-separated scalar key.
 func KeyFromPath(path []string) string {
 	return "." + strings.Join(path, ".")
 }

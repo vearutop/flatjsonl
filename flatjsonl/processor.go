@@ -63,11 +63,8 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 		rd: &Reader{
 			Concurrency: f.Concurrency,
 			AddSequence: f.AddSequence,
-			OnError: func(err error) {
-				println(err.Error())
-			},
-			Progress: pr,
-			Buf:      make([]byte, 1e7),
+			Progress:    pr,
+			Buf:         make([]byte, 1e7),
 		},
 		includeKeys:   map[string]int{},
 		canonicalKeys: map[string]flKey{},
@@ -360,7 +357,6 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 		}
 
 		v := Value{
-			Seq:    seq,
 			Type:   TypeString,
 			Dst:    wi.pkDst[pk],
 			String: string(value),
@@ -401,7 +397,6 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		if i, ok := wi.pkIndex[pk]; ok {
 			l.values[i] = Value{
-				Seq:       seq,
 				Dst:       wi.pkDst[pk],
 				Type:      TypeFloat,
 				Number:    value,
@@ -417,7 +412,6 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
 			l.values[i] = Value{
-				Seq:  seq,
 				Type: TypeBool,
 				Bool: value,
 			}
@@ -431,7 +425,6 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
 			l.values[i] = Value{
-				Seq:  seq,
 				Type: TypeNull,
 			}
 		}
@@ -477,7 +470,7 @@ func (wi *writeIterator) checkCompleted() error {
 			break
 		}
 
-		if err := wi.p.w.ReceiveRow(l.values); err != nil {
+		if err := wi.p.w.ReceiveRow(seqCompleted, l.values); err != nil {
 			return err
 		}
 

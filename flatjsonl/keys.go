@@ -19,18 +19,34 @@ type flKey struct {
 	canonical        string
 	replaced         string
 	transposeDst     string
-	transposeIdx     int
+	transposeKey     intOrString
 	transposeTrimmed string
+}
+
+type intOrString struct {
+	i int
+	s string
+}
+
+func (is intOrString) String() string {
+	if is.s != "" {
+		return is.s
+	}
+
+	return strconv.Itoa(is.i)
 }
 
 func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, isZero bool) {
 	k, ok := p.flKeys.Load(pk)
 	if !ok {
 		p.mu.Lock()
-		defer p.mu.Unlock()
-
 		k, ok = p.flKeys.Load(pk)
+		p.mu.Unlock()
+
 		if !ok {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+
 			pp := make([]string, len(path))
 			copy(pp, path)
 
@@ -44,20 +60,36 @@ func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, i
 
 			for tk, dst := range p.cfg.Transpose {
 				if strings.HasPrefix(k.original, tk) {
-					trimmed := strings.TrimPrefix(k.original, tk)[1:]
-					pos := strings.Index(trimmed, "]")
-					idx := trimmed[0:pos]
-					i, err := strconv.Atoi(idx)
-					if err != nil {
-						panic("BUG: failed to parse idx " + idx + ": " + err.Error())
+					trimmed := strings.TrimPrefix(k.original, tk)
+					if trimmed[0] == '.' {
+						trimmed = trimmed[1:]
 					}
-					trimmed = trimmed[pos+1:]
+
+					// Array.
+					if trimmed[0] == '[' {
+						pos := strings.Index(trimmed, "]")
+						idx := trimmed[1:pos]
+						i, err := strconv.Atoi(idx)
+						if err != nil {
+							panic("BUG: failed to parse idx " + idx + ": " + err.Error())
+						}
+						trimmed = trimmed[pos+1:]
+						k.transposeKey.i = i
+					} else {
+						if pos := strings.Index(trimmed, "."); pos > 0 {
+							k.transposeKey.s = trimmed[0:pos]
+							trimmed = trimmed[pos:]
+						} else {
+							k.transposeKey.s = trimmed
+							trimmed = ""
+						}
+					}
+
 					if trimmed == "" {
 						trimmed = "value"
 					}
 
 					k.transposeDst = dst
-					k.transposeIdx = i
 					k.transposeTrimmed = trimmed
 					break
 				}

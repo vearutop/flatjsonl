@@ -10,7 +10,7 @@ import (
 // WriteReceiver can receive a row for processing.
 type WriteReceiver interface {
 	SetupKeys(keys []flKey) error
-	ReceiveRow(values []Value) error
+	ReceiveRow(seq int64, values []Value) error
 	Close() error
 }
 
@@ -21,7 +21,6 @@ type Writer struct {
 
 // Value encapsulates value of an allowed Type.
 type Value struct {
-	Seq       int64
 	Dst       string
 	Type      Type
 	String    string
@@ -69,11 +68,11 @@ func (w *Writer) SetupKeys(keys []flKey) error {
 }
 
 // ReceiveRow passes row to all receivers.
-func (w *Writer) ReceiveRow(values []Value) error {
+func (w *Writer) ReceiveRow(seq int64, values []Value) error {
 	var errs []string
 
 	for _, r := range w.receivers {
-		if err := r.ReceiveRow(values); err != nil {
+		if err := r.ReceiveRow(seq, values); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}

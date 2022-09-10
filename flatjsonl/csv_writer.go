@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"path"
 	"strconv"
 )
 
@@ -52,26 +53,9 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 			continue
 		}
 
-		tw := c.transposed[key.transposeDst]
-		if tw == nil {
-			if c.transposed == nil {
-				c.transposed = map[string]*CSVWriter{}
-			}
-
-			tw, err = NewCSVWriter(key.transposeDst + "_" + c.fn)
-			if err != nil {
-				return fmt.Errorf("failed to init transposed CSV writer for %s: %w", key.transposeDst, err)
-			}
-
-			tw.isTransposed = true
-			tw.keys = keys
-			tw.trimmedKeys = map[string]int{
-				".sequence": 0,
-				".index":    1,
-			}
-			tw.transposedMapping = map[int]int{}
-
-			c.transposed[key.transposeDst] = tw
+		tw, err := c.transposedWriter(key.transposeDst, keys)
+		if err != nil {
+			return err
 		}
 
 		tw.keyIndexes = append(tw.keyIndexes, i)
@@ -95,6 +79,39 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 	}
 
 	return nil
+}
+
+func (c *CSVWriter) transposedWriter(dst string, keys []flKey) (*CSVWriter, error) {
+	tw := c.transposed[dst]
+	if tw != nil {
+		return tw, nil
+	}
+
+	if c.transposed == nil {
+		c.transposed = map[string]*CSVWriter{}
+	}
+
+	dir, fn := path.Split(c.fn)
+	ext := path.Ext(fn)
+	fn = fn[0 : len(fn)-len(ext)]
+	fn = path.Join(dir, fn+"_"+dst+ext)
+
+	tw, err := NewCSVWriter(fn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init transposed CSV writer for %s: %w", dst, err)
+	}
+
+	tw.isTransposed = true
+	tw.keys = keys
+	tw.trimmedKeys = map[string]int{
+		".sequence": 0,
+		".index":    1,
+	}
+	tw.transposedMapping = map[int]int{}
+
+	c.transposed[dst] = tw
+
+	return tw, nil
 }
 
 func (c *CSVWriter) writeHead() error {
@@ -122,14 +139,14 @@ func (c *CSVWriter) writeHead() error {
 }
 
 // ReceiveRow receives rows.
-func (c *CSVWriter) ReceiveRow(values []Value) error {
+func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 	if len(c.keys) != len(values) {
 		panic(fmt.Sprintf("BUG: keys and values mismatch:\nKeys:\n%v\nValues:\n%v\n", c.keys, values))
 	}
 
 	c.row = c.row[:0]
 
-	rows := map[int][]string{}
+	transposedRows := map[string][]string{}
 	allAbsent := true
 	for _, i := range c.keyIndexes {
 		v := values[i]
@@ -144,18 +161,19 @@ func (c *CSVWriter) ReceiveRow(values []Value) error {
 		}
 
 		if c.isTransposed {
-			k := c.keys[i]
-
-			row := rows[k.transposeIdx]
-			if row == nil {
-				row = make([]string, len(c.trimmedKeys))
-				row[0] = strconv.Itoa(int(v.Seq))
-				row[1] = strconv.Itoa(k.transposeIdx)
-				rows[k.transposeIdx] = row
+			if v.Type == TypeAbsent {
+				continue
 			}
 
-			if f != "" {
-				_ = f
+			k := c.keys[i]
+
+			transposeKey := k.transposeKey.String()
+			row := transposedRows[transposeKey]
+			if row == nil {
+				row = make([]string, len(c.trimmedKeys))
+				row[0] = strconv.Itoa(int(seq)) // Add sequence.
+				row[1] = transposeKey           // Add array idx/object property.
+				transposedRows[transposeKey] = row
 			}
 
 			row[c.transposedMapping[i]] = f
@@ -169,8 +187,8 @@ func (c *CSVWriter) ReceiveRow(values []Value) error {
 	}
 
 	if c.isTransposed {
-		for i, row := range rows {
-			row = append(row, strconv.Itoa(i))
+		// TODO: deterministic iteration.
+		for _, row := range transposedRows {
 			err := c.w.Write(row)
 			if err != nil {
 				return fmt.Errorf("failed to write CSV row: %w", err)
@@ -181,11 +199,11 @@ func (c *CSVWriter) ReceiveRow(values []Value) error {
 		if err != nil {
 			return fmt.Errorf("failed to write CSV row: %w", err)
 		}
-	}
 
-	for dst, tw := range c.transposed {
-		if err := tw.ReceiveRow(values); err != nil {
-			return fmt.Errorf("transposed %s: %w", dst, err)
+		for dst, tw := range c.transposed {
+			if err := tw.ReceiveRow(seq, values); err != nil {
+				return fmt.Errorf("transposed %s: %w", dst, err)
+			}
 		}
 	}
 
@@ -195,6 +213,13 @@ func (c *CSVWriter) ReceiveRow(values []Value) error {
 // Close flushes rows anc closes file.
 func (c *CSVWriter) Close() error {
 	c.w.Flush()
+
+	for _, tw := range c.transposed {
+		tw.w.Flush()
+		if err := tw.f.Close(); err != nil {
+			println("failed to close transpose CSV file: " + err.Error())
+		}
+	}
 
 	return c.f.Close()
 }

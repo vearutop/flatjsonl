@@ -9,6 +9,7 @@ require (
 	github.com/stretchr/testify v1.8.0
 	github.com/swaggest/assertjson v1.7.0
 	github.com/valyala/fastjson v1.6.3
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	modernc.org/sqlite v1.17.3
 )
 
