@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -93,6 +92,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 	f.ShowKeysFlat = true
 	f.ShowKeysHier = true
 	f.ShowKeysInfo = true
+	f.Concurrency = 1
 	f.PrepareOutput()
 
 	if err := os.Remove("_testdata/transpose.sqlite"); err != nil {
@@ -111,10 +111,13 @@ func TestNewProcessor_transpose(t *testing.T) {
 	assert.NoError(t, proc.Process())
 
 	assertFileEquals(t, "_testdata/transpose_deep_arr.csv",
-		`.sequence,.index,.abar.a,.abar.b,.abaz.a,.abaz.b,.afoo.a,.afoo.b
-1,0,,,5,6,15,12
-3,0,1,2,,,,
+		`.sequence,.index,.abaz.a,.abaz.b,.afoo.a,.afoo.b,.abar.a,.abar.b
+1,0,5,6,15,12,,
+3,0,,,,,1,2
 `)
+	//.sequence,.index,.abaz.a,.abaz.b,.afoo.a,.afoo.b,.abar.a,.abar.b
+	//1,0,5,6,15,12,,
+	//3,0,,,,,1,2
 	assertFileEquals(t, "_testdata/transpose_flat_map.csv",
 		`.sequence,.index,value
 1,ccc,123
@@ -134,12 +137,12 @@ func TestNewProcessor_transpose(t *testing.T) {
 3,1,t4
 3,2,t5
 `)
-	assertFileHasLines(t, "_testdata/transpose_tokens.csv",
+	assertFileEquals(t, "_testdata/transpose_tokens.csv",
 		`.sequence,.index,.a,.b
 1,foo,1,2
 2,bar,3,4
-3,baz,5,6
 3,foo,15,12
+3,baz,5,6
 `)
 }
 
@@ -150,35 +153,4 @@ func assertFileEquals(t *testing.T, fn string, contents string) {
 	require.NoError(t, err)
 
 	assert.Equal(t, contents, string(b))
-}
-
-func assertFileHasLines(t *testing.T, fn string, contents string) {
-	t.Helper()
-
-	b, err := os.ReadFile(fn)
-	require.NoError(t, err)
-
-	lines := strings.Split(string(b), "\n")
-	lm := make(map[string]bool, len(lines))
-	for _, l := range lines {
-		lm[l] = true
-	}
-
-	contentLines := strings.Split(contents, "\n")
-	cm := make(map[string]bool, len(contentLines))
-	for _, l := range contentLines {
-		cm[l] = true
-	}
-
-	for _, l := range contentLines {
-		if _, ok := lm[l]; ok {
-			delete(lm, l)
-		} else {
-			assert.Failf(t, "missing line: %s", l)
-		}
-	}
-
-	for l, _ := range lm {
-		assert.Failf(t, "extra line: %s", l)
-	}
 }

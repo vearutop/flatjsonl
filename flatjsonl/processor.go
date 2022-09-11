@@ -166,9 +166,11 @@ func (p *Processor) maybeShowKeys() error {
 
 		for i, k := range p.keys {
 			line := strconv.Itoa(i) + ": " + k.replaced + ", TYPE " + string(k.t)
+
 			if k.replaced != k.original {
 				line = k.original + " REPLACED WITH " + line
 			}
+
 			if k.transposeDst != "" {
 				line += ", TRANSPOSED TO " + k.transposeDst
 			}
@@ -274,11 +276,9 @@ func (p *Processor) iterateForWriters() error {
 		if err != nil {
 			return fmt.Errorf("failed to process file %s: %w", input, err)
 		}
-
-		return wi.waitPending()
 	}
 
-	return nil
+	return wi.waitPending()
 }
 
 type lineBuf struct {

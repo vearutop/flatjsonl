@@ -66,6 +66,7 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, path []strin
 
 	for i, v := range a {
 		k := "[" + strconv.Itoa(i) + "]"
+
 		flatPath = append(flatPath, '.')
 		flatPath = append(flatPath, k...)
 

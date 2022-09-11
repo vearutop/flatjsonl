@@ -69,10 +69,12 @@ func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, i
 					if trimmed[0] == '[' {
 						pos := strings.Index(trimmed, "]")
 						idx := trimmed[1:pos]
+
 						i, err := strconv.Atoi(idx)
 						if err != nil {
 							panic("BUG: failed to parse idx " + idx + ": " + err.Error())
 						}
+
 						trimmed = trimmed[pos+1:]
 						k.transposeKey.i = i
 					} else {
@@ -91,6 +93,7 @@ func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, i
 
 					k.transposeDst = dst
 					k.transposeTrimmed = trimmed
+
 					break
 				}
 			}

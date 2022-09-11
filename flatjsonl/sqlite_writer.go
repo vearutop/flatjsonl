@@ -104,6 +104,7 @@ func (c *SQLiteWriter) insertDst(dst string, values []Value) error {
 	for i, pos := range c.posByDst[dst] {
 		if i > 0 && i%sqliteMaxKeys == 0 {
 			c.rowsTx++
+
 			res = res[:len(res)-1] + ")"
 
 			if err := c.execTx(res); err != nil {
@@ -188,7 +189,7 @@ _seq_id integer primary key,
 
 		tp := ""
 
-		switch k.t { // nolint: exhaustive
+		switch k.t { //nolint: exhaustive
 		case TypeInt, TypeBool:
 			tp = " INTEGER"
 		case TypeFloat:

@@ -51,6 +51,7 @@ func (v Value) Format() string {
 	}
 }
 
+// SetupKeys configures writers.
 func (w *Writer) SetupKeys(keys []flKey) error {
 	var errs []string
 

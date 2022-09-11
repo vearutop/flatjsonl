@@ -50,6 +50,7 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 	for i, key := range keys {
 		if key.transposeDst == "" {
 			c.keyIndexes = append(c.keyIndexes, i)
+
 			continue
 		}
 
@@ -59,6 +60,7 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 		}
 
 		tw.keyIndexes = append(tw.keyIndexes, i)
+
 		mappedIdx, ok := tw.trimmedKeys[key.transposeTrimmed]
 		if !ok {
 			mappedIdx = len(tw.trimmedKeys)
@@ -151,6 +153,7 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 		transposedRows    [][]string
 		allAbsent         = true
 	)
+
 	for _, i := range c.keyIndexes {
 		v := values[i]
 
@@ -172,6 +175,7 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 
 			transposeKey := k.transposeKey.String()
 			row := transposedRowsIdx[transposeKey]
+
 			if row == nil {
 				row = make([]string, len(c.trimmedKeys))
 				row[0] = strconv.Itoa(int(seq)) // Add sequence.
@@ -217,6 +221,7 @@ func (c *CSVWriter) Close() error {
 
 	for _, tw := range c.transposed {
 		tw.w.Flush()
+
 		if err := tw.f.Close(); err != nil {
 			println("failed to close transpose CSV file: " + err.Error())
 		}

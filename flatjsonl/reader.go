@@ -165,6 +165,7 @@ func (rd *Reader) Read(sess *readSession) error {
 
 				if err := rd.doLine(worker, seq, n, sess); err != nil {
 					atomic.AddInt64(&stop, 1)
+
 					return err
 				}
 
