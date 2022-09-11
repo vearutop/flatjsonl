@@ -44,6 +44,7 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 	return c, nil
 }
 
+// SetupKeys writes CSV headers.
 func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 	c.keys = keys
 
@@ -128,7 +129,7 @@ func (c *CSVWriter) writeHead() error {
 		keys = make([]string, 0, len(c.keyIndexes))
 
 		for _, i := range c.keyIndexes {
-			keys = append(keys, c.keys[i].replaced)
+			keys = append(keys, c.keys[i].replaced) //nolint:makezero // False positive: append to slice `keys` with non-zero initialized length.
 		}
 	}
 

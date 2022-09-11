@@ -17,7 +17,9 @@ linters-settings:
   unparam:
     check-exported: true
   cyclop:
-    max-complexity: 15
+    max-complexity: 20
+  gocognit:
+    min-complexity: 40
 
 linters:
   enable-all: true

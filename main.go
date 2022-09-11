@@ -1,3 +1,4 @@
+// Package main contains CLI tool.
 package main
 
 import (

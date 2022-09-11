@@ -43,6 +43,7 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 	return c, nil
 }
 
+// SetupKeys creates tables.
 func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
 	c.posByDst = map[string][]int{}
 	keysByDst := map[string][]flKey{}
@@ -71,12 +72,6 @@ func (c *SQLiteWriter) table(dst string) string {
 
 // ReceiveRow receives rows.
 func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
-	//if !c.tableCreated {
-	//	if err := c.createTable(keys); err != nil {
-	//		return err
-	//	}
-	//}
-
 	c.row = c.row[:0]
 
 	c.seq++

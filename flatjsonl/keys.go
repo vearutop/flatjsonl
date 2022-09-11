@@ -36,76 +36,17 @@ func (is intOrString) String() string {
 	return strconv.Itoa(is.i)
 }
 
-func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, isZero bool) {
+func (p *Processor) scanKey(pk string, path []string, t Type, isZero bool) {
 	k, ok := p.flKeys.Load(pk)
-	if !ok {
-		p.mu.Lock()
-		k, ok = p.flKeys.Load(pk)
-		p.mu.Unlock()
+	if ok {
+		return
+	}
 
-		if !ok {
-			p.mu.Lock()
-			defer p.mu.Unlock()
+	p.mu.Lock()
+	k, ok = p.flKeys.Load(pk)
+	p.mu.Unlock()
 
-			pp := make([]string, len(path))
-			copy(pp, path)
-
-			key := KeyFromPath(path)
-
-			k.t = k.t.Update(t)
-			k.isZero = k.isZero && isZero
-			k.path = pp
-			k.original = key
-			k.canonical = p.ck(key)
-
-			for tk, dst := range p.cfg.Transpose {
-				if strings.HasPrefix(k.original, tk) {
-					trimmed := strings.TrimPrefix(k.original, tk)
-					if trimmed[0] == '.' {
-						trimmed = trimmed[1:]
-					}
-
-					// Array.
-					if trimmed[0] == '[' {
-						pos := strings.Index(trimmed, "]")
-						idx := trimmed[1:pos]
-
-						i, err := strconv.Atoi(idx)
-						if err != nil {
-							panic("BUG: failed to parse idx " + idx + ": " + err.Error())
-						}
-
-						trimmed = trimmed[pos+1:]
-						k.transposeKey.i = i
-					} else {
-						if pos := strings.Index(trimmed, "."); pos > 0 {
-							k.transposeKey.s = trimmed[0:pos]
-							trimmed = trimmed[pos:]
-						} else {
-							k.transposeKey.s = trimmed
-							trimmed = ""
-						}
-					}
-
-					if trimmed == "" {
-						trimmed = "value"
-					}
-
-					k.transposeDst = dst
-					k.transposeTrimmed = trimmed
-
-					break
-				}
-			}
-
-			p.flKeysList = append(p.flKeysList, k.original)
-			p.keyHierarchy.Add(path)
-
-			p.flKeys.Store(pk, k)
-
-			return
-		}
-
+	if ok {
 		updType := false
 
 		if k.t != t {
@@ -125,6 +66,69 @@ func (p *Processor) scanKey(pk string, flatPath []byte, path []string, t Type, i
 			p.flKeys.Store(pk, k)
 		}
 	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	pp := make([]string, len(path))
+	copy(pp, path)
+
+	key := KeyFromPath(path)
+
+	k.t = k.t.Update(t)
+	k.isZero = k.isZero && isZero
+	k.path = pp
+	k.original = key
+	k.canonical = p.ck(key)
+
+	for tk, dst := range p.cfg.Transpose {
+		if strings.HasPrefix(k.original, tk) {
+			p.scanTransposedKey(dst, tk, &k)
+
+			break
+		}
+	}
+
+	p.flKeysList = append(p.flKeysList, k.original)
+	p.keyHierarchy.Add(path)
+
+	p.flKeys.Store(pk, k)
+}
+
+func (p *Processor) scanTransposedKey(dst string, tk string, k *flKey) {
+	trimmed := strings.TrimPrefix(k.original, tk)
+	if trimmed[0] == '.' {
+		trimmed = trimmed[1:]
+	}
+
+	// Array.
+	if trimmed[0] == '[' {
+		pos := strings.Index(trimmed, "]")
+		idx := trimmed[1:pos]
+
+		i, err := strconv.Atoi(idx)
+		if err != nil {
+			panic("BUG: failed to parse idx " + idx + ": " + err.Error())
+		}
+
+		trimmed = trimmed[pos+1:]
+		k.transposeKey.i = i
+	} else {
+		if pos := strings.Index(trimmed, "."); pos > 0 {
+			k.transposeKey.s = trimmed[0:pos]
+			trimmed = trimmed[pos:]
+		} else {
+			k.transposeKey.s = trimmed
+			trimmed = ""
+		}
+	}
+
+	if trimmed == "" {
+		trimmed = "value"
+	}
+
+	k.transposeDst = dst
+	k.transposeTrimmed = trimmed
 }
 
 type hasher struct {
@@ -179,21 +183,21 @@ func (p *Processor) scanAvailableKeys() error {
 				h := newHasher()
 
 				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
-					p.scanKey(h.hashString(path), flatPath, path, TypeString, len(value) == 0)
+					p.scanKey(h.hashString(path), path, TypeString, len(value) == 0)
 				}
 				w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, _ []byte) {
 					isInt := float64(int(value)) == value
 					if isInt {
-						p.scanKey(h.hashString(path), flatPath, path, TypeInt, value == 0)
+						p.scanKey(h.hashString(path), path, TypeInt, value == 0)
 					} else {
-						p.scanKey(h.hashString(path), flatPath, path, TypeFloat, value == 0)
+						p.scanKey(h.hashString(path), path, TypeFloat, value == 0)
 					}
 				}
 				w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
-					p.scanKey(h.hashString(path), flatPath, path, TypeBool, !value)
+					p.scanKey(h.hashString(path), path, TypeBool, !value)
 				}
 				w.FnNull = func(seq int64, flatPath []byte, path []string) {
-					p.scanKey(h.hashString(path), flatPath, path, TypeNull, true)
+					p.scanKey(h.hashString(path), path, TypeNull, true)
 				}
 			}
 
