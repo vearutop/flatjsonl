@@ -146,8 +146,11 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 
 	c.row = c.row[:0]
 
-	transposedRows := map[string][]string{}
-	allAbsent := true
+	var (
+		transposedRowsIdx = map[string][]string{}
+		transposedRows    [][]string
+		allAbsent         = true
+	)
 	for _, i := range c.keyIndexes {
 		v := values[i]
 
@@ -168,12 +171,13 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 			k := c.keys[i]
 
 			transposeKey := k.transposeKey.String()
-			row := transposedRows[transposeKey]
+			row := transposedRowsIdx[transposeKey]
 			if row == nil {
 				row = make([]string, len(c.trimmedKeys))
 				row[0] = strconv.Itoa(int(seq)) // Add sequence.
 				row[1] = transposeKey           // Add array idx/object property.
-				transposedRows[transposeKey] = row
+				transposedRowsIdx[transposeKey] = row
+				transposedRows = append(transposedRows, row)
 			}
 
 			row[c.transposedMapping[i]] = f
@@ -187,16 +191,13 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 	}
 
 	if c.isTransposed {
-		// TODO: deterministic iteration.
 		for _, row := range transposedRows {
-			err := c.w.Write(row)
-			if err != nil {
+			if err := c.w.Write(row); err != nil {
 				return fmt.Errorf("failed to write CSV row: %w", err)
 			}
 		}
 	} else {
-		err := c.w.Write(c.row)
-		if err != nil {
+		if err := c.w.Write(c.row); err != nil {
 			return fmt.Errorf("failed to write CSV row: %w", err)
 		}
 
