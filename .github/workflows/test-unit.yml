@@ -78,7 +78,7 @@ jobs:
       - name: Test
         id: test
         run: |
-          make test-unit
+          make test-unit-multi
           go tool cover -func=./unit.coverprofile > unit.txt
           TOTAL=$(grep 'total:' unit.txt)
           echo "${TOTAL}"
