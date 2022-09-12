@@ -38,61 +38,60 @@ func (is intOrString) String() string {
 
 func (p *Processor) scanKey(pk string, path []string, t Type, isZero bool) {
 	k, ok := p.flKeys.Load(pk)
-	if ok {
-		return
-	}
 
-	p.mu.Lock()
-	k, ok = p.flKeys.Load(pk)
-	p.mu.Unlock()
+	if !ok {
+		p.mu.Lock()
 
-	if ok {
-		updType := false
+		k, ok = p.flKeys.Load(pk)
+		if !ok {
+			pp := make([]string, len(path))
+			copy(pp, path)
 
-		if k.t != t {
-			k.t = k.t.Update(t)
-			updType = true
-		}
-
-		if updType || (k.isZero && !isZero) {
-			p.mu.Lock()
-			defer p.mu.Unlock()
-
-			k, _ = p.flKeys.Load(pk)
+			key := KeyFromPath(path)
 
 			k.t = k.t.Update(t)
 			k.isZero = k.isZero && isZero
+			k.path = pp
+			k.original = key
+			k.canonical = p.ck(key)
+
+			for tk, dst := range p.cfg.Transpose {
+				if strings.HasPrefix(k.original, tk) {
+					p.scanTransposedKey(dst, tk, &k)
+
+					break
+				}
+			}
+
+			if _, ok := p.canonicalKeys[k.canonical]; !ok {
+				p.flKeysList = append(p.flKeysList, k.original)
+				p.keyHierarchy.Add(path)
+				p.canonicalKeys[k.canonical] = k
+			}
 
 			p.flKeys.Store(pk, k)
 		}
+		p.mu.Unlock()
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	updType := false
 
-	pp := make([]string, len(path))
-	copy(pp, path)
-
-	key := KeyFromPath(path)
-
-	k.t = k.t.Update(t)
-	k.isZero = k.isZero && isZero
-	k.path = pp
-	k.original = key
-	k.canonical = p.ck(key)
-
-	for tk, dst := range p.cfg.Transpose {
-		if strings.HasPrefix(k.original, tk) {
-			p.scanTransposedKey(dst, tk, &k)
-
-			break
-		}
+	if k.t != t {
+		k.t = k.t.Update(t)
+		updType = true
 	}
 
-	p.flKeysList = append(p.flKeysList, k.original)
-	p.keyHierarchy.Add(path)
+	if updType || (k.isZero && !isZero) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
 
-	p.flKeys.Store(pk, k)
+		k, _ = p.flKeys.Load(pk)
+
+		k.t = k.t.Update(t)
+		k.isZero = k.isZero && isZero
+
+		p.flKeys.Store(pk, k)
+	}
 }
 
 func (p *Processor) scanTransposedKey(dst string, tk string, k *flKey) {
