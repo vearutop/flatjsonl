@@ -10,7 +10,7 @@ import (
 	"time"
 	_ "time/tzdata" // Loading timezones.
 
-	"github.com/puzpuzpuz/xsync"
+	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/swaggest/assertjson"
 )
 
@@ -37,7 +37,7 @@ type Processor struct {
 	// types are ordered types of respective keys.
 	types []Type
 
-	flKeys *xsync.MapOf[flKey]
+	flKeys *xsync.MapOf[string, flKey]
 
 	mu            sync.Mutex
 	flKeysList    []string
