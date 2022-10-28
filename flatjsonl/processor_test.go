@@ -67,7 +67,7 @@ func TestNewProcessor_prefixNoJSON(t *testing.T) {
 	b, err := os.ReadFile("_testdata/prefix_no_json.csv")
 	require.NoError(t, err)
 
-	assert.Equal(t, `._sequence,._prefix.[1],._prefix.[2],._prefix.[3],._prefix.[4],._prefix.[5],._prefix.[6]
+	assert.Equal(t, `._sequence,._prefix.[0],._prefix.[1],._prefix.[2],._prefix.[3],._prefix.[4],._prefix.[5]
 1,host-13,2022/06/24 14:13:36.393275,fooa,bar1,bazd,qux4
 2,host-14,2022/06/24 14:13:37.393275,foob,bar2,bazc,qux3
 3,host-13,2022/06/24 14:13:38.393275,fooc,bar3,bazb,qux2

@@ -247,11 +247,12 @@ func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, pa
 		if pos > 0 {
 			pref = line[:pos]
 		}
+
 		sm := rd.MatchPrefix.FindAllSubmatch(pref, -1)
 
 		for _, m := range sm {
 			for j := 1; j < len(m); j++ {
-				walkFn(seq, []string{"_prefix", "[" + strconv.Itoa(j) + "]"}, m[j])
+				walkFn(seq, []string{"_prefix", "[" + strconv.Itoa(j-1) + "]"}, m[j])
 			}
 		}
 	}
