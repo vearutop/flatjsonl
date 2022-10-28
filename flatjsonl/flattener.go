@@ -86,6 +86,8 @@ func (fv *FastWalker) walkFastJSONString(seq int64, path []string, v *fastjson.V
 		panic(fmt.Sprintf("BUG: failed to use JSON string: %v", err))
 	}
 
+	fv.FnString(seq, path, s)
+
 	// Check if string has nested JSON.
 	if len(s) > 2 && (s[0] == '{' || s[0] == '[') {
 		p := pl.Get()
@@ -94,12 +96,8 @@ func (fv *FastWalker) walkFastJSONString(seq int64, path []string, v *fastjson.V
 		v, err := p.ParseBytes(s)
 		if err == nil {
 			fv.WalkFastJSON(seq, append(path, "JSON"), v)
-
-			return
 		}
 	}
-
-	fv.FnString(seq, path, s)
 }
 
 // Format turns value into a string.
