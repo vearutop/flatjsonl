@@ -1,3 +1,4 @@
+// Package main provides flatjsonl CLI tool.
 package main
 
 import (
