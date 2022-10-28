@@ -227,25 +227,38 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 }
 
 func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, path []string, value []byte)) []byte {
-	pos := bytes.Index(line, []byte("{"))
+	pos := bytes.Index(line, []byte(`{"`))
 
 	if pos == -1 {
-		if rd.OnError != nil {
-			rd.OnError(fmt.Errorf("could not find JSON in line %s", string(line)))
-		}
+		// If prefix matching is enabled, it may be ok to not have any JSON in line.
+		// All data would be parsed only from prefix (which may also describe whole line).
+		if rd.MatchPrefix == nil {
+			if rd.OnError != nil {
+				rd.OnError(fmt.Errorf("could not find JSON in line %s", string(line)))
+			}
 
-		return nil
+			return nil
+		}
 	}
 
-	if pos > 0 && rd.MatchPrefix != nil {
-		pref := line[:pos]
-		sm := rd.MatchPrefix.FindSubmatch(pref)
+	if rd.MatchPrefix != nil {
+		pref := line
 
-		if len(sm) > 1 {
-			for i, m := range sm[1:] {
-				walkFn(seq, []string{"_prefix", "[" + strconv.Itoa(i) + "]"}, m)
+		if pos > 0 {
+			pref = line[:pos]
+		}
+
+		sm := rd.MatchPrefix.FindAllSubmatch(pref, -1)
+
+		for _, m := range sm {
+			for j := 1; j < len(m); j++ {
+				walkFn(seq, []string{"_prefix", "[" + strconv.Itoa(j-1) + "]"}, m[j])
 			}
 		}
+	}
+
+	if pos == -1 {
+		return []byte(`{}`)
 	}
 
 	line = line[pos:]

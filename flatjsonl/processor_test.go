@@ -51,3 +51,26 @@ func TestNewProcessor(t *testing.T) {
 3,host-13,2022-06-24 14:13:38,May,,,,,,
 `, string(b))
 }
+
+func TestNewProcessor_prefixNoJSON(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "_testdata/prefix_no_json.log"
+	f.Output = "_testdata/prefix_no_json.csv"
+	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+) (\w+): ([\w\d]+), ([\w\d]+) ([\w\d]+)`
+	f.PrepareOutput()
+
+	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{}, f.Inputs())
+
+	assert.NoError(t, proc.Process())
+
+	b, err := os.ReadFile("_testdata/prefix_no_json.csv")
+	require.NoError(t, err)
+
+	assert.Equal(t, `._sequence,._prefix.[0],._prefix.[1],._prefix.[2],._prefix.[3],._prefix.[4],._prefix.[5]
+1,host-13,2022/06/24 14:13:36.393275,fooa,bar1,bazd,qux4
+2,host-14,2022/06/24 14:13:37.393275,foob,bar2,bazc,qux3
+3,host-13,2022/06/24 14:13:38.393275,fooc,bar3,bazb,qux2
+4,host-14,2022/06/24 14:13:39.393275,food,bar4,baza,qux1
+`, string(b))
+}
