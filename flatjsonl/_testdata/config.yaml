@@ -1,0 +1,10 @@
+replaceKeys:
+  "._prefix.[0]": host
+  "._prefix.[1]": timestamp
+replaceKeysRegex:
+  "^\\.foo\\.([^.]+)$": f00_${1} VARCHAR(255)
+  ".foo.*.*": f00_${2}_${1} VARCHAR(255)
+parseTime:
+  "._prefix.[1]": 2006/01/02 15:04:05.99999
+outputTimeFormat: '2006-01-02 15:04:05'
+outputTZ: UTC
