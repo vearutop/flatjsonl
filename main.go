@@ -11,6 +11,7 @@ import (
 	"github.com/bool64/dev/version"
 	"github.com/swaggest/assertjson/json5"
 	"github.com/vearutop/flatjsonl/flatjsonl"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -63,9 +64,12 @@ func main() {
 			log.Fatalf("failed to read config file: %v", err)
 		}
 
-		err = json5.Unmarshal(b, &cfg)
-		if err != nil {
-			log.Fatalf("failed to decode config file: %v", err)
+		yerr := yaml.Unmarshal(b, &cfg)
+		if yerr != nil {
+			err = json5.Unmarshal(b, &cfg)
+			if err != nil {
+				log.Fatalf("failed to decode config file: json5: %v, yaml: %v", err, yerr)
+			}
 		}
 	}
 
