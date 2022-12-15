@@ -247,6 +247,37 @@ func (p *Processor) prepareKeys() {
 	for k, i := range p.includeKeys {
 		p.keys[i], p.types[i] = p.prepareKey(k)
 	}
+
+	keys := make([]string, 0, len(p.keys))
+	types := make([]Type, 0, len(p.types))
+
+	keyExists := make(map[string]int)
+	keyMap := make(map[int]int)
+
+	for i, pk := range p.keys {
+		if j, ok := keyExists[pk]; ok {
+			types[j] = types[j].Update(p.types[i])
+			keyMap[i] = j
+
+			continue
+		}
+
+		keyExists[pk] = len(keys)
+		keyMap[i] = len(keys)
+		keys = append(keys, pk)
+		types = append(types, p.types[i])
+	}
+
+	if len(keyMap) > 0 {
+		for k, i := range p.includeKeys {
+			if j, ok := keyMap[i]; ok {
+				p.includeKeys[k] = j
+			}
+		}
+	}
+
+	p.keys = keys
+	p.types = types
 }
 
 func (p *Processor) prepareKey(k string) (kk string, t Type) {

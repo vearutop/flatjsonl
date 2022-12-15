@@ -35,7 +35,7 @@ func (t Type) Update(u Type) Type {
 	}
 
 	// Bool and non-bool make unconstrained type: string.
-	if t == TypeBool && u != TypeBool {
+	if (t == TypeBool && u != TypeBool) || (t != TypeBool && u == TypeBool) {
 		return TypeString
 	}
 

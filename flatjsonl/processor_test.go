@@ -115,3 +115,31 @@ func TestNewProcessor_prefixNoJSON(t *testing.T) {
 4,host-14,2022/06/24 14:13:39.393275,food,bar4,baza,qux1
 `, string(b))
 }
+
+func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "_testdata/coalesce.log"
+	f.Output = "_testdata/coalesce.csv"
+	f.PrepareOutput()
+
+	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{
+		ReplaceKeys: map[string]string{
+			".a": "shared",
+			".b": "shared",
+			".c": "shared",
+		},
+	}, f.Inputs())
+
+	assert.NoError(t, proc.Process())
+
+	b, err := os.ReadFile("_testdata/coalesce.csv")
+	require.NoError(t, err)
+
+	assert.Equal(t, `._sequence,shared,.foo
+1,1,true
+2,123,false
+3,false,true
+4,10,true
+`, string(b))
+}

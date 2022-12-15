@@ -303,7 +303,7 @@ func newWriteIterator(p *Processor, pkIndex map[string]int, pkTimeFmt map[string
 		New: func() interface{} {
 			return &lineBuf{
 				h:      newHasher(),
-				values: make([]Value, len(p.includeKeys)),
+				values: make([]Value, len(p.keys)),
 			}
 		},
 	}
@@ -429,9 +429,11 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 		l := wi.pending[seq]
 
 		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
-			l.values[i] = Value{
-				Seq:  seq,
-				Type: TypeNull,
+			if l.values[i].Type == TypeAbsent {
+				l.values[i] = Value{
+					Seq:  seq,
+					Type: TypeNull,
+				}
 			}
 		}
 	}
