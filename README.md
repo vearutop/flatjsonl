@@ -60,7 +60,7 @@ Usage of flatjsonl:
   -concurrency int
         Number of concurrent routines in reader. (default 24)
   -config string
-        Configuration JSON file.
+        Configuration JSON or YAML file.
   -cpu-prof string
         Write CPU profile to file.
   -csv string
@@ -105,21 +105,26 @@ Usage of flatjsonl:
 
 ### Configuration file
 
-```json
-{
-  "includeKeys": [".key1", ".key2", ".keyGroup.[0].key3"],
-  "replaceKeys": {".key1": "key1", ".key2": "created_at"},
-  "parseTime": {
-    "._prefix.[1]": "2006/01/02 15:04:05.99999"
-  },
-  "outputTimeFormat": "2006-01-02 15:04:05",
-  "outputTZ": "UTC"
-}
+```yaml
+includeKeys:
+  - ".key1"
+  - ".key2"
+  - ".keyGroup.[0].key3"
+replaceKeys:
+  ".key1": key1
+  ".key2": created_at
+parseTime:
+  "._prefix.[1]": 2006/01/02 15:04:05.99999
+outputTimeFormat: '2006-01-02 15:04:05'
+outputTZ: UTC
 ```
 
 Parse time is a map of original key to time pattern. See https://pkg.go.dev/time#pkg-constants for pattern rules.
 
 Output time format is used to write parsed timestamps.
+
+List of `includeKeys` can also declare columns with constant values in form of `"const:<value>"`, `<value>` would
+be used as column value.
 
 Configuration file can also have [regexp replaces](https://pkg.go.dev/regexp#Regexp.ReplaceAllString) as a map of 
 regular expression as keys and replace patterns as values.
@@ -147,6 +152,8 @@ stopped and replaced key is used.
 
 Multiple regular expression could match and replace a key, this can lead to undefined behavior, to avoid it is 
 recommended to use mutually exclusive expressions and match against full key by having `^` and `$` at the edges of exp.
+
+If multiple keys are replaced into similar key, coalesce function is used for resulting column value.
 
 ## Examples
 

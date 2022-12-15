@@ -143,3 +143,39 @@ func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
 4,10,true
 `, string(b))
 }
+
+func TestNewProcessor_constVal(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "_testdata/coalesce.log"
+	f.Output = "_testdata/constVal.csv"
+	f.PrepareOutput()
+
+	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{
+		IncludeKeys: []string{
+			".a",
+			".b",
+			".c",
+			"const:bar",
+			".foo",
+		},
+		ReplaceKeys: map[string]string{
+			".a":        "shared",
+			".b":        "shared",
+			".c":        "shared",
+			"const:bar": "bar_name",
+		},
+	}, f.Inputs())
+
+	assert.NoError(t, proc.Process())
+
+	b, err := os.ReadFile("_testdata/constVal.csv")
+	require.NoError(t, err)
+
+	assert.Equal(t, `shared,bar_name,.foo
+1,bar,true
+123,bar,false
+false,bar,true
+10,bar,true
+`, string(b))
+}

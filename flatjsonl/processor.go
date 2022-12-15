@@ -27,6 +27,7 @@ type Processor struct {
 	includeKeys  map[string]int
 	includeRegex []*regexp.Regexp
 	replaceRegex map[*regexp.Regexp]string
+	constVals    map[int]string
 
 	replaceKeys  map[string]string
 	replaceByKey map[string]string
@@ -72,6 +73,7 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 			Buf:      make([]byte, 1e7),
 		},
 		includeKeys:   map[string]int{},
+		constVals:     map[int]string{},
 		canonicalKeys: map[string]flKey{},
 
 		flKeysList:   make([]string, 0),
@@ -476,6 +478,16 @@ func (wi *writeIterator) checkCompleted() error {
 
 		if !isReady {
 			break
+		}
+
+		for i, v := range wi.p.constVals {
+			val := Value{
+				Seq:    seqCompleted,
+				Type:   TypeString,
+				String: v,
+			}
+
+			l.values[i] = val
 		}
 
 		if err := wi.p.w.ReceiveRow(wi.p.keys, l.values); err != nil {

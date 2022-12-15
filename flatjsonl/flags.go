@@ -47,7 +47,7 @@ func (f *Flags) Register() {
 	flag.BoolVar(&f.HideProgress, "hide-progress", false, "Do not show progress in STDERR.")
 	flag.DurationVar(&f.ProgressInterval, "progress-interval", 5*time.Second, "Progress update interval.")
 	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as key.")
-	flag.StringVar(&f.Config, "config", "", "Configuration JSON file.")
+	flag.StringVar(&f.Config, "config", "", "Configuration JSON or YAML file.")
 	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
 	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")
 	flag.BoolVar(&f.ShowKeysInfo, "show-keys-info", false, "Show keys, their replaces and types.")
