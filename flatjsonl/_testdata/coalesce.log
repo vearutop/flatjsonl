@@ -1,0 +1,4 @@
+{"a":1,"foo":true}
+{"b":"b","a":123,"foo":false}
+{"c":false,"foo":true}
+{"a":10,"foo":true}
