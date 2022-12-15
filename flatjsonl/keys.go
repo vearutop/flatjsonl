@@ -157,18 +157,15 @@ func (p *Processor) scanAvailableKeys() error {
 	return nil
 }
 
-func (p *Processor) iterateIncludeKeys() {
-	i := 0
-
-	for _, k := range p.cfg.IncludeKeys {
-		p.includeKeys[k] = i
-		i++
-	}
-
+func (p *Processor) populateFLKeys() {
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
 
 		for k := range p.includeKeys {
+			if strings.HasPrefix(k, "const:") {
+				continue
+			}
+
 			path := strings.Split(strings.TrimPrefix(k, "."), ".")
 			pk := h.hashString(path)
 			p.flKeys.Store(pk, flKey{
@@ -180,6 +177,17 @@ func (p *Processor) iterateIncludeKeys() {
 			})
 		}
 	}
+}
+
+func (p *Processor) iterateIncludeKeys() {
+	i := 0
+
+	for _, k := range p.cfg.IncludeKeys {
+		p.includeKeys[k] = i
+		i++
+	}
+
+	p.populateFLKeys()
 
 	p.flKeys.Range(func(key string, value flKey) bool {
 		v := p.canonicalKeys[value.ck]
@@ -272,6 +280,10 @@ func (p *Processor) prepareKeys() {
 		for k, i := range p.includeKeys {
 			if j, ok := keyMap[i]; ok {
 				p.includeKeys[k] = j
+
+				if strings.HasPrefix(k, "const:") {
+					p.constVals[j] = strings.TrimPrefix(k, "const:")
+				}
 			}
 		}
 	}
