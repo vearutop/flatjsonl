@@ -109,6 +109,7 @@ Usage of flatjsonl:
 includeKeys:
   - ".key1"
   - ".key2"
+  - "const:my-value"
   - ".keyGroup.[0].key3"
 replaceKeys:
   ".key1": key1

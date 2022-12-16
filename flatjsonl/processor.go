@@ -144,6 +144,8 @@ func (p *Processor) Process() error {
 		if err := p.scanAvailableKeys(); err != nil {
 			return err
 		}
+
+		println("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
 	}
 
 	p.prepareKeys()
@@ -152,9 +154,9 @@ func (p *Processor) Process() error {
 		if err := p.iterateForWriters(); err != nil {
 			return err
 		}
-	}
 
-	println("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+		println("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+	}
 
 	return p.maybeShowKeys()
 }
@@ -271,6 +273,7 @@ func (p *Processor) iterateForWriters() error {
 			if err != nil {
 				return err
 			}
+			defer sess.Close()
 
 			sess.lineStarted = wi.lineStarted
 			sess.setupWalker = wi.setupWalker
