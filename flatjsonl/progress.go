@@ -69,6 +69,7 @@ func (p *Progress) Start(total int64, cr *CountingReader, task string) {
 
 			case <-done:
 				t.Stop()
+
 				return
 			}
 		}
