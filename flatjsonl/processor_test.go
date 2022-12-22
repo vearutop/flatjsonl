@@ -138,7 +138,7 @@ func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
 
 	assert.Equal(t, `._sequence,shared,.foo
 1,1,true
-2,123,false
+2,b,false
 3,false,true
 4,10,true
 `, string(b))
@@ -174,7 +174,7 @@ func TestNewProcessor_constVal(t *testing.T) {
 
 	assert.Equal(t, `shared,bar_name,.foo
 1,bar,true
-123,bar,false
+b,bar,false
 false,bar,true
 10,bar,true
 `, string(b))

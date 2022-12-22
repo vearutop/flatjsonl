@@ -118,6 +118,7 @@ parseTime:
   "._prefix.[1]": 2006/01/02 15:04:05.99999
 outputTimeFormat: '2006-01-02 15:04:05'
 outputTZ: UTC
+concatDelimiter: "::"
 ```
 
 Parse time is a map of original key to time pattern. See https://pkg.go.dev/time#pkg-constants for pattern rules.
@@ -154,7 +155,8 @@ stopped and replaced key is used.
 Multiple regular expression could match and replace a key, this can lead to undefined behavior, to avoid it is 
 recommended to use mutually exclusive expressions and match against full key by having `^` and `$` at the edges of exp.
 
-If multiple keys are replaced into similar key, coalesce function is used for resulting column value.
+If multiple keys are replaced into similar key, coalesce function is used for resulting column value, or if 
+`concatDelimiter` is defined those values would be concatenated.
 
 ## Examples
 

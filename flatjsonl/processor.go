@@ -351,95 +351,80 @@ type writeIterator struct {
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.FnString = func(seq int64, path []string, value []byte) {
-		wi.mu.RLock()
-		defer wi.mu.RUnlock()
-
-		l := wi.pending[seq]
-
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
 
-		h := l.h.hashString(path)
-
-		i, ok := wi.pkIndex[h]
-		if !ok {
-			return
-		}
-
-		v := Value{
+		wi.setValue(seq, Value{
+			Seq:    seq,
+			Type:   TypeString,
+			String: string(value),
+		}, path)
+	}
+	w.FnNumber = func(seq int64, path []string, value float64, raw []byte) {
+		wi.setValue(seq, Value{
+			Seq:       seq,
+			Type:      TypeFloat,
+			Number:    value,
+			RawNumber: string(raw),
+		}, path)
+	}
+	w.FnBool = func(seq int64, path []string, value bool) {
+		wi.setValue(seq, Value{
 			Seq:  seq,
-			Type: TypeString,
+			Type: TypeBool,
+			Bool: value,
+		}, path)
+	}
+	w.FnNull = func(seq int64, path []string) {
+		wi.setValue(seq, Value{
+			Seq:  seq,
+			Type: TypeNull,
+		}, path)
+	}
+}
+
+func (wi *writeIterator) setValue(seq int64, v Value, path []string) {
+	wi.mu.RLock()
+	defer wi.mu.RUnlock()
+
+	l := wi.pending[seq]
+
+	h := l.h.hashString(path)
+	if i, ok := wi.pkIndex[h]; ok { //nolint:nestif
+		if v.Type == TypeString {
+			// Reformat time.
+			if tf, ok := wi.pkTimeFmt[h]; ok {
+				t, err := time.Parse(tf, v.String)
+				if err != nil {
+					v.String = fmt.Sprintf("failed to parse time %s: %s", v.String, err)
+				} else {
+					if wi.outputTZ != nil {
+						t = t.In(wi.outputTZ)
+					}
+
+					v.String = t.Format(wi.outTimeFmt)
+				}
+			}
 		}
 
-		sv := string(value)
+		ev := l.values[i]
+		t := ev.Type
 
-		if sv == "" {
-			v.String = ""
+		if t == TypeAbsent {
 			l.values[i] = v
 
 			return
 		}
 
-		if tf, ok := wi.pkTimeFmt[h]; ok {
-			t, err := time.Parse(tf, sv)
-			if err != nil {
-				sv = fmt.Sprintf("failed to parse time %s: %s", sv, err)
-			} else {
-				if wi.outputTZ != nil {
-					t = t.In(wi.outputTZ)
-				}
-
-				sv = t.Format(wi.outTimeFmt)
+		if wi.p.cfg.ConcatDelimiter != nil && v.Type != TypeAbsent {
+			cv := Value{
+				Seq:    v.Seq,
+				Type:   TypeString,
+				String: ev.Format() + *wi.p.cfg.ConcatDelimiter + v.Format(),
 			}
-		}
 
-		v.String = sv
-
-		l.values[i] = v
-	}
-	w.FnNumber = func(seq int64, path []string, value float64, raw []byte) {
-		wi.mu.RLock()
-		defer wi.mu.RUnlock()
-
-		l := wi.pending[seq]
-
-		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
-			l.values[i] = Value{
-				Seq:       seq,
-				Type:      TypeFloat,
-				Number:    value,
-				RawNumber: string(raw),
-			}
-		}
-	}
-	w.FnBool = func(seq int64, path []string, value bool) {
-		wi.mu.RLock()
-		defer wi.mu.RUnlock()
-
-		l := wi.pending[seq]
-
-		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
-			l.values[i] = Value{
-				Seq:  seq,
-				Type: TypeBool,
-				Bool: value,
-			}
-		}
-	}
-	w.FnNull = func(seq int64, path []string) {
-		wi.mu.RLock()
-		defer wi.mu.RUnlock()
-
-		l := wi.pending[seq]
-
-		if i, ok := wi.pkIndex[l.h.hashString(path)]; ok {
-			if l.values[i].Type == TypeAbsent {
-				l.values[i] = Value{
-					Seq:  seq,
-					Type: TypeNull,
-				}
-			}
+			l.values[i] = cv
 		}
 	}
 }

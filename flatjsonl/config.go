@@ -9,4 +9,5 @@ type Config struct {
 	ParseTime        map[string]string `json:"parseTime" yaml:"parseTime" description:"Map of key to time format."`
 	OutputTimeFormat string            `json:"outputTimeFormat" yaml:"outputTimeFormat" example:"2006-01-02T15:04:05Z07:00" description:"See https://pkg.go.dev/time#pkg-constants."`
 	OutputTimezone   string            `json:"outputTZ" yaml:"outputTZ" example:"UTC"`
+	ConcatDelimiter  *string           `json:"concatDelimiter" yaml:"concatDelimiter" example:"," description:"In case multiple keys are replaced into one, their values would be concatenated."`
 }
