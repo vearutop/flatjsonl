@@ -13,14 +13,20 @@ type Flags struct {
 	ProgressInterval time.Duration
 	Input            string
 	Output           string
-	CSV              string
-	SQLite           string
-	SQLTable         string
-	MaxLines         int
-	OffsetLines      int
-	MaxLinesKeys     int
-	FieldLimit       int
-	KeyLimit         int
+
+	CSV string
+
+	SQLite   string
+	SQLTable string
+
+	Raw      string
+	RawDelim string
+
+	MaxLines     int
+	OffsetLines  int
+	MaxLinesKeys int
+	FieldLimit   int
+	KeyLimit     int
 
 	Config            string
 	ReplaceKeys       bool
@@ -40,9 +46,13 @@ type Flags struct {
 func (f *Flags) Register() {
 	flag.StringVar(&f.Input, "input", "", "Input from JSONL files, comma-separated.")
 	flag.StringVar(&f.Output, "output", "", "Output to a file (default <input>.csv).")
-	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file.")
+	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
+
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
+
+	flag.StringVar(&f.Raw, "raw", "", "Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).")
+	flag.StringVar(&f.RawDelim, "raw-delim", "", "RAW file column delimiter.")
 
 	flag.BoolVar(&f.HideProgress, "hide-progress", false, "Do not show progress in STDERR.")
 	flag.DurationVar(&f.ProgressInterval, "progress-interval", 5*time.Second, "Progress update interval.")
@@ -88,7 +98,7 @@ func (f *Flags) PrepareOutput() {
 	for _, output := range strings.Split(f.Output, ",") {
 		outputLow := strings.ToLower(output)
 
-		if strings.HasSuffix(outputLow, ".csv") {
+		if strings.HasSuffix(outputLow, ".csv") || strings.HasSuffix(outputLow, ".csv.gz") {
 			if f.CSV != "" {
 				println("CSV output is already enabled, skipping", output)
 
@@ -96,6 +106,18 @@ func (f *Flags) PrepareOutput() {
 			}
 
 			f.CSV = output
+
+			continue
+		}
+
+		if strings.HasSuffix(outputLow, ".raw") || strings.HasSuffix(outputLow, ".raw.gz") {
+			if f.Raw != "" {
+				println("RAW output is already enabled, skipping", output)
+
+				continue
+			}
+
+			f.Raw = output
 
 			continue
 		}
