@@ -3,7 +3,6 @@ package flatjsonl
 import (
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	gzip "github.com/klauspost/pgzip"
 	"github.com/valyala/fastjson"
 )
 
