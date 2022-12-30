@@ -27,7 +27,7 @@ ifeq ($(DEVGO_PATH),)
 	endif
 endif
 
-export CGO_ENABLED = 0
+export CGO_ENABLED = 1
 BUILD_LDFLAGS="-s -w"
 
 -include $(DEVGO_PATH)/makefiles/main.mk
