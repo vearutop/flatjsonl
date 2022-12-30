@@ -1,7 +1,10 @@
 package flatjsonl_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"os"
 	"strconv"
 	"testing"
@@ -177,5 +180,47 @@ func TestNewProcessor_constVal(t *testing.T) {
 b,bar,false
 false,bar,true
 10,bar,true
+`, string(b))
+}
+
+func TestNewProcessor_rawWriter(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "_testdata/test.log"
+	f.Output = "_testdata/test.raw.gz"
+	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
+	f.MaxLines = 3
+	f.ReplaceKeys = true
+	f.SkipZeroCols = true
+	f.ShowKeysFlat = true
+	f.ShowKeysHier = true
+	f.ShowKeysInfo = true
+	f.Concurrency = 1
+	f.RawDelim = ":::"
+	f.PrepareOutput()
+
+	cj, err := os.ReadFile("_testdata/config.json")
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, json.Unmarshal(cj, &cfg))
+
+	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs())
+
+	assert.NoError(t, proc.Process())
+
+	b, err := os.ReadFile("_testdata/test.raw.gz")
+	require.NoError(t, err)
+
+	r, err := gzip.NewReader(bytes.NewReader(b))
+	require.NoError(t, err)
+
+	b, err = io.ReadAll(r)
+	require.NoError(t, err)
+
+	assert.Equal(t, `1:::host-13:::2022-06-24 14:13:36:::Gilbert:::straight:::7♣:::one pair:::10♥:::1:::abc:::::::::
+2:::host-14:::2022-06-24 14:13:37:::"'Alexa'":::two pair:::4♠:::two pair:::9♠:::::::::::::::
+3:::host-13:::2022-06-24 14:13:38:::May:::::::::::::::::::::{"foo":1, "bar": 2}:::1:::2
 `, string(b))
 }

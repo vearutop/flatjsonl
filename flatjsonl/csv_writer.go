@@ -1,14 +1,17 @@
 package flatjsonl
 
 import (
+	"compress/gzip"
 	"encoding/csv"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 )
 
 // CSVWriter writes rows to CSV file.
 type CSVWriter struct {
-	f           *os.File
+	f           io.WriteCloser
 	w           *csv.Writer
 	headWritten bool
 	row         []string
@@ -23,6 +26,10 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 	c.f, err = os.Create(fn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CSV file: %w", err)
+	}
+
+	if strings.HasSuffix(fn, ".gz") {
+		c.f = gzip.NewWriter(c.f)
 	}
 
 	c.w = csv.NewWriter(c.f)
@@ -64,7 +71,7 @@ func (c *CSVWriter) ReceiveRow(keys []string, values []Value) error {
 	return nil
 }
 
-// Close flushes rows anc closes file.
+// Close flushes rows and closes file.
 func (c *CSVWriter) Close() error {
 	c.w.Flush()
 

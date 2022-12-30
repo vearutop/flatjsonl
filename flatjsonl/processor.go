@@ -223,6 +223,15 @@ func (p *Processor) setupWriters() error {
 		p.w.Add(cw)
 	}
 
+	if p.f.Raw != "" {
+		rw, err := NewRawWriter(p.f.Raw, p.f.RawDelim)
+		if err != nil {
+			return fmt.Errorf("failed")
+		}
+
+		p.w.Add(rw)
+	}
+
 	return nil
 }
 

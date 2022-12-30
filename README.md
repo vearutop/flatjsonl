@@ -64,7 +64,7 @@ Usage of flatjsonl:
   -cpu-prof string
         Write CPU profile to file.
   -csv string
-        Output to CSV file.
+        Output to CSV file (gzip encoded if ends with .gz).
   -field-limit int
         Max length of field value, exceeding tail is truncated, 0 for unlimited.
   -hide-progress
@@ -87,6 +87,10 @@ Usage of flatjsonl:
         Output to a file (default <input>.csv).
   -progress-interval duration
         Progress update interval. (default 5s)
+  -raw string
+        Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).
+  -raw-delim string
+        RAW file column delimiter.
   -replace-keys
         Use unique tail segment converted to snake_case as key.
   -show-keys-flat
