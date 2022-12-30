@@ -66,7 +66,7 @@ Usage of flatjsonl:
   -csv string
         Output to CSV file.
   -field-limit int
-        Max length of field value, exceeding tail is truncated, 0 for unlimited. (default 1000)
+        Max length of field value, exceeding tail is truncated, 0 for unlimited.
   -hide-progress
         Do not show progress in STDERR.
   -input string
@@ -81,6 +81,8 @@ Usage of flatjsonl:
         Max number of lines to process when scanning keys.
   -mem-prof string
         Write mem profile to file.
+  -offset-lines int
+        Skip a number of first lines.
   -output string
         Output to a file (default <input>.csv).
   -progress-interval duration
