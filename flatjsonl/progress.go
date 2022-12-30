@@ -5,6 +5,8 @@ import (
 	"io"
 	"sync/atomic"
 	"time"
+
+	"github.com/erikdubbelboer/gspt"
 )
 
 // ProgressStatus describes current progress.
@@ -49,6 +51,8 @@ func (p *Progress) Start(total int64, cr *CountingReader, task string) {
 			if s.Task != "" {
 				s.Task += ": "
 			}
+
+			gspt.SetProcTitle(fmt.Sprintf("flatjsonl %s %.1f%%", s.Task, s.DonePercent))
 
 			println(fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, elapsed %s, remaining %s",
 				s.DonePercent, s.LinesCompleted, s.SpeedLPS, s.SpeedMBPS,

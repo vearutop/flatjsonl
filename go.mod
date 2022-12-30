@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/bool64/dev v0.2.22
 	github.com/cespare/xxhash/v2 v2.2.0
+	github.com/erikdubbelboer/gspt v0.0.0-20210805194459-ce36a5128377
 	github.com/klauspost/pgzip v1.2.5
 	github.com/puzpuzpuz/xsync/v2 v2.4.0
 	github.com/stretchr/testify v1.8.1
