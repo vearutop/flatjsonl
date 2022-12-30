@@ -58,7 +58,7 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
 	flag.IntVar(&f.OffsetLines, "offset-lines", 0, "Skip a number of first lines.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
-	flag.IntVar(&f.FieldLimit, "field-limit", 1000, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
+	flag.IntVar(&f.FieldLimit, "field-limit", 0, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
 	flag.IntVar(&f.KeyLimit, "key-limit", 0, "Max length of key, exceeding tail is truncated, 0 for unlimited.")
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")

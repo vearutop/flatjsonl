@@ -8,7 +8,8 @@ require (
 	github.com/puzpuzpuz/xsync/v2 v2.4.0
 	github.com/stretchr/testify v1.8.1
 	github.com/swaggest/assertjson v1.7.0
-	github.com/valyala/fastjson v1.6.3
+	github.com/valyala/fastjson v1.6.4
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.20.0
 )
 
@@ -30,7 +31,6 @@ require (
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/tools v0.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect
 	modernc.org/cc/v3 v3.40.0 // indirect
 	modernc.org/ccgo/v3 v3.16.13 // indirect
