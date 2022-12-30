@@ -81,7 +81,7 @@ func (f *Flags) Parse() {
 	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo {
 		inputs := f.Inputs()
 
-		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" {
+		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" && f.Raw == "" {
 			f.Output = inputs[0] + ".csv"
 		}
 	}
