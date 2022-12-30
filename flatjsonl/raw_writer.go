@@ -2,11 +2,12 @@ package flatjsonl
 
 import (
 	"bufio"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	gzip "github.com/klauspost/pgzip"
 )
 
 // RawWriter writes rows to RAW file.

@@ -1,12 +1,13 @@
 package flatjsonl
 
 import (
-	"compress/gzip"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	gzip "github.com/klauspost/pgzip"
 )
 
 // CSVWriter writes rows to CSV file.

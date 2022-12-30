@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/bool64/dev v0.2.22
 	github.com/cespare/xxhash/v2 v2.2.0
+	github.com/klauspost/pgzip v1.2.5
 	github.com/puzpuzpuz/xsync/v2 v2.4.0
 	github.com/stretchr/testify v1.8.1
 	github.com/swaggest/assertjson v1.7.0
@@ -19,6 +20,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/iancoleman/orderedmap v0.2.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
+	github.com/klauspost/compress v1.15.13 // indirect
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
