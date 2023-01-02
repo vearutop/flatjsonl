@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,16 +34,13 @@ type Processor struct {
 	replaceByKey map[string]string
 
 	// keys are ordered replaced column names, indexes match values of includeKeys.
-	keys []string
-
-	// types are ordered types of respective keys.
-	types []Type
+	keys []flKey
 
 	flKeys *xsync.MapOf[string, flKey]
 
 	mu            sync.Mutex
 	flKeysList    []string
-	keyHierarchy  Key
+	keyHierarchy  KeyHierarchy
 	canonicalKeys map[string]flKey
 }
 
@@ -66,18 +64,15 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 		rd: &Reader{
 			Concurrency: f.Concurrency,
 			AddSequence: f.AddSequence,
-			OnError: func(err error) {
-				println(err.Error())
-			},
-			Progress: pr,
-			Buf:      make([]byte, 1e7),
+			Progress:    pr,
+			Buf:         make([]byte, f.BufSize),
 		},
 		includeKeys:   map[string]int{},
 		constVals:     map[int]string{},
 		canonicalKeys: map[string]flKey{},
 
 		flKeysList:   make([]string, 0),
-		keyHierarchy: Key{Name: "."},
+		keyHierarchy: KeyHierarchy{Name: "."},
 
 		flKeys: xsync.NewMapOf[flKey](),
 	}
@@ -173,19 +168,15 @@ func (p *Processor) maybeShowKeys() error {
 	if p.f.ShowKeysInfo {
 		fmt.Println("keys info:")
 
-		keyByIndex := map[int]string{}
-
-		for k, i := range p.includeKeys {
-			keyByIndex[i] = k
-		}
-
 		for i, k := range p.keys {
-			orig := keyByIndex[i]
-			t := p.types[i]
+			line := strconv.Itoa(i) + ": " + k.replaced + ", TYPE " + string(k.t)
 
-			line := k + ", TYPE " + string(t)
-			if orig != k {
-				line = orig + " REPLACED WITH " + line
+			if k.replaced != k.original {
+				line = k.original + " REPLACED WITH " + line
+			}
+
+			if k.transposeDst != "" {
+				line += ", TRANSPOSED TO " + k.transposeDst
 			}
 
 			fmt.Println(line)
@@ -260,47 +251,51 @@ func (p *Processor) iterateForWriters() error {
 	}
 
 	pkIndex := make(map[string]int)
+	pkDst := make(map[string]string)
 	pkTimeFmt := make(map[string]string)
 
 	p.flKeys.Range(func(key string, value flKey) bool {
-		if i, ok := includeKeys[value.ck]; ok {
+		if i, ok := includeKeys[value.canonical]; ok {
 			pkIndex[key] = i
+			if value.transposeDst != "" {
+				pkDst[key] = value.transposeDst
+			}
 		}
 
-		if f, ok := p.cfg.ParseTime[value.key]; ok {
+		if f, ok := p.cfg.ParseTime[value.original]; ok {
 			pkTimeFmt[key] = f
 		}
 
 		return true
 	})
 
-	wi := newWriteIterator(p, pkIndex, pkTimeFmt)
+	wi := newWriteIterator(p, pkIndex, pkDst, pkTimeFmt)
+
+	if err := p.w.SetupKeys(p.keys); err != nil {
+		return err
+	}
 
 	for _, input := range p.inputs {
-		err := func() error {
-			sess, err := p.rd.session(input, "flattening data")
-			if err != nil {
-				return err
-			}
-			defer sess.Close()
-
-			sess.lineStarted = wi.lineStarted
-			sess.setupWalker = wi.setupWalker
-			sess.lineFinished = wi.lineFinished
-
-			err = p.rd.Read(sess)
-			if err != nil {
-				return fmt.Errorf("failed to process file %s: %w", input, err)
-			}
-
-			return wi.waitPending()
-		}()
+		sess, err := p.rd.session(input, "flattening data")
 		if err != nil {
 			return err
 		}
+
+		sess.lineStarted = wi.lineStarted
+		sess.setupWalker = wi.setupWalker
+		sess.lineFinished = wi.lineFinished
+
+		err = p.rd.Read(sess)
+		if err != nil {
+			sess.Close()
+
+			return fmt.Errorf("failed to process file %s: %w", input, err)
+		}
+
+		sess.Close()
 	}
 
-	return nil
+	return wi.waitPending()
 }
 
 type lineBuf struct {
@@ -308,7 +303,7 @@ type lineBuf struct {
 	values []Value
 }
 
-func newWriteIterator(p *Processor, pkIndex map[string]int, pkTimeFmt map[string]string) *writeIterator {
+func newWriteIterator(p *Processor, pkIndex map[string]int, pkDst map[string]string, pkTimeFmt map[string]string) *writeIterator {
 	wi := writeIterator{}
 	wi.pending = map[int64]*lineBuf{}
 	wi.finished = map[int64]bool{}
@@ -323,6 +318,7 @@ func newWriteIterator(p *Processor, pkIndex map[string]int, pkTimeFmt map[string
 	}
 	wi.seqCompleted = 1
 	wi.pkIndex = pkIndex
+	wi.pkDst = pkDst
 	wi.pkTimeFmt = pkTimeFmt
 	wi.p = p
 	wi.fieldLimit = p.f.FieldLimit
@@ -351,6 +347,7 @@ type writeIterator struct {
 	lineBufPool  sync.Pool
 	seqCompleted int64
 	pkIndex      map[string]int
+	pkDst        map[string]string
 	pkTimeFmt    map[string]string
 	p            *Processor
 	fieldLimit   int
@@ -359,35 +356,31 @@ type writeIterator struct {
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
-	w.FnString = func(seq int64, path []string, value []byte) {
+	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
 
 		wi.setValue(seq, Value{
-			Seq:    seq,
 			Type:   TypeString,
 			String: string(value),
 		}, path)
 	}
-	w.FnNumber = func(seq int64, path []string, value float64, raw []byte) {
+	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
 		wi.setValue(seq, Value{
-			Seq:       seq,
 			Type:      TypeFloat,
 			Number:    value,
 			RawNumber: string(raw),
 		}, path)
 	}
-	w.FnBool = func(seq int64, path []string, value bool) {
+	w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
 		wi.setValue(seq, Value{
-			Seq:  seq,
 			Type: TypeBool,
 			Bool: value,
 		}, path)
 	}
-	w.FnNull = func(seq int64, path []string) {
+	w.FnNull = func(seq int64, flatPath []byte, path []string) {
 		wi.setValue(seq, Value{
-			Seq:  seq,
 			Type: TypeNull,
 		}, path)
 	}
@@ -399,11 +392,11 @@ func (wi *writeIterator) setValue(seq int64, v Value, path []string) {
 
 	l := wi.pending[seq]
 
-	h := l.h.hashString(path)
-	if i, ok := wi.pkIndex[h]; ok { //nolint:nestif
+	pk := l.h.hashString(path)
+	if i, ok := wi.pkIndex[pk]; ok { //nolint:nestif
 		if v.Type == TypeString {
 			// Reformat time.
-			if tf, ok := wi.pkTimeFmt[h]; ok {
+			if tf, ok := wi.pkTimeFmt[pk]; ok {
 				t, err := time.Parse(tf, v.String)
 				if err != nil {
 					v.String = fmt.Sprintf("failed to parse time %s: %s", v.String, err)
@@ -417,6 +410,8 @@ func (wi *writeIterator) setValue(seq int64, v Value, path []string) {
 			}
 		}
 
+		v.Dst = wi.pkDst[pk]
+
 		ev := l.values[i]
 		t := ev.Type
 
@@ -428,7 +423,6 @@ func (wi *writeIterator) setValue(seq int64, v Value, path []string) {
 
 		if wi.p.cfg.ConcatDelimiter != nil && v.Type != TypeAbsent {
 			cv := Value{
-				Seq:    v.Seq,
 				Type:   TypeString,
 				String: ev.Format() + *wi.p.cfg.ConcatDelimiter + v.Format(),
 			}
@@ -479,7 +473,6 @@ func (wi *writeIterator) checkCompleted() error {
 
 		for i, v := range wi.p.constVals {
 			val := Value{
-				Seq:    seqCompleted,
 				Type:   TypeString,
 				String: v,
 			}
@@ -487,7 +480,7 @@ func (wi *writeIterator) checkCompleted() error {
 			l.values[i] = val
 		}
 
-		if err := wi.p.w.ReceiveRow(wi.p.keys, l.values); err != nil {
+		if err := wi.p.w.ReceiveRow(seqCompleted, l.values); err != nil {
 			return err
 		}
 

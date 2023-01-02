@@ -1,0 +1,3 @@
+{"name":"a","tags":["t1","t2","t3"],"deepArr":[{"abaz":{"a":5,"b":6},"afoo":{"a":15,"b":12}}],"tokens":{"foo":{"a":1,"b":2}},"flatMap": {"ccc": 123, "ddd": 456}}
+{"name":"b","tags":["t1","t5","t6"],"tokens":{"bar":{"a":3,"b":4}},"flatMap": {"rrr": "aaa","fff": 334}}
+{"name":"c","tags":["t1","t4","t5"],"deepArr":[{"abar":{"a":1,"b":2}}],"tokens":{"baz":{"a":5,"b":6},"foo":{"a":15,"b":12}}}

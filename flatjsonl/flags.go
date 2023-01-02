@@ -16,8 +16,9 @@ type Flags struct {
 
 	CSV string
 
-	SQLite   string
-	SQLTable string
+	SQLite        string
+	SQLiteMaxCols int
+	SQLTable      string
 
 	Raw      string
 	RawDelim string
@@ -27,6 +28,7 @@ type Flags struct {
 	MaxLinesKeys int
 	FieldLimit   int
 	KeyLimit     int
+	BufSize      int
 
 	Config            string
 	ReplaceKeys       bool
@@ -49,6 +51,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
 
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
+	flag.IntVar(&f.SQLiteMaxCols, "sqlite-max-cols", 500, "Maximum columns in single SQLite table (hard limit is 2000).")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
 
 	flag.StringVar(&f.Raw, "raw", "", "Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).")
@@ -70,6 +73,7 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
 	flag.IntVar(&f.FieldLimit, "field-limit", 0, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
 	flag.IntVar(&f.KeyLimit, "key-limit", 0, "Max length of key, exceeding tail is truncated, 0 for unlimited.")
+	flag.IntVar(&f.BufSize, "buf-size", 1e7, "Buffer size (max length of file line) in bytes.")
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
 }

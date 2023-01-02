@@ -1,6 +1,6 @@
 module github.com/vearutop/flatjsonl
 
-go 1.18
+go 1.19
 
 require (
 	github.com/bool64/dev v0.2.22
@@ -10,6 +10,7 @@ require (
 	github.com/stretchr/testify v1.8.1
 	github.com/swaggest/assertjson v1.7.0
 	github.com/valyala/fastjson v1.6.4
+	golang.org/x/sync v0.1.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.20.0
 )

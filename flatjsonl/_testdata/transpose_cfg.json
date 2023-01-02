@@ -1,0 +1,8 @@
+{
+  "transpose": {
+    ".tags": "tags",
+    ".tokens": "tokens",
+    ".deepArr": "deep_arr",
+    ".flatMap": "flat_map"
+  }
+}

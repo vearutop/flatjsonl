@@ -11,15 +11,16 @@ import (
 
 // SQLiteWriter inserts rows into SQLite database.
 type SQLiteWriter struct {
-	db           *sql.DB
-	tableCreated bool
-	tableName    string
-	row          []string
-	tx           *sql.Tx
-	rowsTx       int
-	seq          int
-	replacer     *strings.Replacer
-	p            *Processor
+	db        *sql.DB
+	tableName string
+	tx        *sql.Tx
+	rowsTx    int
+	replacer  *strings.Replacer
+	p         *Processor
+	maxCols   int
+
+	transposed map[string]*baseWriter
+	b          *baseWriter
 }
 
 // NewSQLiteWriter creates an instance of SQLiteWriter.
@@ -36,28 +37,87 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 		tableName: tableName,
 		replacer:  strings.NewReplacer(`"`, `""`),
 		p:         p,
+		maxCols:   p.f.SQLiteMaxCols - 1, // -1 for _seq_id.
 	}
 
 	return c, nil
 }
 
-// ReceiveRow receives rows.
-func (c *SQLiteWriter) ReceiveRow(keys []string, values []Value) error {
-	if !c.tableCreated {
-		if err := c.createTable(keys); err != nil {
+// SetupKeys creates tables.
+func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
+	c.b = &baseWriter{}
+	c.b.setupKeys(keys)
+	c.transposed = map[string]*baseWriter{}
+
+	if err := c.createTable(c.tableName, c.b.filteredKeys, false); err != nil {
+		return err
+	}
+
+	for dst, tw := range c.b.transposed {
+		tw.extName = c.table(dst)
+
+		if err := c.createTable(c.table(dst), tw.filteredKeys, true); err != nil {
 			return err
+		}
+
+		c.transposed[dst] = tw
+	}
+
+	return nil
+}
+
+func (c *SQLiteWriter) table(dst string) string {
+	if dst != "" {
+		return c.tableName + "_" + dst
+	}
+
+	return c.tableName
+}
+
+// ReceiveRow receives rows.
+func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
+	vv := c.b.receiveRowValues(values)
+
+	if err := c.insert(seq, c.tableName, vv); err != nil {
+		return fmt.Errorf("writing SQLite row: %w", err)
+	}
+
+	if c.rowsTx >= 1000 {
+		if err := c.commitTx(); err != nil {
+			return fmt.Errorf("committing tx: %w", err)
 		}
 	}
 
-	c.row = c.row[:0]
+	for dst, tw := range c.transposed {
+		vv := tw.receiveTransposedRowValues(seq, values)
 
-	c.seq++
-	tableName := c.tableName
-	res := `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(c.seq) + `,`
+		for _, r := range vv {
+			if err := c.insert(seq, tw.extName, r); err != nil {
+				return fmt.Errorf("transposed rows for %s: %w", dst, err)
+			}
+
+			if c.rowsTx >= 1000 {
+				if err := c.commitTx(); err != nil {
+					return fmt.Errorf("committing tx: %w", err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *SQLiteWriter) insert(seq int64, tn string, values []Value) error {
+	c.rowsTx++
+
+	tableName := tn
+	res := `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(int(seq)) + `,`
 	part := 1
 
 	for i, v := range values {
-		if i > 0 && i%sqliteMaxKeys == 0 {
+		if i > 0 && i%c.maxCols == 0 {
+			c.rowsTx++
+
 			res = res[:len(res)-1] + ")"
 
 			if err := c.execTx(res); err != nil {
@@ -65,8 +125,8 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []Value) error {
 			}
 
 			part++
-			tableName = c.tableName + "_part" + strconv.Itoa(part)
-			res = `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(c.seq) + `,`
+			tableName = tn + "_part" + strconv.Itoa(part)
+			res = `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(int(seq)) + `,`
 		}
 
 		if v.Type != TypeNull && v.Type != TypeAbsent {
@@ -78,17 +138,7 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []Value) error {
 
 	res = res[:len(res)-1] + ")"
 
-	if err := c.execTx(res); err != nil {
-		return err
-	}
-
-	c.rowsTx++
-
-	if c.rowsTx >= 1000 {
-		return c.commitTx()
-	}
-
-	return nil
+	return c.execTx(res)
 }
 
 func (c *SQLiteWriter) commitTx() error {
@@ -121,19 +171,25 @@ func (c *SQLiteWriter) execTx(res string) error {
 	return nil
 }
 
-const sqliteMaxKeys = 1999 // 2000-1 for _seq_id.
-
-func (c *SQLiteWriter) createTable(keys []string) error {
-	c.tableCreated = true
-
-	tableName := c.tableName
+func (c *SQLiteWriter) createTable(tn string, keys []flKey, isTransposed bool) error {
+	tableName := tn
 	createTable := `CREATE TABLE "` + tableName + `" (
+`
+
+	if !isTransposed {
+		createTable += `
 _seq_id integer primary key,
 `
+	} else {
+		createTable += `
+_seq_id integer,
+`
+	}
+
 	part := 1
 
 	for i, k := range keys {
-		if i > 0 && i%sqliteMaxKeys == 0 {
+		if i > 0 && i%c.maxCols == 0 {
 			createTable = createTable[:len(createTable)-2] + "\n)"
 
 			_, err := c.db.Exec(createTable)
@@ -142,23 +198,31 @@ _seq_id integer primary key,
 			}
 
 			part++
-			tableName = c.tableName + "_part" + strconv.Itoa(part)
+			tableName = tn + "_part" + strconv.Itoa(part)
 			createTable = `CREATE TABLE "` + tableName + `" (
+`
+
+			if !isTransposed {
+				createTable += `
 _seq_id integer primary key,
 `
+			} else {
+				createTable += `
+_seq_id integer,
+`
+			}
 		}
 
 		tp := ""
 
-		t := c.p.types[i]
-		switch t { //nolint: exhaustive
+		switch k.t { //nolint: exhaustive
 		case TypeInt, TypeBool:
 			tp = " INTEGER"
 		case TypeFloat:
 			tp = " REAL"
 		}
 
-		createTable += `"` + k + `"` + tp + `,` + "\n"
+		createTable += `"` + k.replaced + `"` + tp + `,` + "\n"
 	}
 
 	createTable = createTable[:len(createTable)-2] + "\n)"
