@@ -20,6 +20,8 @@ type SQLiteWriter struct {
 	seq          int
 	replacer     *strings.Replacer
 	p            *Processor
+
+	posByDst map[string][]int
 }
 
 // NewSQLiteWriter creates an instance of SQLiteWriter.
@@ -41,23 +43,63 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 	return c, nil
 }
 
-// ReceiveRow receives rows.
-func (c *SQLiteWriter) ReceiveRow(keys []string, values []Value) error {
-	if !c.tableCreated {
-		if err := c.createTable(keys); err != nil {
+// SetupKeys creates tables.
+func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
+	c.posByDst = map[string][]int{}
+	keysByDst := map[string][]flKey{}
+
+	for i, k := range keys {
+		c.posByDst[k.transposeDst] = append(c.posByDst[k.transposeDst], i)
+		keysByDst[k.transposeDst] = append(keysByDst[k.transposeDst], k)
+	}
+
+	for dst, kk := range keysByDst {
+		if err := c.createTable(c.table(dst), kk); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+func (c *SQLiteWriter) table(dst string) string {
+	if dst != "" {
+		return c.tableName + "_" + dst
+	}
+
+	return c.tableName
+}
+
+// ReceiveRow receives rows.
+func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
 	c.row = c.row[:0]
 
 	c.seq++
-	tableName := c.tableName
+
+	for dst := range c.posByDst {
+		if err := c.insertDst(dst, values); err != nil {
+			return err
+		}
+	}
+
+	if c.rowsTx >= 1000 {
+		return c.commitTx()
+	}
+
+	return nil
+}
+
+func (c *SQLiteWriter) insertDst(dst string, values []Value) error {
+	tableName := c.table(dst)
+
+	c.rowsTx++
 	res := `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(c.seq) + `,`
 	part := 1
 
-	for i, v := range values {
+	for i, pos := range c.posByDst[dst] {
 		if i > 0 && i%sqliteMaxKeys == 0 {
+			c.rowsTx++
+
 			res = res[:len(res)-1] + ")"
 
 			if err := c.execTx(res); err != nil {
@@ -69,6 +111,8 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []Value) error {
 			res = `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(c.seq) + `,`
 		}
 
+		v := values[pos]
+
 		if v.Type != TypeNull && v.Type != TypeAbsent {
 			res += `"` + c.replacer.Replace(v.Format()) + `",`
 		} else {
@@ -78,17 +122,7 @@ func (c *SQLiteWriter) ReceiveRow(keys []string, values []Value) error {
 
 	res = res[:len(res)-1] + ")"
 
-	if err := c.execTx(res); err != nil {
-		return err
-	}
-
-	c.rowsTx++
-
-	if c.rowsTx >= 1000 {
-		return c.commitTx()
-	}
-
-	return nil
+	return c.execTx(res)
 }
 
 func (c *SQLiteWriter) commitTx() error {
@@ -123,10 +157,10 @@ func (c *SQLiteWriter) execTx(res string) error {
 
 const sqliteMaxKeys = 1999 // 2000-1 for _seq_id.
 
-func (c *SQLiteWriter) createTable(keys []string) error {
+func (c *SQLiteWriter) createTable(tn string, keys []flKey) error {
 	c.tableCreated = true
 
-	tableName := c.tableName
+	tableName := tn
 	createTable := `CREATE TABLE "` + tableName + `" (
 _seq_id integer primary key,
 `
@@ -150,15 +184,14 @@ _seq_id integer primary key,
 
 		tp := ""
 
-		t := c.p.types[i]
-		switch t { //nolint: exhaustive
+		switch k.t { //nolint: exhaustive
 		case TypeInt, TypeBool:
 			tp = " INTEGER"
 		case TypeFloat:
 			tp = " REAL"
 		}
 
-		createTable += `"` + k + `"` + tp + `,` + "\n"
+		createTable += `"` + k.replaced + `"` + tp + `,` + "\n"
 	}
 
 	createTable = createTable[:len(createTable)-2] + "\n)"

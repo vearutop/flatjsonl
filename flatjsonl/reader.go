@@ -14,6 +14,7 @@ import (
 
 	gzip "github.com/klauspost/pgzip"
 	"github.com/valyala/fastjson"
+	"golang.org/x/sync/errgroup"
 )
 
 // Reader scans lines and decodes JSON in them.
@@ -106,11 +107,12 @@ func (rd *Reader) session(fn string, task string) (sess *readSession, err error)
 }
 
 type syncWorker struct {
-	i      int
-	p      *fastjson.Parser
-	path   []string
-	walker *FastWalker
-	line   []byte
+	i        int
+	p        *fastjson.Parser
+	path     []string
+	flatPath []byte
+	walker   *FastWalker
+	line     []byte
 }
 
 // Read reads single file with JSON lines.
@@ -126,15 +128,17 @@ func (rd *Reader) Read(sess *readSession) error {
 		sess.setupWalker(w)
 
 		semaphore <- &syncWorker{
-			i:      i,
-			p:      &fastjson.Parser{},
-			path:   make([]string, 0, 20),
-			line:   make([]byte, 0, 100),
-			walker: w,
+			i:        i,
+			p:        &fastjson.Parser{},
+			path:     make([]string, 0, 20),
+			flatPath: make([]byte, 0, 500),
+			line:     make([]byte, 0, 100),
+			walker:   w,
 		}
 	}
 
 	stop := int64(0)
+	g := new(errgroup.Group)
 
 	for sess.scanner.Scan() {
 		if err := sess.scanner.Err(); err != nil {
@@ -154,19 +158,19 @@ func (rd *Reader) Read(sess *readSession) error {
 			worker := <-semaphore
 			worker.line = append(worker.line[:0], line...)
 
-			go func() {
+			g.Go(func() error {
 				defer func() {
 					semaphore <- worker
 				}()
 
 				if err := rd.doLine(worker, seq, n, sess); err != nil {
-					if rd.OnError != nil {
-						rd.OnError(err)
-					}
-
 					atomic.AddInt64(&stop, 1)
+
+					return err
 				}
-			}()
+
+				return nil
+			})
 		}()
 
 		if atomic.LoadInt64(&stop) != 0 {
@@ -183,7 +187,11 @@ func (rd *Reader) Read(sess *readSession) error {
 		<-semaphore
 	}
 
-	return nil
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	return sess.scanner.Err()
 }
 
 func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
@@ -195,7 +203,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 
 	if rd.AddSequence {
 		seqf := float64(seq)
-		w.walker.FnNumber(seq, []string{"_sequence"}, seqf, []byte(Format(seqf)))
+		w.walker.FnNumber(seq, []byte("._sequence"), []string{"_sequence"}, seqf, []byte(Format(seqf)))
 	}
 
 	line := w.line
@@ -207,6 +215,8 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 
 	p := w.p
 	path := w.path[:0]
+	flatPath := w.flatPath[:0]
+	flatPath = append(flatPath, '.')
 
 	pv, err := p.ParseBytes(line)
 	if err != nil {
@@ -214,7 +224,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
 		}
 	} else {
-		w.walker.WalkFastJSON(seq, path, pv)
+		w.walker.WalkFastJSON(seq, flatPath, path, pv)
 	}
 
 	if sess.lineFinished != nil {
@@ -226,8 +236,8 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	return nil
 }
 
-func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, path []string, value []byte)) []byte {
-	pos := bytes.Index(line, []byte(`{"`))
+func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, path []string, value []byte)) []byte {
+	pos := bytes.Index(line, []byte("{"))
 
 	if pos == -1 {
 		// If prefix matching is enabled, it may be ok to not have any JSON in line.
@@ -252,7 +262,7 @@ func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, pa
 
 		for _, m := range sm {
 			for j := 1; j < len(m); j++ {
-				walkFn(seq, []string{"_prefix", "[" + strconv.Itoa(j-1) + "]"}, m[j])
+				walkFn(seq, []byte("._prefix.["+strconv.Itoa(j-1)+"]"), []string{"_prefix", "[" + strconv.Itoa(j-1) + "]"}, m[j])
 			}
 		}
 	}

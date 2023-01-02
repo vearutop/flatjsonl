@@ -12,42 +12,74 @@ import (
 )
 
 type flKey struct {
-	path   []string
-	isZero bool
-	t      Type
-	key    string
-	ck     string
+	path             []string
+	isZero           bool
+	t                Type
+	original         string
+	canonical        string
+	replaced         string
+	transposeDst     string
+	transposeKey     intOrString
+	transposeTrimmed string
+}
+
+type intOrString struct {
+	i int
+	s string
+}
+
+func (is intOrString) String() string {
+	if is.s != "" {
+		return is.s
+	}
+
+	return strconv.Itoa(is.i)
+}
+
+func (p *Processor) initKey(pk string, path []string, t Type, isZero bool) flKey {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	k, ok := p.flKeys.Load(pk)
+	if ok {
+		return k
+	}
+
+	pp := make([]string, len(path))
+	copy(pp, path)
+
+	key := KeyFromPath(path)
+
+	k.t = k.t.Update(t)
+	k.isZero = k.isZero && isZero
+	k.path = pp
+	k.original = key
+	k.canonical = p.ck(key)
+
+	for tk, dst := range p.cfg.Transpose {
+		if strings.HasPrefix(k.original, tk) {
+			p.scanTransposedKey(dst, tk, &k)
+
+			break
+		}
+	}
+
+	if _, ok := p.canonicalKeys[k.canonical]; !ok {
+		p.flKeysList = append(p.flKeysList, k.original)
+		p.keyHierarchy.Add(path)
+		p.canonicalKeys[k.canonical] = k
+	}
+
+	p.flKeys.Store(pk, k)
+
+	return k
 }
 
 func (p *Processor) scanKey(pk string, path []string, t Type, isZero bool) {
 	k, ok := p.flKeys.Load(pk)
+
 	if !ok {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-
-		k, ok = p.flKeys.Load(pk)
-		if !ok {
-			pp := make([]string, len(path))
-			copy(pp, path)
-
-			key := KeyFromPath(path)
-
-			k.t = k.t.Update(t)
-			k.isZero = k.isZero && isZero
-			k.path = pp
-			k.key = key
-			k.ck = p.ck(key)
-
-			if _, ok := p.canonicalKeys[k.ck]; !ok {
-				p.flKeysList = append(p.flKeysList, k.key)
-				p.canonicalKeys[k.ck] = k
-			}
-
-			p.keyHierarchy.Add(path)
-			p.flKeys.Store(pk, k)
-		}
-
-		return
+		k = p.initKey(pk, path, t, isZero)
 	}
 
 	updType := false
@@ -68,6 +100,42 @@ func (p *Processor) scanKey(pk string, path []string, t Type, isZero bool) {
 
 		p.flKeys.Store(pk, k)
 	}
+}
+
+func (p *Processor) scanTransposedKey(dst string, tk string, k *flKey) {
+	trimmed := strings.TrimPrefix(k.original, tk)
+	if trimmed[0] == '.' {
+		trimmed = trimmed[1:]
+	}
+
+	// Array.
+	if trimmed[0] == '[' {
+		pos := strings.Index(trimmed, "]")
+		idx := trimmed[1:pos]
+
+		i, err := strconv.Atoi(idx)
+		if err != nil {
+			panic("BUG: failed to parse idx " + idx + ": " + err.Error())
+		}
+
+		trimmed = trimmed[pos+1:]
+		k.transposeKey.i = i
+	} else {
+		if pos := strings.Index(trimmed, "."); pos > 0 {
+			k.transposeKey.s = trimmed[0:pos]
+			trimmed = trimmed[pos:]
+		} else {
+			k.transposeKey.s = trimmed
+			trimmed = ""
+		}
+	}
+
+	if trimmed == "" {
+		trimmed = "value"
+	}
+
+	k.transposeDst = dst
+	k.transposeTrimmed = trimmed
 }
 
 type hasher struct {
@@ -121,10 +189,10 @@ func (p *Processor) scanAvailableKeys() error {
 			sess.setupWalker = func(w *FastWalker) {
 				h := newHasher()
 
-				w.FnString = func(seq int64, path []string, value []byte) {
+				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
 					p.scanKey(h.hashString(path), path, TypeString, len(value) == 0)
 				}
-				w.FnNumber = func(seq int64, path []string, value float64, _ []byte) {
+				w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, _ []byte) {
 					isInt := float64(int(value)) == value
 					if isInt {
 						p.scanKey(h.hashString(path), path, TypeInt, value == 0)
@@ -132,10 +200,10 @@ func (p *Processor) scanAvailableKeys() error {
 						p.scanKey(h.hashString(path), path, TypeFloat, value == 0)
 					}
 				}
-				w.FnBool = func(seq int64, path []string, value bool) {
+				w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
 					p.scanKey(h.hashString(path), path, TypeBool, !value)
 				}
-				w.FnNull = func(seq int64, path []string) {
+				w.FnNull = func(seq int64, flatPath []byte, path []string) {
 					p.scanKey(h.hashString(path), path, TypeNull, true)
 				}
 			}
@@ -157,7 +225,14 @@ func (p *Processor) scanAvailableKeys() error {
 	return nil
 }
 
-func (p *Processor) populateFLKeys() {
+func (p *Processor) iterateIncludeKeys() {
+	i := 0
+
+	for _, k := range p.cfg.IncludeKeys {
+		p.includeKeys[k] = i
+		i++
+	}
+
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
 
@@ -169,37 +244,36 @@ func (p *Processor) populateFLKeys() {
 			path := strings.Split(strings.TrimPrefix(k, "."), ".")
 			pk := h.hashString(path)
 			p.flKeys.Store(pk, flKey{
-				path:   path,
-				isZero: false,
-				t:      TypeString,
-				key:    k,
-				ck:     p.ck(k),
+				path:      path,
+				isZero:    false,
+				t:         TypeString,
+				original:  k,
+				canonical: p.ck(k),
 			})
 		}
 	}
-}
-
-func (p *Processor) iterateIncludeKeys() {
-	i := 0
-
-	for _, k := range p.cfg.IncludeKeys {
-		p.includeKeys[k] = i
-		i++
-	}
-
-	p.populateFLKeys()
 
 	p.flKeys.Range(func(key string, value flKey) bool {
-		v := p.canonicalKeys[value.ck]
+		v := p.canonicalKeys[value.canonical]
 		value.isZero = value.isZero && v.isZero
 		value.t = v.t.Update(value.t)
 
-		p.canonicalKeys[value.ck] = value
+		p.canonicalKeys[value.canonical] = value
 
 		return true
 	})
 
 	canonicalIncludes := make(map[string]bool)
+
+	for _, k := range p.flKeysList {
+		if len(p.cfg.Transpose) > 0 {
+			for tk := range p.cfg.Transpose {
+				if strings.HasPrefix(k, tk) {
+					break
+				}
+			}
+		}
+	}
 
 	for _, k := range p.flKeysList {
 		if _, ok := p.includeKeys[k]; ok {
@@ -239,8 +313,7 @@ func (p *Processor) iterateIncludeKeys() {
 }
 
 func (p *Processor) prepareKeys() {
-	p.keys = make([]string, len(p.includeKeys))
-	p.types = make([]Type, len(p.includeKeys))
+	p.keys = make([]flKey, len(p.includeKeys))
 
 	p.replaceKeys = make(map[string]string)
 	p.replaceByKey = make(map[string]string)
@@ -252,28 +325,31 @@ func (p *Processor) prepareKeys() {
 		p.replaceKeys[mk] = r
 	}
 
-	for k, i := range p.includeKeys {
-		p.keys[i], p.types[i] = p.prepareKey(k)
+	for origKey, i := range p.includeKeys {
+		replaced := p.prepareKey(origKey)
+
+		ck := p.canonicalKeys[p.ck(origKey)]
+		ck.replaced = replaced
+
+		p.keys[i] = ck
 	}
 
-	keys := make([]string, 0, len(p.keys))
-	types := make([]Type, 0, len(p.types))
-
+	keys := make([]flKey, 0, len(p.keys))
 	keyExists := make(map[string]int)
 	keyMap := make(map[int]int)
 
 	for i, pk := range p.keys {
-		if j, ok := keyExists[pk]; ok {
-			types[j] = types[j].Update(p.types[i])
+		if j, ok := keyExists[pk.replaced]; ok {
+			pk.t = pk.t.Update(p.keys[i].t)
+			p.keys[i] = pk
 			keyMap[i] = j
 
 			continue
 		}
 
-		keyExists[pk] = len(keys)
+		keyExists[pk.replaced] = len(keys)
 		keyMap[i] = len(keys)
 		keys = append(keys, pk)
-		types = append(types, p.types[i])
 	}
 
 	if len(keyMap) > 0 {
@@ -289,15 +365,13 @@ func (p *Processor) prepareKeys() {
 	}
 
 	p.keys = keys
-	p.types = types
 }
 
-func (p *Processor) prepareKey(k string) (kk string, t Type) {
-	ck := p.ck(k)
-	t = p.canonicalKeys[ck].t
+func (p *Processor) prepareKey(origKey string) (kk string) {
+	ck := p.ck(origKey)
 
 	if rep, ok := p.replaceKeys[ck]; ok {
-		return rep, t
+		return rep
 	}
 
 	defer func() {
@@ -312,29 +386,29 @@ func (p *Processor) prepareKey(k string) (kk string, t Type) {
 	}()
 
 	for reg, rep := range p.replaceRegex {
-		kr := reg.ReplaceAllString(k, rep)
-		if kr != k {
+		kr := reg.ReplaceAllString(origKey, rep)
+		if kr != origKey {
 			if strings.HasSuffix(kr, "|to_snake_case") {
 				kr = toSnakeCase(strings.TrimSuffix(kr, "|to_snake_case"))
 			}
 
-			return kr, t
+			return kr
 		}
 	}
 
 	if !p.f.ReplaceKeys {
-		return k, t
+		return origKey
 	}
 
-	sk := strings.Split(k, ".")
+	sk := strings.Split(origKey, ".")
 	i := len(sk) - 1
 	ski := toSnakeCase(sk[i])
 	snk := strings.Trim(ski, "[]")
 
 	for {
 		if _, ok := p.replaceByKey[snk]; !ok && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
-			p.replaceByKey[snk] = k
-			k = snk
+			p.replaceByKey[snk] = origKey
+			origKey = snk
 
 			break
 		}
@@ -348,7 +422,7 @@ func (p *Processor) prepareKey(k string) (kk string, t Type) {
 		snk = strings.Trim(ski, "[]") + "_" + snk
 	}
 
-	return k, t
+	return origKey
 }
 
 var (

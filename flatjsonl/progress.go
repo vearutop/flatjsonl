@@ -34,7 +34,7 @@ type Progress struct {
 // Start spawns background progress reporter.
 func (p *Progress) Start(total int64, cr *CountingReader, task string) {
 	p.done = make(chan bool)
-	p.lines = 0
+	atomic.StoreInt64(&p.lines, 0)
 	p.task = task
 	p.cr = cr
 

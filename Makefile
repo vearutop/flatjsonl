@@ -30,6 +30,8 @@ endif
 export CGO_ENABLED = 0
 BUILD_LDFLAGS="-s -w"
 
+export UNIT_TEST_COUNT ?= 5
+
 -include $(DEVGO_PATH)/makefiles/main.mk
 -include $(DEVGO_PATH)/makefiles/lint.mk
 -include $(DEVGO_PATH)/makefiles/test-unit.mk
