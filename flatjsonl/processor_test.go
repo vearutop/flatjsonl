@@ -284,14 +284,28 @@ func TestNewProcessor_transpose(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
+	assertFileEquals(t, "_testdata/transpose.csv",
+		`._sequence,.name
+1,a
+2,b
+3,c
+`)
+	assertFileEquals(t, "_testdata/transpose.raw",
+		`1,a
+2,b
+3,c
+`)
+
 	assertFileEquals(t, "_testdata/transpose_deep_arr.csv",
 		`.sequence,.index,.abaz.a,.abaz.b,.afoo.a,.afoo.b,.abar.a,.abar.b
 1,0,5,6,15,12,,
 3,0,,,,,1,2
 `)
-	//.sequence,.index,.abaz.a,.abaz.b,.afoo.a,.afoo.b,.abar.a,.abar.b
-	//1,0,5,6,15,12,,
-	//3,0,,,,,1,2
+	assertFileEquals(t, "_testdata/transpose_deep_arr.raw",
+		`1,0,5,6,15,12,,
+3,0,,,,,1,2
+`)
+
 	assertFileEquals(t, "_testdata/transpose_flat_map.csv",
 		`.sequence,.index,value
 1,ccc,123
@@ -299,6 +313,13 @@ func TestNewProcessor_transpose(t *testing.T) {
 2,rrr,aaa
 2,fff,334
 `)
+	assertFileEquals(t, "_testdata/transpose_flat_map.raw",
+		`1,ccc,123
+1,ddd,456
+2,rrr,aaa
+2,fff,334
+`)
+
 	assertFileEquals(t, "_testdata/transpose_tags.csv",
 		`.sequence,.index,value
 1,0,t1
@@ -311,9 +332,27 @@ func TestNewProcessor_transpose(t *testing.T) {
 3,1,t4
 3,2,t5
 `)
+	assertFileEquals(t, "_testdata/transpose_tags.raw",
+		`1,0,t1
+1,1,t2
+1,2,t3
+2,0,t1
+2,1,t5
+2,2,t6
+3,0,t1
+3,1,t4
+3,2,t5
+`)
+
 	assertFileEquals(t, "_testdata/transpose_tokens.csv",
 		`.sequence,.index,.a,.b
 1,foo,1,2
+2,bar,3,4
+3,foo,15,12
+3,baz,5,6
+`)
+	assertFileEquals(t, "_testdata/transpose_tokens.raw",
+		`1,foo,1,2
 2,bar,3,4
 3,foo,15,12
 3,baz,5,6
