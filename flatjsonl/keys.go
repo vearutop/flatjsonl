@@ -225,14 +225,7 @@ func (p *Processor) scanAvailableKeys() error {
 	return nil
 }
 
-func (p *Processor) iterateIncludeKeys() {
-	i := 0
-
-	for _, k := range p.cfg.IncludeKeys {
-		p.includeKeys[k] = i
-		i++
-	}
-
+func (p *Processor) flKeysInit() {
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
 
@@ -263,8 +256,6 @@ func (p *Processor) iterateIncludeKeys() {
 		return true
 	})
 
-	canonicalIncludes := make(map[string]bool)
-
 	for _, k := range p.flKeysList {
 		if len(p.cfg.Transpose) > 0 {
 			for tk := range p.cfg.Transpose {
@@ -274,6 +265,19 @@ func (p *Processor) iterateIncludeKeys() {
 			}
 		}
 	}
+}
+
+func (p *Processor) iterateIncludeKeys() {
+	i := 0
+
+	for _, k := range p.cfg.IncludeKeys {
+		p.includeKeys[k] = i
+		i++
+	}
+
+	p.flKeysInit()
+
+	canonicalIncludes := make(map[string]bool)
 
 	for _, k := range p.flKeysList {
 		if _, ok := p.includeKeys[k]; ok {

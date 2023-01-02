@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
-	"strconv"
 	"strings"
 
 	gzip "github.com/klauspost/pgzip"
@@ -19,16 +17,9 @@ type RawWriter struct {
 	w     *bufio.Writer
 	delim []byte
 
-	row        []string
-	keyIndexes []int
-	keys       []flKey
+	transposed map[string]*RawWriter
 
-	isTransposed bool
-	transposed   map[string]*RawWriter
-	trimmedKeys  map[string]int
-
-	// transposedMapping maps original key index to reduced set of trimmed keys.
-	transposedMapping map[int]int
+	b *baseWriter
 }
 
 // NewRawWriter creates an instance of RawWriter.
@@ -55,146 +46,49 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 
 // SetupKeys initializes writer.
 func (c *RawWriter) SetupKeys(keys []flKey) (err error) {
-	c.keys = keys
+	c.b = &baseWriter{}
+	c.b.setupKeys(keys)
 
-	for i, key := range keys {
-		if key.transposeDst == "" {
-			c.keyIndexes = append(c.keyIndexes, i)
+	c.transposed = map[string]*RawWriter{}
 
-			continue
-		}
-
-		tw, err := c.transposedWriter(key.transposeDst, keys)
+	for dst, tw := range c.b.transposed {
+		ctw, err := NewRawWriter(c.b.transposedFileName(c.fn, dst), string(c.delim))
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to init transposed CSV writer for %s: %w", dst, err)
 		}
 
-		tw.keyIndexes = append(tw.keyIndexes, i)
-
-		mappedIdx, ok := tw.trimmedKeys[key.transposeTrimmed]
-		if !ok {
-			mappedIdx = len(tw.trimmedKeys)
-			tw.trimmedKeys[key.transposeTrimmed] = mappedIdx
-		}
-
-		tw.transposedMapping[i] = mappedIdx
+		ctw.b = tw
+		c.transposed[dst] = ctw
 	}
 
 	return nil
 }
 
-func (c *RawWriter) transposedWriter(dst string, keys []flKey) (*RawWriter, error) {
-	tw := c.transposed[dst]
-	if tw != nil {
-		return tw, nil
-	}
+// ReceiveRow receives rows.
+func (c *RawWriter) ReceiveRow(seq int64, values []Value) error {
+	if c.b.isTransposed {
+		transposedRows := c.b.receiveRow(seq, values)
 
-	if c.transposed == nil {
-		c.transposed = map[string]*RawWriter{}
-	}
-
-	dir, fn := path.Split(c.fn)
-	ext := path.Ext(fn)
-	fn = fn[0 : len(fn)-len(ext)]
-	fn = path.Join(dir, fn+"_"+dst+ext)
-
-	tw, err := NewRawWriter(fn, string(c.delim))
-	if err != nil {
-		return nil, fmt.Errorf("failed to init transposed RAW writer for %s: %w", dst, err)
-	}
-
-	tw.isTransposed = true
-	tw.keys = keys
-	tw.trimmedKeys = map[string]int{
-		".sequence": 0,
-		".index":    1,
-	}
-	tw.transposedMapping = map[int]int{}
-
-	c.transposed[dst] = tw
-
-	return tw, nil
-}
-
-func (c *RawWriter) makeRow(seq int64, values []Value) [][]string {
-	c.row = c.row[:0]
-
-	var (
-		transposedRowsIdx = map[string][]string{}
-		transposedRows    [][]string
-		allAbsent         = true
-	)
-
-	for _, i := range c.keyIndexes {
-		v := values[i]
-
-		if v.Type != TypeAbsent {
-			allAbsent = false
-		}
-
-		var f string
-		if v.Type != TypeNull && v.Type != TypeAbsent {
-			f = v.Format()
-		}
-
-		if c.isTransposed {
-			if v.Type == TypeAbsent {
-				continue
+		for _, row := range transposedRows {
+			if err := c.writeRow(row); err != nil {
+				return fmt.Errorf("writing transposed RAW row: %w", err)
 			}
-
-			k := c.keys[i]
-
-			transposeKey := k.transposeKey.String()
-			row := transposedRowsIdx[transposeKey]
-
-			if row == nil {
-				row = make([]string, len(c.trimmedKeys))
-				row[0] = strconv.Itoa(int(seq)) // Add sequence.
-				row[1] = transposeKey           // Add array idx/object property.
-				transposedRowsIdx[transposeKey] = row
-				transposedRows = append(transposedRows, row)
-			}
-
-			row[c.transposedMapping[i]] = f
-		} else {
-			c.row = append(c.row, f)
 		}
-	}
 
-	if allAbsent {
 		return nil
 	}
 
-	return transposedRows
-}
+	c.b.receiveRow(seq, values)
 
-// ReceiveRow receives rows.
-func (c *RawWriter) ReceiveRow(seq int64, values []Value) error {
-	if len(c.keys) != len(values) {
-		panic(fmt.Sprintf("BUG: keys and values mismatch:\nKeys:\n%v\nValues:\n%v\n", c.keys, values))
+	if len(c.b.row) > 0 {
+		if err := c.writeRow(c.b.row); err != nil {
+			return fmt.Errorf("writing RAW row: %w", err)
+		}
 	}
 
-	transposedRows := c.makeRow(seq, values)
-
-	if c.isTransposed {
-		for _, row := range transposedRows {
-			if err := c.writeRow(row); err != nil {
-				return fmt.Errorf("failed to write RAW row: %w", err)
-			}
-		}
-	} else {
-		if len(c.row) == 0 {
-			return nil
-		}
-
-		if err := c.writeRow(c.row); err != nil {
-			return fmt.Errorf("failed to write RAW row: %w", err)
-		}
-
-		for dst, tw := range c.transposed {
-			if err := tw.ReceiveRow(seq, values); err != nil {
-				return fmt.Errorf("transposed %s: %w", dst, err)
-			}
+	for dst, tw := range c.transposed {
+		if err := tw.ReceiveRow(seq, values); err != nil {
+			return fmt.Errorf("transposed rows for %s: %w", dst, err)
 		}
 	}
 
