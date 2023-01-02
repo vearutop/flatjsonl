@@ -16,8 +16,9 @@ type Flags struct {
 
 	CSV string
 
-	SQLite   string
-	SQLTable string
+	SQLite        string
+	SQLiteMaxCols int
+	SQLTable      string
 
 	Raw      string
 	RawDelim string
@@ -50,6 +51,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
 
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
+	flag.IntVar(&f.SQLiteMaxCols, "sqlite-max-cols", 500, "Maximum columns in single SQLite table (hard limit is 2000).")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
 
 	flag.StringVar(&f.Raw, "raw", "", "Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).")

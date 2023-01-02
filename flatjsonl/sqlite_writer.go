@@ -17,6 +17,7 @@ type SQLiteWriter struct {
 	rowsTx    int
 	replacer  *strings.Replacer
 	p         *Processor
+	maxCols   int
 
 	transposed map[string]*baseWriter
 	b          *baseWriter
@@ -36,6 +37,7 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 		tableName: tableName,
 		replacer:  strings.NewReplacer(`"`, `""`),
 		p:         p,
+		maxCols:   p.f.SQLiteMaxCols - 1, // -1 for _seq_id.
 	}
 
 	return c, nil
@@ -105,14 +107,15 @@ func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
 	return nil
 }
 
-func (c *SQLiteWriter) insert(seq int64, tableName string, values []Value) error {
+func (c *SQLiteWriter) insert(seq int64, tn string, values []Value) error {
 	c.rowsTx++
 
+	tableName := tn
 	res := `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(int(seq)) + `,`
 	part := 1
 
 	for i, v := range values {
-		if i > 0 && i%sqliteMaxKeys == 0 {
+		if i > 0 && i%c.maxCols == 0 {
 			c.rowsTx++
 
 			res = res[:len(res)-1] + ")"
@@ -122,7 +125,7 @@ func (c *SQLiteWriter) insert(seq int64, tableName string, values []Value) error
 			}
 
 			part++
-			tableName = c.tableName + "_part" + strconv.Itoa(part)
+			tableName = tn + "_part" + strconv.Itoa(part)
 			res = `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(int(seq)) + `,`
 		}
 
@@ -168,8 +171,6 @@ func (c *SQLiteWriter) execTx(res string) error {
 	return nil
 }
 
-const sqliteMaxKeys = 1999 // 2000-1 for _seq_id.
-
 func (c *SQLiteWriter) createTable(tn string, keys []flKey, isTransposed bool) error {
 	tableName := tn
 	createTable := `CREATE TABLE "` + tableName + `" (
@@ -188,7 +189,7 @@ _seq_id integer,
 	part := 1
 
 	for i, k := range keys {
-		if i > 0 && i%sqliteMaxKeys == 0 {
+		if i > 0 && i%c.maxCols == 0 {
 			createTable = createTable[:len(createTable)-2] + "\n)"
 
 			_, err := c.db.Exec(createTable)
@@ -197,7 +198,7 @@ _seq_id integer,
 			}
 
 			part++
-			tableName = c.tableName + "_part" + strconv.Itoa(part)
+			tableName = tn + "_part" + strconv.Itoa(part)
 			createTable = `CREATE TABLE "` + tableName + `" (
 `
 
