@@ -359,6 +359,34 @@ func TestNewProcessor_transpose(t *testing.T) {
 `)
 }
 
+func TestNewProcessor_transpose_sqlite(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "_testdata/transpose.jsonl"
+	f.Output = "_testdata/transpose.sqlite"
+	f.SQLTable = "whatever"
+	f.ShowKeysFlat = true
+	f.ShowKeysHier = true
+	f.ShowKeysInfo = true
+	f.Concurrency = 1
+	f.PrepareOutput()
+
+	if err := os.Remove("_testdata/transpose.sqlite"); err != nil {
+		require.Contains(t, err.Error(), "no such file or directory")
+	}
+
+	cj, err := os.ReadFile("_testdata/transpose_cfg.json")
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, json.Unmarshal(cj, &cfg))
+
+	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs())
+
+	assert.NoError(t, proc.Process())
+}
+
 func assertFileEquals(t *testing.T, fn string, contents string) {
 	t.Helper()
 

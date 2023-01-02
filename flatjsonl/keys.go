@@ -28,6 +28,20 @@ type intOrString struct {
 	s string
 }
 
+func (is intOrString) Value() Value {
+	if is.s != "" {
+		return Value{
+			Type:   TypeString,
+			String: is.s,
+		}
+	}
+
+	return Value{
+		Type:   TypeFloat,
+		Number: float64(is.i),
+	}
+}
+
 func (is intOrString) String() string {
 	if is.s != "" {
 		return is.s

@@ -164,6 +164,15 @@ recommended to use mutually exclusive expressions and match against full key by 
 If multiple keys are replaced into similar key, coalesce function is used for resulting column value, or if 
 `concatDelimiter` is defined those values would be concatenated.
 
+### Transposing data
+
+In cases of dynamic arrays or objects, you may want to transpose the values as rows of separate tables instead of
+columns of main table.
+
+This is possible with `transpose` configuration file field ([example](./flatjsonl/_testdata/transpose_cfg.json)), 
+it accepts a map of key prefixes to transposed table name. During processing, values found in the prefixed keys would
+be moved as multiple rows in transposed table.
+
 ## Examples
 
 Import data from `events.jsonl` as columns described in `events.json` config file to 

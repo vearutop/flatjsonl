@@ -114,9 +114,10 @@ func (w *Writer) Close() error {
 }
 
 type baseWriter struct {
-	row        []string
-	keyIndexes []int
-	keys       []flKey
+	row          []string
+	keyIndexes   []int   // Key indexes of this projection in incoming []Value.
+	keys         []flKey // Full list of original keys.
+	filteredKeys []flKey // Reduced list of keys for this projection.
 
 	isTransposed bool
 	transposed   map[string]*baseWriter
@@ -124,6 +125,8 @@ type baseWriter struct {
 
 	// transposedMapping maps original key index to reduced set of trimmed keys.
 	transposedMapping map[int]int
+
+	extName string
 }
 
 func (b *baseWriter) setupKeys(keys []flKey) {
@@ -147,6 +150,37 @@ func (b *baseWriter) setupKeys(keys []flKey) {
 		}
 
 		tw.transposedMapping[i] = mappedIdx
+	}
+
+	b.initFilteredKeys()
+
+	for _, tw := range b.transposed {
+		tw.initFilteredKeys()
+	}
+}
+
+func (b *baseWriter) initFilteredKeys() {
+	if !b.isTransposed {
+		b.filteredKeys = make([]flKey, 0, len(b.keyIndexes))
+
+		for _, i := range b.keyIndexes {
+			b.filteredKeys = append(b.filteredKeys, b.keys[i])
+		}
+
+		return
+	}
+
+	b.filteredKeys = make([]flKey, len(b.trimmedKeys))
+	for k, i := range b.trimmedKeys {
+		b.filteredKeys[i] = flKey{
+			replaced: k,
+		}
+	}
+
+	for o, t := range b.transposedMapping {
+		k := b.filteredKeys[t]
+		k.t = k.t.Update(b.keys[o].t)
+		b.filteredKeys[t] = k
 	}
 }
 
@@ -226,4 +260,58 @@ func (b *baseWriter) receiveRow(seq int64, values []Value) (transposedRows [][]s
 	}
 
 	return transposedRows
+}
+
+func (b *baseWriter) receiveTransposedRowValues(seq int64, values []Value) (transposedRows [][]Value) {
+	if len(b.keys) != len(values) {
+		panic(fmt.Sprintf("BUG: keys and values mismatch:\nKeys:\n%v\nValues:\n%v\n", b.keys, values))
+	}
+
+	if !b.isTransposed {
+		return nil
+	}
+
+	transposedRowsIdx := map[string][]Value{}
+
+	for _, i := range b.keyIndexes {
+		v := values[i]
+
+		if v.Type == TypeAbsent {
+			continue
+		}
+
+		k := b.keys[i]
+
+		transposeKey := k.transposeKey.String()
+		row := transposedRowsIdx[transposeKey]
+
+		if row == nil {
+			row = make([]Value, len(b.trimmedKeys))
+			row[0] = Value{
+				Type:   TypeFloat,
+				Number: float64(seq),
+			} // Add sequence.
+			row[1] = k.transposeKey.Value() // Add array idx/object property.
+			transposedRowsIdx[transposeKey] = row
+			transposedRows = append(transposedRows, row)
+		}
+
+		row[b.transposedMapping[i]] = v
+	}
+
+	return transposedRows
+}
+
+func (b *baseWriter) receiveRowValues(values []Value) (row []Value) {
+	if len(b.keys) != len(values) {
+		panic(fmt.Sprintf("BUG: keys and values mismatch:\nKeys:\n%v\nValues:\n%v\n", b.keys, values))
+	}
+
+	row = make([]Value, len(b.keyIndexes))
+
+	for j, i := range b.keyIndexes {
+		row[j] = values[i]
+	}
+
+	return row
 }
