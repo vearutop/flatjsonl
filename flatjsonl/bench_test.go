@@ -14,35 +14,6 @@ import (
 	"github.com/vearutop/flatjsonl/flatjsonl"
 )
 
-func BenchmarkNewProcessor_test_writeOutput(b *testing.B) {
-	f := flatjsonl.Flags{}
-	f.AddSequence = true
-	f.Input = "_testdata/test.log"
-	f.CSV = "<nop>"
-	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
-	f.ReplaceKeys = true
-	f.SkipZeroCols = true
-	f.PrepareOutput()
-
-	lr, err := loopReaderFromFile(f.Input, b.N)
-	require.NoError(b, err)
-
-	cj, err := os.ReadFile("_testdata/config.json")
-	require.NoError(b, err)
-
-	var cfg flatjsonl.Config
-
-	require.NoError(b, json.Unmarshal(cj, &cfg))
-
-	proc := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{Reader: lr})
-
-	require.NoError(b, proc.PrepareKeys())
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	assert.NoError(b, proc.WriteOutput())
-}
-
 func BenchmarkNewProcessor(b *testing.B) {
 	for name, f := range map[string]flatjsonl.Flags{
 		"test": {
