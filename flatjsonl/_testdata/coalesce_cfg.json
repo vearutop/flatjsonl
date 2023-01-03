@@ -1,0 +1,7 @@
+{
+  "replaceKeys": {
+    ".a": "shared",
+    ".b": "shared",
+    ".c": "shared"
+  }
+}

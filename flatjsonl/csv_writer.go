@@ -18,19 +18,33 @@ type CSVWriter struct {
 	row         []string
 }
 
+type nopWriter struct{}
+
+func (nopWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func (nopWriter) Close() error {
+	return nil
+}
+
 // NewCSVWriter creates an instance of CSVWriter.
 func NewCSVWriter(fn string) (*CSVWriter, error) {
 	var err error
 
 	c := &CSVWriter{}
 
-	c.f, err = os.Create(fn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CSV file: %w", err)
-	}
+	if fn == "<nop>" {
+		c.f = nopWriter{}
+	} else {
+		c.f, err = os.Create(fn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create CSV file: %w", err)
+		}
 
-	if strings.HasSuffix(fn, ".gz") {
-		c.f = gzip.NewWriter(c.f)
+		if strings.HasSuffix(fn, ".gz") {
+			c.f = gzip.NewWriter(c.f)
+		}
 	}
 
 	c.w = csv.NewWriter(c.f)

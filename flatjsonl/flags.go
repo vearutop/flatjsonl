@@ -82,7 +82,7 @@ func (f *Flags) Parse() {
 		inputs := f.Inputs()
 
 		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" && f.Raw == "" {
-			f.Output = inputs[0] + ".csv"
+			f.Output = inputs[0].FileName + ".csv"
 		}
 	}
 
@@ -139,12 +139,17 @@ func (f *Flags) PrepareOutput() {
 }
 
 // Inputs returns list of file names to read.
-func (f *Flags) Inputs() []string {
+func (f *Flags) Inputs() []Input {
 	inputs := flag.Args()
 
 	if f.Input != "" {
 		inputs = append(inputs, strings.Split(f.Input, ",")...)
 	}
 
-	return inputs
+	res := make([]Input, 0, len(inputs))
+	for _, fn := range inputs {
+		res = append(res, Input{FileName: fn})
+	}
+
+	return res
 }

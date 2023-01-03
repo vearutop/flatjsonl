@@ -2,7 +2,9 @@ package flatjsonl
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -14,11 +16,24 @@ import (
 	"github.com/swaggest/assertjson"
 )
 
+// Input can be either a file name or a reader.
+type Input struct {
+	FileName string
+	Reader   interface {
+		io.Reader
+		Size() int64
+		Reset()
+		IsGzip() bool
+	}
+}
+
 // Processor reads JSONL files with Reader and passes flat rows to Writer.
 type Processor struct {
+	Log func(args ...any)
+
 	cfg    Config
 	f      Flags
-	inputs []string
+	inputs []Input
 
 	pr *Progress
 	w  *Writer
@@ -47,16 +62,16 @@ type Processor struct {
 }
 
 // NewProcessor creates an instance of Processor.
-func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: funlen // Yeah, that's what she said.
+func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: funlen // Yeah, that's what she said.
 	pr := &Progress{
 		Interval: f.ProgressInterval,
 	}
 
-	if f.HideProgress {
-		pr.Print = func(status ProgressStatus) {}
-	}
-
 	p := &Processor{
+		Log: func(args ...any) {
+			_, _ = fmt.Fprintln(os.Stderr, args...)
+		},
+
 		cfg:    cfg,
 		f:      f,
 		inputs: inputs,
@@ -82,6 +97,14 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 		flKeys: xsync.NewMapOf[flKey](),
 	}
 
+	if f.HideProgress {
+		pr.Print = func(status ProgressStatus) {}
+	} else {
+		pr.Print = func(status ProgressStatus) {
+			p.Log(DefaultStatus(status))
+		}
+	}
+
 	if f.MatchLinePrefix != "" {
 		p.rd.MatchPrefix = regexp.MustCompile(f.MatchLinePrefix)
 	}
@@ -103,7 +126,7 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 
 		r, err := regexp.Compile(reg)
 		if err != nil {
-			println(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
+			p.Log(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
 		}
 
 		p.includeRegex = append(p.includeRegex, r)
@@ -116,7 +139,7 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 
 		r, err := regexp.Compile(reg)
 		if err != nil {
-			println(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
+			p.Log(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
 		}
 
 		p.replaceRegex[r] = rep
@@ -127,6 +150,37 @@ func NewProcessor(f Flags, cfg Config, inputs []string) *Processor { //nolint: f
 
 // Process dispatches data from Reader to Writer.
 func (p *Processor) Process() error {
+	if err := p.PrepareKeys(); err != nil {
+		return err
+	}
+
+	if err := p.WriteOutput(); err != nil {
+		return err
+	}
+
+	return p.maybeShowKeys()
+}
+
+// PrepareKeys runs first pass of reading if necessary to scan the keys.
+func (p *Processor) PrepareKeys() error {
+	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) != 0 {
+		p.iterateIncludeKeys()
+	} else {
+		// Scan available keys.
+		if err := p.scanAvailableKeys(); err != nil {
+			return err
+		}
+
+		p.Log("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+	}
+
+	p.prepareKeys()
+
+	return nil
+}
+
+// WriteOutput runs second pass of reading to create the output.
+func (p *Processor) WriteOutput() error {
 	defer func() {
 		if err := p.w.Close(); err != nil {
 			log.Fatalf("failed to close writer: %v", err)
@@ -137,28 +191,15 @@ func (p *Processor) Process() error {
 		return err
 	}
 
-	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) != 0 {
-		p.iterateIncludeKeys()
-	} else {
-		// Scan available keys.
-		if err := p.scanAvailableKeys(); err != nil {
-			return err
-		}
-
-		println("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
-	}
-
-	p.prepareKeys()
-
 	if p.w.HasReceivers() {
 		if err := p.iterateForWriters(); err != nil {
 			return err
 		}
 
-		println("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+		p.Log("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
 	}
 
-	return p.maybeShowKeys()
+	return nil
 }
 
 func (p *Processor) maybeShowKeys() error {
@@ -245,7 +286,7 @@ func (p *Processor) ck(k string) string {
 }
 
 func (p *Processor) iterateForWriters() error {
-	println("flattening data...")
+	p.Log("flattening data...")
 
 	p.rd.MaxLines = 0
 	atomic.StoreInt64(&p.rd.Sequence, 0)
@@ -337,7 +378,7 @@ func newWriteIterator(p *Processor, pkIndex map[string]int, pkTimeFmt map[string
 		if err == nil {
 			wi.outputTZ = tz
 		} else {
-			println("failed to load timezone:", err.Error())
+			p.Log("failed to load timezone:", err.Error())
 		}
 	}
 
@@ -529,7 +570,7 @@ func (wi *writeIterator) waitPending() error {
 			return err
 		}
 
-		println("waiting pending", fmt.Sprintf("%v", seqLeft))
+		wi.p.Log("waiting pending", fmt.Sprintf("%v", seqLeft))
 		time.Sleep(time.Second)
 
 		i++

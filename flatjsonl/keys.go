@@ -96,7 +96,7 @@ func (h hasher) hashString(path []string) string {
 }
 
 func (p *Processor) scanAvailableKeys() error {
-	println("scanning keys...")
+	p.Log("scanning keys...")
 
 	atomic.StoreInt64(&p.rd.Sequence, 0)
 

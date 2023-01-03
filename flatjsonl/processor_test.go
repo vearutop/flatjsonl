@@ -42,7 +42,7 @@ func TestNewProcessor(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs())
+	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
 	assert.NoError(t, proc.Process())
 
@@ -82,7 +82,7 @@ func TestNewProcessor_concurrency(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs())
+	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
 	assert.NoError(t, proc.Process())
 
@@ -104,7 +104,7 @@ func TestNewProcessor_prefixNoJSON(t *testing.T) {
 	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+) (\w+): ([\w\d]+), ([\w\d]+) ([\w\d]+)`
 	f.PrepareOutput()
 
-	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{}, f.Inputs())
+	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{}, f.Inputs()...)
 
 	assert.NoError(t, proc.Process())
 
@@ -132,7 +132,7 @@ func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
 			".b": "shared",
 			".c": "shared",
 		},
-	}, f.Inputs())
+	}, f.Inputs()...)
 
 	assert.NoError(t, proc.Process())
 
@@ -168,7 +168,7 @@ func TestNewProcessor_constVal(t *testing.T) {
 			".c":        "shared",
 			"const:bar": "bar_name",
 		},
-	}, f.Inputs())
+	}, f.Inputs()...)
 
 	assert.NoError(t, proc.Process())
 
@@ -206,7 +206,7 @@ func TestNewProcessor_rawWriter(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs())
+	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
 	assert.NoError(t, proc.Process())
 
