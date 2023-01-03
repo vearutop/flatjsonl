@@ -73,7 +73,7 @@ func main() {
 		}
 	}
 
-	proc := flatjsonl.NewProcessor(f, cfg, inputs)
+	proc := flatjsonl.NewProcessor(f, cfg, inputs...)
 
 	if err := proc.Process(); err != nil {
 		log.Fatal(err)

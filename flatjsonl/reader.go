@@ -59,7 +59,7 @@ func (rs *readSession) Close() {
 	}
 }
 
-func (rd *Reader) session(fn string, task string) (sess *readSession, err error) {
+func (rd *Reader) session(in Input, task string) (sess *readSession, err error) {
 	sess = &readSession{}
 
 	sess.pr = rd.Progress
@@ -67,31 +67,48 @@ func (rd *Reader) session(fn string, task string) (sess *readSession, err error)
 		sess.pr = &Progress{}
 	}
 
-	fj, err := os.Open(fn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %w", fn, err)
-	}
+	var (
+		r      io.Reader
+		s      int64
+		isGzip bool
+	)
 
-	defer func() {
-		if err != nil && fj != nil {
-			if clErr := fj.Close(); clErr != nil {
-				err = fmt.Errorf("%w, failed close file (%s)", err, clErr.Error())
-			}
+	if in.FileName != "" { //nolint:nestif
+		fj, err := os.Open(in.FileName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open file %s: %w", in, err)
 		}
-	}()
 
-	st, err := fj.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file stats %s: %w", fn, err)
+		defer func() {
+			if err != nil && fj != nil {
+				if clErr := fj.Close(); clErr != nil {
+					err = fmt.Errorf("%w, failed close file (%s)", err, clErr.Error())
+				}
+			}
+		}()
+
+		st, err := fj.Stat()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file stats %s: %w", in, err)
+		}
+
+		r = fj
+		s = st.Size()
+		isGzip = strings.HasSuffix(in.FileName, ".gz")
+	} else {
+		r = in.Reader
+		in.Reader.Reset()
+		s = in.Reader.Size()
+		isGzip = in.Reader.IsGzip()
 	}
 
-	cr := &CountingReader{Reader: fj}
+	cr := &CountingReader{Reader: r}
 
-	sess.pr.Start(st.Size(), cr, task)
+	sess.pr.Start(s, cr, task)
 
 	sess.r = cr
 
-	if strings.HasSuffix(fn, ".gz") {
+	if isGzip {
 		if sess.r, err = gzip.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}

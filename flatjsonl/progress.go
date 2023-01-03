@@ -31,6 +31,17 @@ type Progress struct {
 	tot      float64
 }
 
+// DefaultStatus renders ProgressStatus as a string.
+func DefaultStatus(s ProgressStatus) string {
+	if s.Task != "" {
+		s.Task += ": "
+	}
+
+	return fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, elapsed %s, remaining %s",
+		s.DonePercent, s.LinesCompleted, s.SpeedLPS, s.SpeedMBPS,
+		s.Elapsed.Round(10*time.Millisecond).String(), s.Remaining.String())
+}
+
 // Start spawns background progress reporter.
 func (p *Progress) Start(total int64, cr *CountingReader, task string) {
 	p.done = make(chan bool)
@@ -46,13 +57,7 @@ func (p *Progress) Start(total int64, cr *CountingReader, task string) {
 	p.prnt = p.Print
 	if p.prnt == nil {
 		p.prnt = func(s ProgressStatus) {
-			if s.Task != "" {
-				s.Task += ": "
-			}
-
-			println(fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, elapsed %s, remaining %s",
-				s.DonePercent, s.LinesCompleted, s.SpeedLPS, s.SpeedMBPS,
-				s.Elapsed.Round(10*time.Millisecond).String(), s.Remaining.String()))
+			println(DefaultStatus(s))
 		}
 	}
 
