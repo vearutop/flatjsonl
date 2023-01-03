@@ -21,6 +21,16 @@ type CSVWriter struct {
 	b *baseWriter
 }
 
+type nopWriter struct{}
+
+func (nopWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func (nopWriter) Close() error {
+	return nil
+}
+
 // NewCSVWriter creates an instance of CSVWriter.
 func NewCSVWriter(fn string) (*CSVWriter, error) {
 	var err error
@@ -29,13 +39,17 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 		fn: fn,
 	}
 
-	c.f, err = os.Create(fn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CSV file: %w", err)
-	}
+	if fn == "<nop>" {
+		c.f = nopWriter{}
+	} else {
+		c.f, err = os.Create(fn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create CSV file: %w", err)
+		}
 
-	if strings.HasSuffix(fn, ".gz") {
-		c.f = gzip.NewWriter(c.f)
+		if strings.HasSuffix(fn, ".gz") {
+			c.f = gzip.NewWriter(c.f)
+		}
 	}
 
 	c.w = csv.NewWriter(c.f)
@@ -55,7 +69,13 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 	c.transposed = map[string]*CSVWriter{}
 
 	for dst, tw := range c.b.transposed {
-		ctw, err := NewCSVWriter(c.b.transposedFileName(c.fn, dst))
+		fn := c.b.transposedFileName(c.fn, dst)
+
+		if c.fn == "<nop>" {
+			fn = c.fn
+		}
+
+		ctw, err := NewCSVWriter(fn)
 		if err != nil {
 			return fmt.Errorf("failed to init transposed CSV writer for %s: %w", dst, err)
 		}
