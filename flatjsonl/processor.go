@@ -346,8 +346,8 @@ type lineBuf struct {
 
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := writeIterator{}
-	wi.pending = map[int64]*lineBuf{}
-	wi.finished = map[int64]*lineBuf{}
+	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
+	wi.finished = xsync.NewIntegerMapOf[int64, *lineBuf]()
 
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
@@ -382,22 +382,20 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 }
 
 type writeIterator struct {
-	seqExpected int64
-	pkIndex     map[uint64]int
-	pkDst       map[uint64]string
-	pkTimeFmt   map[uint64]string
-	p           *Processor
-	fieldLimit  int
-	outTimeFmt  string
-	outputTZ    *time.Location
+	// Read-only under concurrency.
+	pkIndex    map[uint64]int
+	pkDst      map[uint64]string
+	pkTimeFmt  map[uint64]string
+	p          *Processor
+	fieldLimit int
+	outTimeFmt string
+	outputTZ   *time.Location
 
+	// Read-write under concurrency.
 	lineBufPool sync.Pool
-
-	fmu      sync.Mutex
-	finished map[int64]*lineBuf // concurrent
-
-	mu      sync.RWMutex
-	pending map[int64]*lineBuf // concurrent
+	seqExpected int64
+	finished    *xsync.MapOf[int64, *lineBuf]
+	pending     *xsync.MapOf[int64, *lineBuf]
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -432,10 +430,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 }
 
 func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
-	wi.mu.RLock()
-	defer wi.mu.RUnlock()
-
-	l := wi.pending[seq]
+	l, _ := wi.pending.Load(seq)
 	pk := l.h.hashBytes(flatPath)
 
 	i, ok := wi.pkIndex[pk]
@@ -488,23 +483,16 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 }
 
 func (wi *writeIterator) lineStarted(seq int64) error {
-	wi.mu.Lock()
-	defer wi.mu.Unlock()
-
-	wi.pending[seq] = wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
+	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
+	wi.pending.Store(seq, l)
 
 	return nil
 }
 
 func (wi *writeIterator) lineFinished(seq int64) error {
-	wi.mu.Lock()
-	l := wi.pending[seq]
-	delete(wi.pending, seq)
-	wi.mu.Unlock()
+	l, _ := wi.pending.LoadAndDelete(seq)
 
-	wi.fmu.Lock()
-	wi.finished[seq] = l
-	wi.fmu.Unlock()
+	wi.finished.Store(seq, l)
 
 	return wi.checkCompleted()
 }
@@ -533,18 +521,14 @@ func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
 }
 
 func (wi *writeIterator) checkCompleted() error {
-	wi.fmu.Lock()
-	defer wi.fmu.Unlock()
-
 	for {
 		seqExpected := atomic.LoadInt64(&wi.seqExpected)
-		l := wi.finished[seqExpected]
 
-		if l == nil {
+		l, ok := wi.finished.LoadAndDelete(seqExpected)
+
+		if !ok {
 			break
 		}
-
-		delete(wi.finished, seqExpected)
 
 		if err := wi.complete(seqExpected, l); err != nil {
 			return err
@@ -560,11 +544,7 @@ func (wi *writeIterator) waitPending() error {
 	for {
 		var seqLeft []int64
 
-		wi.fmu.Lock()
-		cnt := len(wi.finished)
-		wi.fmu.Unlock()
-
-		if cnt == 0 {
+		if wi.finished.Size() == 0 {
 			return nil
 		}
 
