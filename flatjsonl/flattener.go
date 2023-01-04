@@ -123,8 +123,6 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 			return
 		}
 	}
-
-	fv.FnString(seq, flatPath, path, s)
 }
 
 // Format turns value into a string.

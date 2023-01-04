@@ -51,9 +51,6 @@ func (is intOrString) String() string {
 }
 
 func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	k, ok := p.flKeys.Load(pk)
 	if ok {
 		return k
@@ -72,11 +69,14 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 
 	for tk, dst := range p.cfg.Transpose {
 		if strings.HasPrefix(k.original, tk) {
-			p.scanTransposedKey(dst, tk, &k)
+			scanTransposedKey(dst, tk, &k)
 
 			break
 		}
 	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	if _, ok := p.canonicalKeys[k.canonical]; !ok {
 		p.flKeysList = append(p.flKeysList, k.original)
@@ -116,7 +116,7 @@ func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) {
 	}
 }
 
-func (p *Processor) scanTransposedKey(dst string, tk string, k *flKey) {
+func scanTransposedKey(dst string, tk string, k *flKey) {
 	trimmed := strings.TrimPrefix(k.original, tk)
 	if trimmed[0] == '.' {
 		trimmed = trimmed[1:]

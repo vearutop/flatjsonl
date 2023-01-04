@@ -404,7 +404,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		wi.setValue(seq, Value{
 			Type:   TypeString,
-			String: string(value),
+			String: string(value), // TODO: use []byte here.
 		}, flatPath)
 	}
 	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
@@ -432,44 +432,48 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	defer wi.mu.RUnlock()
 
 	l := wi.pending[seq]
-
 	pk := l.h.hashBytes(flatPath)
-	if i, ok := wi.pkIndex[pk]; ok { //nolint:nestif
-		if v.Type == TypeString {
-			// Reformat time.
-			if tf, ok := wi.pkTimeFmt[pk]; ok {
-				t, err := time.Parse(tf, v.String)
-				if err != nil {
-					v.String = fmt.Sprintf("failed to parse time %s: %s", v.String, err)
-				} else {
-					if wi.outputTZ != nil {
-						t = t.In(wi.outputTZ)
-					}
 
-					v.String = t.Format(wi.outTimeFmt)
+	i, ok := wi.pkIndex[pk]
+	if !ok {
+		return
+	}
+
+	if v.Type == TypeString { //nolint:nestif
+		// Reformat time.
+		tf, ok := wi.pkTimeFmt[pk]
+		if ok {
+			t, err := time.Parse(tf, v.String)
+			if err != nil {
+				v.String = fmt.Sprintf("failed to parse time %s: %s", v.String, err)
+			} else {
+				if wi.outputTZ != nil {
+					t = t.In(wi.outputTZ)
 				}
+
+				v.String = t.Format(wi.outTimeFmt)
 			}
 		}
+	}
 
-		v.Dst = wi.pkDst[pk]
+	v.Dst = wi.pkDst[pk]
 
-		ev := l.values[i]
-		t := ev.Type
+	ev := l.values[i]
+	t := ev.Type
 
-		if t == TypeAbsent {
-			l.values[i] = v
+	if t == TypeAbsent {
+		l.values[i] = v
 
-			return
+		return
+	}
+
+	if wi.p.cfg.ConcatDelimiter != nil && v.Type != TypeAbsent {
+		cv := Value{
+			Type:   TypeString,
+			String: ev.Format() + *wi.p.cfg.ConcatDelimiter + v.Format(),
 		}
 
-		if wi.p.cfg.ConcatDelimiter != nil && v.Type != TypeAbsent {
-			cv := Value{
-				Type:   TypeString,
-				String: ev.Format() + *wi.p.cfg.ConcatDelimiter + v.Format(),
-			}
-
-			l.values[i] = cv
-		}
+		l.values[i] = cv
 	}
 }
 
