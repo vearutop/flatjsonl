@@ -237,7 +237,6 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	p := w.p
 	path := w.path[:0]
 	flatPath := w.flatPath[:0]
-	flatPath = append(flatPath, '.')
 
 	pv, err := p.ParseBytes(line)
 	if err != nil {

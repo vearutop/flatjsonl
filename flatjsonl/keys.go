@@ -50,7 +50,7 @@ func (is intOrString) String() string {
 	return strconv.Itoa(is.i)
 }
 
-func (p *Processor) initKey(pk string, path []string, t Type, isZero bool) flKey {
+func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -89,7 +89,7 @@ func (p *Processor) initKey(pk string, path []string, t Type, isZero bool) flKey
 	return k
 }
 
-func (p *Processor) scanKey(pk string, path []string, t Type, isZero bool) {
+func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) {
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
@@ -153,28 +153,24 @@ func (p *Processor) scanTransposedKey(dst string, tk string, k *flKey) {
 }
 
 type hasher struct {
-	buf    []byte
 	digest *xxhash.Digest
 }
 
 func newHasher() *hasher {
 	return &hasher{
-		buf:    make([]byte, 8),
 		digest: xxhash.New(),
 	}
 }
 
-func (h hasher) hashString(path []string) string {
+func (h hasher) hashBytes(flatPath []byte) uint64 {
 	h.digest.Reset()
 
-	for _, s := range path {
-		_, err := h.digest.WriteString(s)
-		if err != nil {
-			panic("hashing failed: " + err.Error())
-		}
+	_, err := h.digest.Write(flatPath)
+	if err != nil {
+		panic("hashing failed: " + err.Error())
 	}
 
-	return string(h.digest.Sum(h.buf[:0]))
+	return h.digest.Sum64()
 }
 
 func (p *Processor) scanAvailableKeys() error {
@@ -203,22 +199,24 @@ func (p *Processor) scanAvailableKeys() error {
 			sess.setupWalker = func(w *FastWalker) {
 				h := newHasher()
 
+				w.WantPath = true
+
 				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
-					p.scanKey(h.hashString(path), path, TypeString, len(value) == 0)
+					p.scanKey(h.hashBytes(flatPath), path, TypeString, len(value) == 0)
 				}
 				w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, _ []byte) {
 					isInt := float64(int(value)) == value
 					if isInt {
-						p.scanKey(h.hashString(path), path, TypeInt, value == 0)
+						p.scanKey(h.hashBytes(flatPath), path, TypeInt, value == 0)
 					} else {
-						p.scanKey(h.hashString(path), path, TypeFloat, value == 0)
+						p.scanKey(h.hashBytes(flatPath), path, TypeFloat, value == 0)
 					}
 				}
 				w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
-					p.scanKey(h.hashString(path), path, TypeBool, !value)
+					p.scanKey(h.hashBytes(flatPath), path, TypeBool, !value)
 				}
 				w.FnNull = func(seq int64, flatPath []byte, path []string) {
-					p.scanKey(h.hashString(path), path, TypeNull, true)
+					p.scanKey(h.hashBytes(flatPath), path, TypeNull, true)
 				}
 			}
 
@@ -249,7 +247,8 @@ func (p *Processor) flKeysInit() {
 			}
 
 			path := strings.Split(strings.TrimPrefix(k, "."), ".")
-			pk := h.hashString(path)
+			flatPath := []byte(k)
+			pk := h.hashBytes(flatPath)
 			p.flKeys.Store(pk, flKey{
 				path:      path,
 				isZero:    false,
@@ -260,7 +259,7 @@ func (p *Processor) flKeysInit() {
 		}
 	}
 
-	p.flKeys.Range(func(key string, value flKey) bool {
+	p.flKeys.Range(func(key uint64, value flKey) bool {
 		v := p.canonicalKeys[value.canonical]
 		value.isZero = value.isZero && v.isZero
 		value.t = v.t.Update(value.t)
