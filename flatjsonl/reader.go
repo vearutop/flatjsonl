@@ -10,11 +10,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	gzip "github.com/klauspost/pgzip"
 	"github.com/valyala/fastjson"
-	"golang.org/x/sync/errgroup"
 )
 
 // Reader scans lines and decodes JSON in them.
@@ -155,7 +155,11 @@ func (rd *Reader) Read(sess *readSession) error {
 	}
 
 	stop := int64(0)
-	g := new(errgroup.Group)
+
+	var (
+		mu        sync.Mutex
+		doLineErr error
+	)
 
 	for sess.scanner.Scan() {
 		if err := sess.scanner.Err(); err != nil {
@@ -175,7 +179,7 @@ func (rd *Reader) Read(sess *readSession) error {
 			worker := <-semaphore
 			worker.line = append(worker.line[:0], line...)
 
-			g.Go(func() error {
+			go func() {
 				defer func() {
 					semaphore <- worker
 				}()
@@ -183,11 +187,11 @@ func (rd *Reader) Read(sess *readSession) error {
 				if err := rd.doLine(worker, seq, n, sess); err != nil {
 					atomic.AddInt64(&stop, 1)
 
-					return err
+					mu.Lock()
+					doLineErr = err
+					mu.Unlock()
 				}
-
-				return nil
-			})
+			}()
 		}()
 
 		if atomic.LoadInt64(&stop) != 0 {
@@ -204,8 +208,8 @@ func (rd *Reader) Read(sess *readSession) error {
 		<-semaphore
 	}
 
-	if err := g.Wait(); err != nil {
-		return err
+	if doLineErr != nil {
+		return doLineErr
 	}
 
 	return sess.scanner.Err()
