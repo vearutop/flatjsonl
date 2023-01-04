@@ -22,6 +22,8 @@ type FastWalker struct {
 	FnBool   func(seq int64, flatPath []byte, path []string, value bool)
 	FnNull   func(seq int64, flatPath []byte, path []string)
 
+	WantPath bool
+
 	buf []byte
 }
 
@@ -67,10 +69,14 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, path []strin
 	for i, v := range a {
 		k := "[" + strconv.Itoa(i) + "]"
 
-		flatPath = append(flatPath, '.')
+		flatPath := append(flatPath, '.')
 		flatPath = append(flatPath, k...)
 
-		fv.WalkFastJSON(seq, flatPath, append(path, k), v)
+		if fv.WantPath {
+			fv.WalkFastJSON(seq, flatPath, append(path, k), v)
+		} else {
+			fv.WalkFastJSON(seq, flatPath, nil, v)
+		}
 	}
 }
 
@@ -81,9 +87,13 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, path []stri
 	}
 
 	o.Visit(func(key []byte, v *fastjson.Value) {
-		flatPath = append(flatPath, '.')
+		flatPath := append(flatPath, '.')
 		flatPath = append(flatPath, key...)
-		fv.WalkFastJSON(seq, flatPath, append(path, string(key)), v)
+		if fv.WantPath {
+			fv.WalkFastJSON(seq, flatPath, append(path, string(key)), v)
+		} else {
+			fv.WalkFastJSON(seq, flatPath, nil, v)
+		}
 	})
 }
 
@@ -103,13 +113,16 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 		v, err := p.ParseBytes(s)
 		if err == nil {
 			flatPath = append(flatPath, []byte(".JSON")...)
-			fv.WalkFastJSON(seq, flatPath, append(path, "JSON"), v)
+
+			if fv.WantPath {
+				fv.WalkFastJSON(seq, flatPath, append(path, "JSON"), v)
+			} else {
+				fv.WalkFastJSON(seq, flatPath, nil, v)
+			}
 
 			return
 		}
 	}
-
-	fv.FnString(seq, flatPath, path, s)
 }
 
 // Format turns value into a string.

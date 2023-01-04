@@ -51,7 +51,7 @@ type Processor struct {
 	// keys are ordered replaced column names, indexes match values of includeKeys.
 	keys []flKey
 
-	flKeys *xsync.MapOf[string, flKey]
+	flKeys *xsync.MapOf[uint64, flKey]
 
 	mu            sync.Mutex
 	flKeysList    []string
@@ -89,7 +89,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		flKeysList:   make([]string, 0),
 		keyHierarchy: KeyHierarchy{Name: "."},
 
-		flKeys: xsync.NewMapOf[flKey](),
+		flKeys: xsync.NewIntegerMapOf[uint64, flKey](),
 	}
 
 	if f.HideProgress {
@@ -291,11 +291,11 @@ func (p *Processor) iterateForWriters() error {
 		includeKeys[p.ck(k)] = i
 	}
 
-	pkIndex := make(map[string]int)
-	pkDst := make(map[string]string)
-	pkTimeFmt := make(map[string]string)
+	pkIndex := make(map[uint64]int)
+	pkDst := make(map[uint64]string)
+	pkTimeFmt := make(map[uint64]string)
 
-	p.flKeys.Range(func(key string, value flKey) bool {
+	p.flKeys.Range(func(key uint64, value flKey) bool {
 		if i, ok := includeKeys[value.canonical]; ok {
 			pkIndex[key] = i
 			if value.transposeDst != "" {
@@ -344,7 +344,7 @@ type lineBuf struct {
 	values []Value
 }
 
-func newWriteIterator(p *Processor, pkIndex map[string]int, pkDst map[string]string, pkTimeFmt map[string]string) *writeIterator {
+func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := writeIterator{}
 	wi.pending = map[int64]*lineBuf{}
 	wi.finished = map[int64]bool{}
@@ -387,9 +387,9 @@ type writeIterator struct {
 	finished     map[int64]bool
 	lineBufPool  sync.Pool
 	seqCompleted int64
-	pkIndex      map[string]int
-	pkDst        map[string]string
-	pkTimeFmt    map[string]string
+	pkIndex      map[uint64]int
+	pkDst        map[uint64]string
+	pkTimeFmt    map[uint64]string
 	p            *Processor
 	fieldLimit   int
 	outTimeFmt   string
@@ -405,71 +405,81 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 		wi.setValue(seq, Value{
 			Type:   TypeString,
 			String: string(value),
-		}, path)
+		}, flatPath)
 	}
 	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
 		wi.setValue(seq, Value{
 			Type:      TypeFloat,
 			Number:    value,
 			RawNumber: string(raw),
-		}, path)
+		}, flatPath)
 	}
 	w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
 		wi.setValue(seq, Value{
 			Type: TypeBool,
 			Bool: value,
-		}, path)
+		}, flatPath)
 	}
 	w.FnNull = func(seq int64, flatPath []byte, path []string) {
 		wi.setValue(seq, Value{
 			Type: TypeNull,
-		}, path)
+		}, flatPath)
 	}
 }
 
-func (wi *writeIterator) setValue(seq int64, v Value, path []string) {
+func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	wi.mu.RLock()
 	defer wi.mu.RUnlock()
 
 	l := wi.pending[seq]
+	pk := l.h.hashBytes(flatPath)
 
-	pk := l.h.hashString(path)
-	if i, ok := wi.pkIndex[pk]; ok { //nolint:nestif
-		if v.Type == TypeString {
-			// Reformat time.
-			if tf, ok := wi.pkTimeFmt[pk]; ok {
-				t, err := time.Parse(tf, v.String)
-				if err != nil {
-					v.String = fmt.Sprintf("failed to parse time %s: %s", v.String, err)
-				} else {
-					if wi.outputTZ != nil {
-						t = t.In(wi.outputTZ)
-					}
+	i, ok := wi.pkIndex[pk]
+	if !ok {
+		return
+	}
 
-					v.String = t.Format(wi.outTimeFmt)
-				}
-			}
-		}
+	if v.Type == TypeString { //nolint:nestif
+		// Reformat time.
+		tf, ok := wi.pkTimeFmt[pk]
+		if ok {
+			var (
+				t   time.Time
+				err error
+			)
 
-		v.Dst = wi.pkDst[pk]
-
-		ev := l.values[i]
-		t := ev.Type
-
-		if t == TypeAbsent {
-			l.values[i] = v
-
-			return
-		}
-
-		if wi.p.cfg.ConcatDelimiter != nil && v.Type != TypeAbsent {
-			cv := Value{
-				Type:   TypeString,
-				String: ev.Format() + *wi.p.cfg.ConcatDelimiter + v.Format(),
+			if wi.outputTZ != nil {
+				t, err = time.ParseInLocation(tf, v.String, wi.outputTZ)
+			} else {
+				t, err = time.Parse(tf, v.String)
 			}
 
-			l.values[i] = cv
+			if err != nil {
+				v.String = fmt.Sprintf("failed to parse time %s: %s", v.String, err)
+			} else {
+				v.String = t.Format(wi.outTimeFmt)
+			}
 		}
+	}
+
+	v.Dst = wi.pkDst[pk]
+
+	ev := l.values[i]
+	t := ev.Type
+
+	if t == TypeAbsent {
+		l.values[i] = v
+
+		return
+	}
+
+	if wi.p.cfg.ConcatDelimiter != nil && v.Type != TypeAbsent {
+		cv := Value{
+			Type:   TypeString,
+			String: ev.Format() + *wi.p.cfg.ConcatDelimiter + v.Format(),
+		}
+
+		l.values[i] = cv
 	}
 }
 
