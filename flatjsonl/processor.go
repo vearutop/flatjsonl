@@ -404,7 +404,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		wi.setValue(seq, Value{
 			Type:   TypeString,
-			String: string(value), // TODO: use []byte here.
+			String: string(value),
 		}, flatPath)
 	}
 	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
@@ -443,14 +443,20 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 		// Reformat time.
 		tf, ok := wi.pkTimeFmt[pk]
 		if ok {
-			t, err := time.Parse(tf, v.String)
+			var (
+				t   time.Time
+				err error
+			)
+
+			if wi.outputTZ != nil {
+				t, err = time.ParseInLocation(tf, v.String, wi.outputTZ)
+			} else {
+				t, err = time.Parse(tf, v.String)
+			}
+
 			if err != nil {
 				v.String = fmt.Sprintf("failed to parse time %s: %s", v.String, err)
 			} else {
-				if wi.outputTZ != nil {
-					t = t.In(wi.outputTZ)
-				}
-
 				v.String = t.Format(wi.outTimeFmt)
 			}
 		}
