@@ -346,8 +346,8 @@ type lineBuf struct {
 
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := writeIterator{}
-	wi.pending = map[int64]*lineBuf{}
-	wi.finished = map[int64]bool{}
+	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
+	wi.finished = xsync.NewIntegerMapOf[int64, *lineBuf]()
 
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
@@ -357,7 +357,7 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 			}
 		},
 	}
-	wi.seqCompleted = 1
+	wi.seqExpected = 1
 	wi.pkIndex = pkIndex
 	wi.pkDst = pkDst
 	wi.pkTimeFmt = pkTimeFmt
@@ -382,18 +382,20 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 }
 
 type writeIterator struct {
-	mu           sync.RWMutex
-	pending      map[int64]*lineBuf
-	finished     map[int64]bool
-	lineBufPool  sync.Pool
-	seqCompleted int64
-	pkIndex      map[uint64]int
-	pkDst        map[uint64]string
-	pkTimeFmt    map[uint64]string
-	p            *Processor
-	fieldLimit   int
-	outTimeFmt   string
-	outputTZ     *time.Location
+	// Read-only under concurrency.
+	pkIndex    map[uint64]int
+	pkDst      map[uint64]string
+	pkTimeFmt  map[uint64]string
+	p          *Processor
+	fieldLimit int
+	outTimeFmt string
+	outputTZ   *time.Location
+
+	// Read-write under concurrency.
+	lineBufPool sync.Pool
+	seqExpected int64
+	finished    *xsync.MapOf[int64, *lineBuf]
+	pending     *xsync.MapOf[int64, *lineBuf]
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -428,10 +430,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 }
 
 func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
-	wi.mu.RLock()
-	defer wi.mu.RUnlock()
-
-	l := wi.pending[seq]
+	l, _ := wi.pending.Load(seq)
 	pk := l.h.hashBytes(flatPath)
 
 	i, ok := wi.pkIndex[pk]
@@ -483,65 +482,57 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	}
 }
 
-func (wi *writeIterator) lineStarted(seq, _ int64) error {
-	wi.mu.Lock()
-	defer wi.mu.Unlock()
-
-	wi.pending[seq] = wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
+func (wi *writeIterator) lineStarted(seq int64) error {
+	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
+	wi.pending.Store(seq, l)
 
 	return nil
 }
 
-func (wi *writeIterator) lineFinished(seq, n int64) error {
-	wi.mu.Lock()
-	defer wi.mu.Unlock()
+func (wi *writeIterator) lineFinished(seq int64) error {
+	l, _ := wi.pending.LoadAndDelete(seq)
 
-	wi.finished[seq] = true
+	wi.finished.Store(seq, l)
 
 	return wi.checkCompleted()
 }
 
-func (wi *writeIterator) checkCompleted() error {
-	for {
-		seqCompleted := atomic.LoadInt64(&wi.seqCompleted)
-
-		var (
-			l       *lineBuf
-			isReady = false
-		)
-
-		if wi.finished[seqCompleted] {
-			isReady = true
-			l = wi.pending[seqCompleted]
-
-			delete(wi.pending, seqCompleted)
-			delete(wi.finished, seqCompleted)
+func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
+	for i, v := range wi.p.constVals {
+		val := Value{
+			Type:   TypeString,
+			String: v,
 		}
 
-		if !isReady {
+		l.values[i] = val
+	}
+
+	err := wi.p.w.ReceiveRow(seq, l.values)
+
+	for i := range l.values {
+		l.values[i] = Value{}
+	}
+
+	wi.lineBufPool.Put(l)
+
+	atomic.AddInt64(&wi.seqExpected, 1)
+
+	return err
+}
+
+func (wi *writeIterator) checkCompleted() error {
+	for {
+		seqExpected := atomic.LoadInt64(&wi.seqExpected)
+
+		l, ok := wi.finished.LoadAndDelete(seqExpected)
+
+		if !ok {
 			break
 		}
 
-		for i, v := range wi.p.constVals {
-			val := Value{
-				Type:   TypeString,
-				String: v,
-			}
-
-			l.values[i] = val
-		}
-
-		if err := wi.p.w.ReceiveRow(seqCompleted, l.values); err != nil {
+		if err := wi.complete(seqExpected, l); err != nil {
 			return err
 		}
-
-		for i := range l.values {
-			l.values[i] = Value{}
-		}
-
-		wi.lineBufPool.Put(l)
-
-		atomic.AddInt64(&wi.seqCompleted, 1)
 	}
 
 	return nil
@@ -553,19 +544,7 @@ func (wi *writeIterator) waitPending() error {
 	for {
 		var seqLeft []int64
 
-		wi.mu.RLock()
-
-		for seq := range wi.pending {
-			if wi.finished[seq] {
-				continue
-			}
-
-			seqLeft = append(seqLeft, seq)
-		}
-
-		wi.mu.RUnlock()
-
-		if len(seqLeft) == 0 {
+		if wi.finished.Size() == 0 {
 			return nil
 		}
 

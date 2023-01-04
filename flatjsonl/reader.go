@@ -39,8 +39,8 @@ type readSession struct {
 	r       io.Reader
 
 	setupWalker  func(w *FastWalker)
-	lineStarted  func(seq, n int64) error
-	lineFinished func(seq, n int64) error
+	lineStarted  func(seq int64) error
+	lineFinished func(seq int64) error
 }
 
 func (rs *readSession) Close() {
@@ -215,7 +215,7 @@ func (rd *Reader) Read(sess *readSession) error {
 
 func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	if sess.lineStarted != nil {
-		if err := sess.lineStarted(seq, n); err != nil {
+		if err := sess.lineStarted(seq); err != nil {
 			return fmt.Errorf("failure in line started callback, line %d: %w", n, err)
 		}
 	}
@@ -251,7 +251,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	}
 
 	if sess.lineFinished != nil {
-		if err := sess.lineFinished(seq, n); err != nil {
+		if err := sess.lineFinished(seq); err != nil {
 			return fmt.Errorf("failure in line finished callback, line %d: %w", n, err)
 		}
 	}
