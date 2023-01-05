@@ -13,9 +13,21 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
 	"github.com/valyala/fastjson"
 )
+
+// Input can be either a file name or a reader.
+type Input struct {
+	FileName string
+	Reader   interface {
+		io.Reader
+		Size() int64
+		Reset()
+		Compression() string
+	}
+}
 
 // Reader scans lines and decodes JSON in them.
 type Reader struct {
@@ -68,9 +80,9 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 	}
 
 	var (
-		r      io.Reader
-		s      int64
-		isGzip bool
+		r   io.Reader
+		s   int64
+		cmp string
 	)
 
 	if in.FileName != "" { //nolint:nestif
@@ -94,12 +106,18 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 
 		r = fj
 		s = st.Size()
-		isGzip = strings.HasSuffix(in.FileName, ".gz")
+
+		switch {
+		case strings.HasSuffix(in.FileName, ".gz"):
+			cmp = "gzip"
+		case strings.HasSuffix(in.FileName, ".zst"):
+			cmp = "zst"
+		}
 	} else {
 		r = in.Reader
 		in.Reader.Reset()
 		s = in.Reader.Size()
-		isGzip = in.Reader.IsGzip()
+		cmp = in.Reader.Compression()
 	}
 
 	cr := &CountingReader{Reader: r}
@@ -110,8 +128,13 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 
 	sess.r = cr
 
-	if isGzip {
+	switch cmp {
+	case "gzip":
 		if sess.r, err = gzip.NewReader(sess.r); err != nil {
+			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
+		}
+	case "zst":
+		if sess.r, err = zstd.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
 	}

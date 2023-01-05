@@ -2,7 +2,6 @@ package flatjsonl
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"regexp"
@@ -16,17 +15,6 @@ import (
 	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/swaggest/assertjson"
 )
-
-// Input can be either a file name or a reader.
-type Input struct {
-	FileName string
-	Reader   interface {
-		io.Reader
-		Size() int64
-		Reset()
-		IsGzip() bool
-	}
-}
 
 // Processor reads JSONL files with Reader and passes flat rows to Writer.
 type Processor struct {

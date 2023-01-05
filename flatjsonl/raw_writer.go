@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
 )
 
@@ -35,8 +36,14 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 		return nil, fmt.Errorf("failed to create RAW file: %w", err)
 	}
 
-	if strings.HasSuffix(fn, ".gz") {
+	switch {
+	case strings.HasSuffix(fn, ".gz"):
 		c.f = gzip.NewWriter(c.f)
+	case strings.HasSuffix(fn, ".zst"):
+		c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	c.w = bufio.NewWriter(c.f)

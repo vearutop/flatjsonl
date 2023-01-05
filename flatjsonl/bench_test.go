@@ -87,8 +87,8 @@ func loopReaderFromFile(fn string, bytesLimit int) (*loopReader, error) {
 	}, nil
 }
 
-func (l *loopReader) IsGzip() bool {
-	return false
+func (l *loopReader) Compression() string {
+	return ""
 }
 
 func (l *loopReader) Size() int64 {

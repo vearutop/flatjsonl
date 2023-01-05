@@ -102,7 +102,9 @@ func (f *Flags) PrepareOutput() {
 	for _, output := range strings.Split(f.Output, ",") {
 		outputLow := strings.ToLower(output)
 
-		if strings.HasSuffix(outputLow, ".csv") || strings.HasSuffix(outputLow, ".csv.gz") {
+		if strings.HasSuffix(outputLow, ".csv") ||
+			strings.HasSuffix(outputLow, ".csv.gz") ||
+			strings.HasSuffix(outputLow, ".csv.zst") {
 			if f.CSV != "" {
 				println("CSV output is already enabled, skipping", output)
 
@@ -114,7 +116,9 @@ func (f *Flags) PrepareOutput() {
 			continue
 		}
 
-		if strings.HasSuffix(outputLow, ".raw") || strings.HasSuffix(outputLow, ".raw.gz") {
+		if strings.HasSuffix(outputLow, ".raw") ||
+			strings.HasSuffix(outputLow, ".raw.gz") ||
+			strings.HasSuffix(outputLow, ".raw.zst") {
 			if f.Raw != "" {
 				println("RAW output is already enabled, skipping", output)
 
