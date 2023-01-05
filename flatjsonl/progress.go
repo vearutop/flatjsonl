@@ -3,6 +3,7 @@ package flatjsonl
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"sync/atomic"
 	"time"
 )
@@ -37,9 +38,14 @@ func DefaultStatus(s ProgressStatus) string {
 		s.Task += ": "
 	}
 
-	return fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, elapsed %s, remaining %s",
+	ms := runtime.MemStats{}
+	runtime.ReadMemStats(&ms)
+
+	heapMB := ms.HeapInuse / (1024 * 1024)
+
+	return fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, elapsed %s, remaining %s, heap %d MB",
 		s.DonePercent, s.LinesCompleted, s.SpeedLPS, s.SpeedMBPS,
-		s.Elapsed.Round(10*time.Millisecond).String(), s.Remaining.String())
+		s.Elapsed.Round(10*time.Millisecond).String(), s.Remaining.String(), heapMB)
 }
 
 // Start spawns background progress reporter.
