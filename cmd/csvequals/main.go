@@ -93,6 +93,8 @@ func main() { //nolint
 			log.Fatal("file2 reading: ", err)
 		}
 
+		pr.CountLine()
+
 		if r1 == nil && r2 == nil {
 			break
 		}
