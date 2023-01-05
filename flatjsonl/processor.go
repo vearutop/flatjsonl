@@ -542,8 +542,6 @@ func (wi *writeIterator) waitPending() error {
 	i := 0
 
 	for {
-		var seqLeft []int64
-
 		if wi.finished.Size() == 0 {
 			return nil
 		}
@@ -552,13 +550,13 @@ func (wi *writeIterator) waitPending() error {
 			return err
 		}
 
-		wi.p.Log("waiting pending", fmt.Sprintf("%v", seqLeft))
+		wi.p.Log(fmt.Sprintf("waiting pending: %d, in progress %d", wi.finished.Size(), wi.pending.Size()))
 		time.Sleep(time.Second)
 
 		i++
 
 		if i > 10 {
-			return fmt.Errorf("could not wait for lines %v", seqLeft)
+			return fmt.Errorf("could not wait for lines %v, in progress %d", wi.finished.Size(), wi.pending.Size())
 		}
 	}
 }

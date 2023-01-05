@@ -104,7 +104,9 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 
 	cr := &CountingReader{Reader: r}
 
-	sess.pr.Start(s, cr, task)
+	sess.pr.Start(s, func() int64 {
+		return cr.Bytes()
+	}, task)
 
 	sess.r = cr
 

@@ -25,7 +25,7 @@ type Progress struct {
 	done     chan bool
 	lines    int64
 	task     string
-	cr       *CountingReader
+	current  func() int64
 	prnt     func(s ProgressStatus)
 	start    time.Time
 	tot      float64
@@ -43,11 +43,11 @@ func DefaultStatus(s ProgressStatus) string {
 }
 
 // Start spawns background progress reporter.
-func (p *Progress) Start(total int64, cr *CountingReader, task string) {
+func (p *Progress) Start(total int64, current func() int64, task string) {
 	p.done = make(chan bool)
 	atomic.StoreInt64(&p.lines, 0)
 	p.task = task
-	p.cr = cr
+	p.current = current
 
 	interval := p.Interval
 	if interval == 0 {
@@ -86,7 +86,7 @@ func (p *Progress) printStatus(last bool) {
 	s.Task = p.task
 	s.LinesCompleted = atomic.LoadInt64(&p.lines)
 
-	b := float64(p.cr.Bytes())
+	b := float64(p.current())
 	s.DonePercent = 100 * b / p.tot
 	s.Elapsed = time.Since(p.start)
 	s.SpeedMBPS = (b / s.Elapsed.Seconds()) / (1024 * 1024)
