@@ -12,7 +12,7 @@ require (
 	github.com/swaggest/assertjson v1.7.0
 	github.com/valyala/fastjson v1.6.4
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.20.0
+	modernc.org/sqlite v1.20.1
 )
 
 require (
