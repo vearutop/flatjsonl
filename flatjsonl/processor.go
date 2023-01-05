@@ -2,7 +2,6 @@ package flatjsonl
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"regexp"
@@ -16,17 +15,6 @@ import (
 	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/swaggest/assertjson"
 )
-
-// Input can be either a file name or a reader.
-type Input struct {
-	FileName string
-	Reader   interface {
-		io.Reader
-		Size() int64
-		Reset()
-		IsGzip() bool
-	}
-}
 
 // Processor reads JSONL files with Reader and passes flat rows to Writer.
 type Processor struct {
@@ -347,7 +335,7 @@ type lineBuf struct {
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := writeIterator{}
 	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
-	wi.finished = xsync.NewIntegerMapOf[int64, *lineBuf]()
+	wi.finished = &sync.Map{}
 
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
@@ -394,8 +382,14 @@ type writeIterator struct {
 	// Read-write under concurrency.
 	lineBufPool sync.Pool
 	seqExpected int64
-	finished    *xsync.MapOf[int64, *lineBuf]
 	pending     *xsync.MapOf[int64, *lineBuf]
+
+	// Finished was originally *xsync.MapOf[int64, *lineBuf], but for unclear, hardly reproducible reason
+	// it was leading to eventually failing "waiting pending".
+	// Seems Store with eventual LoadAndDelete can have eviction-style inconsistency under heavy concurrent load.
+	// E.g. LoadAndDelete would not find the entry that was Stored.
+	// However, making a minimal reproducer isn't feasible.
+	finished *sync.Map
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -490,7 +484,10 @@ func (wi *writeIterator) lineStarted(seq int64) error {
 }
 
 func (wi *writeIterator) lineFinished(seq int64) error {
-	l, _ := wi.pending.LoadAndDelete(seq)
+	l, ok := wi.pending.LoadAndDelete(seq)
+	if !ok {
+		panic("BUG: could not find pending line to finish")
+	}
 
 	wi.finished.Store(seq, l)
 
@@ -509,13 +506,13 @@ func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
 
 	err := wi.p.w.ReceiveRow(seq, l.values)
 
+	atomic.AddInt64(&wi.seqExpected, 1)
+
 	for i := range l.values {
 		l.values[i] = Value{}
 	}
 
 	wi.lineBufPool.Put(l)
-
-	atomic.AddInt64(&wi.seqExpected, 1)
 
 	return err
 }
@@ -530,7 +527,7 @@ func (wi *writeIterator) checkCompleted() error {
 			break
 		}
 
-		if err := wi.complete(seqExpected, l); err != nil {
+		if err := wi.complete(seqExpected, l.(*lineBuf)); err != nil {
 			return err
 		}
 	}
@@ -542,7 +539,30 @@ func (wi *writeIterator) waitPending() error {
 	i := 0
 
 	for {
-		if wi.finished.Size() == 0 {
+		cnt := 0
+		min := int64(-1)
+		max := int64(-1)
+
+		wi.finished.Range(func(key, value any) bool {
+			cnt++
+
+			k, ok := key.(int64)
+			if !ok {
+				panic(fmt.Sprintf("BUG: int64 expected, %T received", key))
+			}
+
+			if min == -1 || k < min {
+				min = k
+			}
+
+			if max == -1 || k > max {
+				max = k
+			}
+
+			return true
+		})
+
+		if cnt == 0 {
 			return nil
 		}
 
@@ -550,13 +570,14 @@ func (wi *writeIterator) waitPending() error {
 			return err
 		}
 
-		wi.p.Log(fmt.Sprintf("waiting pending: %d, in progress %d", wi.finished.Size(), wi.pending.Size()))
+		wi.p.Log(fmt.Sprintf("waiting pending: %d, reading in progress %d", cnt, wi.pending.Size()))
 		time.Sleep(time.Second)
 
 		i++
 
 		if i > 10 {
-			return fmt.Errorf("could not wait for lines %v, in progress %d", wi.finished.Size(), wi.pending.Size())
+			return fmt.Errorf("could not wait for lines %v (%d - %d), expected seq %d, in progress %d",
+				cnt, min, max, atomic.LoadInt64(&wi.seqExpected), wi.pending.Size())
 		}
 	}
 }
