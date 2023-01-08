@@ -24,9 +24,24 @@ type flKey struct {
 }
 
 type intOrString struct {
+	//t Type
 	i int
 	s string
 }
+
+//func (is intOrString) Value() Value {
+//	if is.t == TypeString {
+//		return Value{
+//			Type:   TypeString,
+//			String: is.s,
+//		}
+//	}
+//
+//	return Value{
+//		Type:   TypeFloat,
+//		Number: float64(is.i),
+//	}
+//}
 
 func (is intOrString) Value() Value {
 	if is.s != "" {
@@ -133,18 +148,22 @@ func scanTransposedKey(dst string, tk string, k *flKey) {
 		}
 
 		trimmed = trimmed[pos+1:]
+		//k.transposeKey = intOrString{t: TypeInt, i: i}
 		k.transposeKey.i = i
 	} else {
 		if pos := strings.Index(trimmed, "."); pos > 0 {
+			//k.transposeKey = intOrString{t: TypeString, s: trimmed[0:pos]}
 			k.transposeKey.s = trimmed[0:pos]
 			trimmed = trimmed[pos:]
 		} else {
+			//k.transposeKey = intOrString{t: TypeString, s: trimmed}
 			k.transposeKey.s = trimmed
 			trimmed = ""
 		}
 	}
 
 	if trimmed == "" {
+		//trimmed = ".value"
 		trimmed = "value"
 	}
 
@@ -342,6 +361,18 @@ func (p *Processor) prepareKeys() {
 		p.replaceKeys[mk] = r
 	}
 
+	//for origKey, i := range p.includeKeys {
+	//	ck := p.canonicalKeys[p.ck(origKey)]
+	//
+	//	if ck.transposeDst == "" {
+	//		ck.replaced = p.prepareKey(ck.original)
+	//	} else {
+	//		ck.replaced = p.prepareKey(ck.transposeTrimmed)
+	//	}
+	//
+	//	p.keys[i] = ck
+	//}
+
 	for origKey, i := range p.includeKeys {
 		replaced := p.prepareKey(origKey)
 
@@ -423,7 +454,7 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 	snk := strings.Trim(ski, "[]")
 
 	for {
-		if _, ok := p.replaceByKey[snk]; !ok && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
+		if stored, ok := p.replaceByKey[snk]; (!ok || origKey == stored) && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
 			p.replaceByKey[snk] = origKey
 			origKey = snk
 

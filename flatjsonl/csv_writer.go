@@ -40,7 +40,7 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 		fn: fn,
 	}
 
-	if fn == "<nop>" {
+	if fn == NopFile {
 		c.f = nopWriter{}
 	} else {
 		c.f, err = os.Create(fn)
@@ -78,7 +78,7 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 	for dst, tw := range c.b.transposed {
 		fn := c.b.transposedFileName(c.fn, dst)
 
-		if c.fn == "<nop>" {
+		if c.fn == NopFile {
 			fn = c.fn
 		}
 

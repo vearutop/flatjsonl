@@ -31,18 +31,22 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 
 	c.delim = []byte(delimiter)
 
-	c.f, err = os.Create(fn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create RAW file: %w", err)
-	}
-
-	switch {
-	case strings.HasSuffix(fn, ".gz"):
-		c.f = gzip.NewWriter(c.f)
-	case strings.HasSuffix(fn, ".zst"):
-		c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
+	if fn == "<nop>" {
+		c.f = nopWriter{}
+	} else {
+		c.f, err = os.Create(fn)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create RAW file: %w", err)
+		}
+
+		switch {
+		case strings.HasSuffix(fn, ".gz"):
+			c.f = gzip.NewWriter(c.f)
+		case strings.HasSuffix(fn, ".zst"):
+			c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 

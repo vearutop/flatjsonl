@@ -20,6 +20,8 @@ type Flags struct {
 	SQLiteMaxCols int
 	SQLTable      string
 
+	PGDump string
+
 	Raw      string
 	RawDelim string
 
@@ -31,6 +33,7 @@ type Flags struct {
 	BufSize      int
 
 	Config            string
+	GetKey            string
 	ReplaceKeys       bool
 	SkipZeroCols      bool
 	AddSequence       bool
@@ -53,6 +56,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
 	flag.IntVar(&f.SQLiteMaxCols, "sqlite-max-cols", 500, "Maximum columns in single SQLite table (hard limit is 2000).")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
+	flag.StringVar(&f.PGDump, "pg-dump", "", "Output to PostgreSQL dump file.")
 
 	flag.StringVar(&f.Raw, "raw", "", "Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).")
 	flag.StringVar(&f.RawDelim, "raw-delim", "", "RAW file column delimiter.")
@@ -60,6 +64,7 @@ func (f *Flags) Register() {
 	flag.BoolVar(&f.HideProgress, "hide-progress", false, "Do not show progress in STDERR.")
 	flag.DurationVar(&f.ProgressInterval, "progress-interval", 5*time.Second, "Progress update interval.")
 	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as key.")
+	flag.StringVar(&f.GetKey, "get-key", "", "Add a single key to list of included keys.")
 	flag.StringVar(&f.Config, "config", "", "Configuration JSON or YAML file.")
 	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
 	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")
@@ -85,7 +90,7 @@ func (f *Flags) Parse() {
 	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo {
 		inputs := f.Inputs()
 
-		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" && f.Raw == "" {
+		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" && f.Raw == "" && f.PGDump == "" {
 			f.Output = inputs[0].FileName + ".csv"
 		}
 	}

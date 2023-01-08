@@ -243,6 +243,15 @@ func (p *Processor) setupWriters() error {
 		p.w.Add(cw)
 	}
 
+	if p.f.PGDump != "" {
+		w, err := NewPGDumpWriter(p.f.PGDump, p.f.SQLTable, p)
+		if err != nil {
+			return fmt.Errorf("failed to open PostgreSQL dump file: %w", err)
+		}
+
+		p.w.Add(w)
+	}
+
 	if p.f.Raw != "" {
 		rw, err := NewRawWriter(p.f.Raw, p.f.RawDelim)
 		if err != nil {

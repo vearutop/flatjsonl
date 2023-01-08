@@ -1,10 +1,7 @@
 package flatjsonl_test
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -40,7 +37,7 @@ func BenchmarkNewProcessor(b *testing.B) {
 	} {
 		f.PrepareOutput()
 
-		lr, err := loopReaderFromFile(f.Input, b.N)
+		lr, err := flatjsonl.LoopReaderFromFile(f.Input, b.N)
 		require.NoError(b, err)
 
 		var cfg flatjsonl.Config
@@ -57,70 +54,20 @@ func BenchmarkNewProcessor(b *testing.B) {
 
 		b.Run(name+"_scanKeys", func(b *testing.B) {
 			b.ReportAllocs()
-			lr.bytesLimit = b.N
+			lr.BytesLimit = b.N
 			assert.NoError(b, proc.PrepareKeys())
 		})
 
 		b.Run(name+"_writeOutput", func(b *testing.B) {
 			b.ReportAllocs()
-			lr.bytesLimit = b.N
+			lr.BytesLimit = b.N
 			assert.NoError(b, proc.WriteOutput())
 		})
 	}
 }
 
-type loopReader struct {
-	bytesLimit int
-	bytesRead  int
-	src        *bytes.Reader
-}
-
-func loopReaderFromFile(fn string, bytesLimit int) (*loopReader, error) {
-	f, err := os.ReadFile(fn)
-	if err != nil {
-		return nil, err
-	}
-
-	return &loopReader{
-		bytesLimit: bytesLimit,
-		src:        bytes.NewReader(f),
-	}, nil
-}
-
-func (l *loopReader) Compression() string {
-	return ""
-}
-
-func (l *loopReader) Size() int64 {
-	return int64(l.bytesLimit)
-}
-
-func (l *loopReader) Reset() {
-	l.bytesRead = 0
-}
-
-func (l *loopReader) Read(p []byte) (n int, err error) {
-	if l.bytesRead >= l.bytesLimit {
-		return 0, io.EOF
-	}
-
-	n, err = l.src.Read(p)
-
-	if err != nil && errors.Is(err, io.EOF) {
-		if _, err := l.src.Seek(0, io.SeekStart); err != nil {
-			return 0, fmt.Errorf("seek to start: %w", err)
-		}
-
-		return l.Read(p)
-	}
-
-	l.bytesRead += n
-
-	return n, err
-}
-
 func Test_loopReader(t *testing.T) {
-	lr, err := loopReaderFromFile("_testdata/test.log", 10000)
+	lr, err := flatjsonl.LoopReaderFromFile("_testdata/test.log", 10000)
 	require.NoError(t, err)
 
 	b, err := io.ReadAll(lr)
@@ -130,7 +77,7 @@ func Test_loopReader(t *testing.T) {
 }
 
 func Test_loopReader_scan(t *testing.T) {
-	lr, err := loopReaderFromFile("_testdata/test.log", 10000)
+	lr, err := flatjsonl.LoopReaderFromFile("_testdata/test.log", 10000)
 	require.NoError(t, err)
 
 	f := flatjsonl.Flags{}
