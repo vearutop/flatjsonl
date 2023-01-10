@@ -3,6 +3,7 @@ package flatjsonl
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -322,4 +323,60 @@ func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, fl
 	line = line[pos:]
 
 	return line
+}
+
+// LoopReader repeats bytes buffer until the limit is hit.
+type LoopReader struct {
+	BytesLimit int
+	bytesRead  int
+	src        *bytes.Reader
+}
+
+// LoopReaderFromFile creates LoopReader from a file.
+func LoopReaderFromFile(fn string, bytesLimit int) (*LoopReader, error) {
+	f, err := os.ReadFile(fn)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LoopReader{
+		BytesLimit: bytesLimit,
+		src:        bytes.NewReader(f),
+	}, nil
+}
+
+// Compression implements Input.
+func (l *LoopReader) Compression() string {
+	return ""
+}
+
+// Size implements Input.
+func (l *LoopReader) Size() int64 {
+	return int64(l.BytesLimit)
+}
+
+// Reset resets the counter.
+func (l *LoopReader) Reset() {
+	l.bytesRead = 0
+}
+
+// Read implements io.Reader.
+func (l *LoopReader) Read(p []byte) (n int, err error) {
+	if l.bytesRead >= l.BytesLimit {
+		return 0, io.EOF
+	}
+
+	n, err = l.src.Read(p)
+
+	if err != nil && errors.Is(err, io.EOF) {
+		if _, err := l.src.Seek(0, io.SeekStart); err != nil {
+			return 0, fmt.Errorf("seek to start: %w", err)
+		}
+
+		return l.Read(p)
+	}
+
+	l.bytesRead += n
+
+	return n, err
 }
