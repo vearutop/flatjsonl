@@ -24,12 +24,13 @@ type flKey struct {
 }
 
 type intOrString struct {
+	t Type
 	i int
 	s string
 }
 
 func (is intOrString) Value() Value {
-	if is.s != "" {
+	if is.t == TypeString {
 		return Value{
 			Type:   TypeString,
 			String: is.s,
@@ -133,19 +134,19 @@ func scanTransposedKey(dst string, tk string, k *flKey) {
 		}
 
 		trimmed = trimmed[pos+1:]
-		k.transposeKey.i = i
+		k.transposeKey = intOrString{t: TypeInt, i: i}
 	} else {
 		if pos := strings.Index(trimmed, "."); pos > 0 {
-			k.transposeKey.s = trimmed[0:pos]
+			k.transposeKey = intOrString{t: TypeString, s: trimmed[0:pos]}
 			trimmed = trimmed[pos:]
 		} else {
-			k.transposeKey.s = trimmed
+			k.transposeKey = intOrString{t: TypeString, s: trimmed}
 			trimmed = ""
 		}
 	}
 
 	if trimmed == "" {
-		trimmed = "value"
+		trimmed = ".value"
 	}
 
 	k.transposeDst = dst
@@ -423,7 +424,7 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 	snk := strings.Trim(ski, "[]")
 
 	for {
-		if _, ok := p.replaceByKey[snk]; !ok && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
+		if stored, ok := p.replaceByKey[snk]; (!ok || origKey == stored) && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
 			p.replaceByKey[snk] = origKey
 			origKey = snk
 

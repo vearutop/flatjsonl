@@ -338,7 +338,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 `)
 
 	assertFileEquals(t, "_testdata/transpose_flat_map.csv",
-		`.sequence,.index,value
+		`.sequence,.index,.value
 1,ccc,123
 1,ddd,456
 2,rrr,aaa
@@ -352,7 +352,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 `)
 
 	assertFileEquals(t, "_testdata/transpose_tags.csv",
-		`.sequence,.index,value
+		`.sequence,.index,.value
 1,0,t1
 1,1,t2
 1,2,t3
@@ -424,5 +424,5 @@ func assertFileEquals(t *testing.T, fn string, contents string) {
 	b, err := os.ReadFile(fn)
 	require.NoError(t, err)
 
-	assert.Equal(t, contents, string(b))
+	assert.Equal(t, contents, string(b), fn)
 }
