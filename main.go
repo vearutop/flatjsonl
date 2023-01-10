@@ -14,19 +14,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func main() {
+func main() { //nolint:cyclop
 	var (
-		showVersion bool
-		cpuProfile  string
-		memProfile  string
+		showVersion   bool
+		cpuProfile    string
+		memProfile    string
+		loopInputSize int
 	)
 
 	f := flatjsonl.Flags{}
 
 	f.Register()
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit.")
-	flag.StringVar(&cpuProfile, "cpu-prof", "", "Write CPU profile to file.")
-	flag.StringVar(&memProfile, "mem-prof", "", "Write mem profile to file.")
+	flag.StringVar(&cpuProfile, "dbg-cpu-prof", "", "Write CPU profile to file.")
+	flag.StringVar(&memProfile, "dbg-mem-prof", "", "Write mem profile to file.")
+	flag.IntVar(&loopInputSize, "dbg-loop-input-size", 0,
+		"(benchmark) Repeat input until total target size reached, bytes.")
 
 	f.Parse()
 
@@ -56,6 +59,16 @@ func main() {
 		return
 	}
 
+	if loopInputSize > 0 {
+		i, err := flatjsonl.LoopReaderFromFile(inputs[0].FileName, loopInputSize)
+		if err != nil {
+			log.Fatalf("failed to init loop reader: %v", err)
+		}
+
+		inputs[0].Reader = i
+		inputs[0].FileName = ""
+	}
+
 	var cfg flatjsonl.Config
 
 	if f.Config != "" {
@@ -71,6 +84,10 @@ func main() {
 				log.Fatalf("failed to decode config file: json5: %v, yaml: %v", err, yerr)
 			}
 		}
+	}
+
+	if f.GetKey != "" {
+		cfg.IncludeKeys = append(cfg.IncludeKeys, f.GetKey)
 	}
 
 	proc := flatjsonl.NewProcessor(f, cfg, inputs...)
