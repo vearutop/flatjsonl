@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// NopFile indicates a no op file.
+const NopFile = "<nop>"
+
 // WriteReceiver can receive a row for processing.
 type WriteReceiver interface {
 	SetupKeys(keys []flKey) error
@@ -118,6 +121,7 @@ type baseWriter struct {
 	keyIndexes   []int   // Key indexes of this projection in incoming []Value.
 	keys         []flKey // Full list of original keys.
 	filteredKeys []flKey // Reduced list of keys for this projection.
+	indexType    Type    // Type of transpose index (int for arrays, string for objects).
 
 	isTransposed bool
 	transposed   map[string]*baseWriter
@@ -142,6 +146,7 @@ func (b *baseWriter) setupKeys(keys []flKey) {
 		tw := b.transposedWriter(key.transposeDst, keys)
 
 		tw.keyIndexes = append(tw.keyIndexes, i)
+		tw.indexType = key.transposeKey.t
 
 		mappedIdx, ok := tw.trimmedKeys[key.transposeTrimmed]
 		if !ok {
@@ -176,6 +181,9 @@ func (b *baseWriter) initFilteredKeys() {
 			replaced: k,
 		}
 	}
+
+	b.filteredKeys[0].t = TypeInt     // .sequence
+	b.filteredKeys[1].t = b.indexType // .index
 
 	for o, t := range b.transposedMapping {
 		k := b.filteredKeys[t]
