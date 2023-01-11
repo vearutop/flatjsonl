@@ -57,7 +57,6 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 
 // SetupKeys initializes writer.
 func (c *RawWriter) SetupKeys(keys []flKey) (err error) {
-	c.b = &baseWriter{}
 	c.b.setupKeys(keys)
 
 	c.transposed = map[string]*RawWriter{}

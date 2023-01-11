@@ -116,7 +116,14 @@ func (w *Writer) Close() error {
 	return nil
 }
 
+type idxKey struct {
+	idx int
+	k   flKey
+}
+
 type baseWriter struct {
+	p *Processor
+
 	row          []string
 	keyIndexes   []int   // Key indexes of this projection in incoming []Value.
 	keys         []flKey // Full list of original keys.
@@ -125,7 +132,7 @@ type baseWriter struct {
 
 	isTransposed bool
 	transposed   map[string]*baseWriter
-	trimmedKeys  map[string]int
+	trimmedKeys  map[string]idxKey
 
 	// transposedMapping maps original key index to reduced set of trimmed keys.
 	transposedMapping map[int]int
@@ -148,13 +155,15 @@ func (b *baseWriter) setupKeys(keys []flKey) {
 		tw.keyIndexes = append(tw.keyIndexes, i)
 		tw.indexType = key.transposeKey.t
 
-		mappedIdx, ok := tw.trimmedKeys[key.transposeTrimmed]
+		ik, ok := tw.trimmedKeys[key.transposeTrimmed]
 		if !ok {
-			mappedIdx = len(tw.trimmedKeys)
-			tw.trimmedKeys[key.transposeTrimmed] = mappedIdx
+			ik.idx = len(tw.trimmedKeys)
+			ik.k = key
+			ik.k.replaced = b.p.prepareKey(ik.k.transposeTrimmed)
+			tw.trimmedKeys[key.transposeTrimmed] = ik
 		}
 
-		tw.transposedMapping[i] = mappedIdx
+		tw.transposedMapping[i] = ik.idx
 	}
 
 	b.initFilteredKeys()
@@ -176,10 +185,8 @@ func (b *baseWriter) initFilteredKeys() {
 	}
 
 	b.filteredKeys = make([]flKey, len(b.trimmedKeys))
-	for k, i := range b.trimmedKeys {
-		b.filteredKeys[i] = flKey{
-			replaced: k,
-		}
+	for _, i := range b.trimmedKeys {
+		b.filteredKeys[i.idx] = i.k
 	}
 
 	b.filteredKeys[0].t = TypeInt     // .sequence
@@ -206,9 +213,15 @@ func (b *baseWriter) transposedWriter(dst string, keys []flKey) *baseWriter {
 
 	tw.isTransposed = true
 	tw.keys = keys
-	tw.trimmedKeys = map[string]int{
-		".sequence": 0,
-		".index":    1,
+	tw.trimmedKeys = map[string]idxKey{
+		".sequence": {idx: 0, k: flKey{
+			original: ".sequence",
+			replaced: b.p.prepareKey(".sequence"),
+		}},
+		".index": {idx: 1, k: flKey{
+			original: ".index",
+			replaced: b.p.prepareKey(".index"),
+		}},
 	}
 	tw.transposedMapping = map[int]int{}
 
