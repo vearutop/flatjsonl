@@ -337,6 +337,8 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
 
+	wi.sem = make(chan struct{}, 1000)
+
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
 			return &lineBuf{
@@ -390,6 +392,8 @@ type writeIterator struct {
 	// E.g. LoadAndDelete would not find the entry that was Stored.
 	// However, making a minimal reproducer isn't feasible.
 	finished *sync.Map
+
+	sem chan struct{}
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -489,12 +493,16 @@ func (wi *writeIterator) lineFinished(seq int64) error {
 		panic("BUG: could not find pending line to finish")
 	}
 
+	wi.sem <- struct{}{}
+
 	wi.finished.Store(seq, l)
 
 	return wi.checkCompleted()
 }
 
 func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
+	<-wi.sem
+
 	for i, v := range wi.p.constVals {
 		val := Value{
 			Type:   TypeString,
