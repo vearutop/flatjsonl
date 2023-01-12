@@ -27,10 +27,11 @@ type PGDumpWriter struct {
 
 	linesTx int
 
-	sortedTransposed []string
-
 	b          *baseWriter
 	csvCopiers map[string]csvCopier
+
+	sortedTransposed []string
+	sortedTables     []string
 }
 
 type csvCopier struct {
@@ -100,6 +101,12 @@ func (c *PGDumpWriter) SetupKeys(keys []flKey) error {
 		}
 	}
 
+	for table := range c.csvCopiers {
+		c.sortedTables = append(c.sortedTables, table)
+	}
+
+	sort.Strings(c.sortedTables)
+
 	return nil
 }
 
@@ -144,7 +151,8 @@ func (c *PGDumpWriter) ReceiveRow(seq int64, values []Value) error {
 }
 
 func (c *PGDumpWriter) flush() error {
-	for _, cc := range c.csvCopiers {
+	for _, table := range c.sortedTables {
+		cc := c.csvCopiers[table]
 		cc.cw.Flush()
 
 		if _, err := c.f.Write([]byte(cc.stmt)); err != nil {
