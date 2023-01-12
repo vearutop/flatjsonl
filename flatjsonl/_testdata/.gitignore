@@ -2,3 +2,4 @@
 /*.sqlite
 /*.raw
 /*.gz
+/*.pg.sql

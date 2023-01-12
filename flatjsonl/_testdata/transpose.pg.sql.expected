@@ -1,0 +1,77 @@
+CREATE TABLE "whatever" (
+	"_seq_id" INT8 primary key,
+	"sequence" INT8,
+	"name" VARCHAR
+);
+
+CREATE TABLE "whatever_deep_arr" (
+	"_seq_id" INT8,
+	"sequence" INT8,
+	"index" INT8,
+	"abaz_a" INT8,
+	"abaz_b" INT8,
+	"afoo_a" INT8,
+	"afoo_b" INT8,
+	"abar_a" INT8,
+	"abar_b" INT8
+);
+
+CREATE TABLE "whatever_flat_map" (
+	"_seq_id" INT8,
+	"sequence" INT8,
+	"index" VARCHAR,
+	"value" VARCHAR
+);
+
+CREATE TABLE "whatever_tags" (
+	"_seq_id" INT8,
+	"sequence" INT8,
+	"index" INT8,
+	"value" VARCHAR
+);
+
+CREATE TABLE "whatever_tokens" (
+	"_seq_id" INT8,
+	"sequence" INT8,
+	"index" VARCHAR,
+	"a" INT8,
+	"b" INT8
+);
+
+COPY "whatever" ("_seq_id","sequence","name") FROM stdin WITH (FORMAT csv);
+1,1,a
+2,2,b
+3,3,c
+\.
+
+COPY "whatever_deep_arr" ("_seq_id","sequence","index","abaz_a","abaz_b","afoo_a","afoo_b","abar_a","abar_b") FROM stdin WITH (FORMAT csv);
+1,1,0,5,6,15,12,,
+3,3,0,,,,,1,2
+\.
+
+COPY "whatever_flat_map" ("_seq_id","sequence","index","value") FROM stdin WITH (FORMAT csv);
+1,1,ccc,123
+1,1,ddd,456
+2,2,rrr,aaa
+2,2,fff,334
+\.
+
+COPY "whatever_tags" ("_seq_id","sequence","index","value") FROM stdin WITH (FORMAT csv);
+1,1,0,t1
+1,1,1,t2
+1,1,2,t3
+2,2,0,t1
+2,2,1,t5
+2,2,2,t6
+3,3,0,t1
+3,3,1,t4
+3,3,2,t5
+\.
+
+COPY "whatever_tokens" ("_seq_id","sequence","index","a","b") FROM stdin WITH (FORMAT csv);
+1,1,foo,1,2
+2,2,bar,3,4
+3,3,foo,15,12
+3,3,baz,5,6
+\.
+
