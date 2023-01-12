@@ -72,17 +72,17 @@ jobs:
           # Use base sha for PR or new commit hash for master/main push in benchmark result key.
           key: ${{ runner.os }}-bench-${{ (github.event.pull_request.base.sha != github.event.after) && github.event.pull_request.base.sha || github.event.after }}
 
-      - name: Run benchmark for base code
-        if: env.RUN_BASE_BENCHMARK == 'on' && steps.base-benchmark.outputs.cache-hit != 'true' && (github.event.pull_request.base.sha != '' || github.event.inputs.old != '')
-        run: |
-          git fetch origin master ${{ github.event.pull_request.base.sha }}
-          HEAD=$(git rev-parse HEAD)
-          git reset --hard ${{ github.event.pull_request.base.sha }}
-          export REF_NAME=master
-          export BENCH_COUNT=5
-          make bench-run bench-stat
-          (make test-unit && go tool cover -func=./unit.coverprofile > unit-base.txt) || echo "No test-unit in base"
-          git reset --hard $HEAD
+#      - name: Run benchmark for base code
+#        if: env.RUN_BASE_BENCHMARK == 'on' && steps.base-benchmark.outputs.cache-hit != 'true' && (github.event.pull_request.base.sha != '' || github.event.inputs.old != '')
+#        run: |
+#          git fetch origin master ${{ github.event.pull_request.base.sha }}
+#          HEAD=$(git rev-parse HEAD)
+#          git reset --hard ${{ github.event.pull_request.base.sha }}
+#          export REF_NAME=master
+#          export BENCH_COUNT=5
+#          make bench-run bench-stat
+#          (make test-unit && go tool cover -func=./unit.coverprofile > unit-base.txt) || echo "No test-unit in base"
+#          git reset --hard $HEAD
 
       - name: Benchmark
         id: bench
