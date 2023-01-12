@@ -337,8 +337,6 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
 
-	wi.sem = make(chan struct{}, 1000)
-
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
 			return &lineBuf{
@@ -393,7 +391,7 @@ type writeIterator struct {
 	// However, making a minimal reproducer isn't feasible.
 	finished *sync.Map
 
-	sem chan struct{}
+	inProgress int64
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -481,7 +479,12 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 }
 
 func (wi *writeIterator) lineStarted(seq int64) error {
-	wi.sem <- struct{}{}
+	inp := atomic.AddInt64(&wi.inProgress, 1)
+	if inp > int64(10*wi.p.f.Concurrency) {
+		time.Sleep(50 * time.Millisecond)
+	} else if inp > int64(50*wi.p.f.Concurrency) {
+		time.Sleep(500 * time.Millisecond)
+	}
 
 	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
 	wi.pending.Store(seq, l)
@@ -502,7 +505,7 @@ func (wi *writeIterator) lineFinished(seq int64) error {
 
 func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
 	defer func() {
-		<-wi.sem
+		atomic.AddInt64(&wi.inProgress, -1)
 	}()
 
 	for i, v := range wi.p.constVals {
