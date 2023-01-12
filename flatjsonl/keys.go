@@ -3,6 +3,7 @@ package flatjsonl
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -146,7 +147,7 @@ func scanTransposedKey(dst string, tk string, k *flKey) {
 	}
 
 	if trimmed == "" {
-		trimmed = ".value"
+		trimmed = "._value"
 	}
 
 	k.transposeDst = dst
@@ -343,13 +344,40 @@ func (p *Processor) prepareKeys() {
 		p.replaceKeys[mk] = r
 	}
 
+	type ik struct {
+		orig string
+		idx  int
+	}
+
+	sorted := make([]ik, 0, len(p.includeKeys))
 	for origKey, i := range p.includeKeys {
-		replaced := p.prepareKey(origKey)
+		sorted = append(sorted, ik{orig: origKey, idx: i})
+	}
+	// Sorting by index first to have deterministic order.
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].idx < sorted[j].idx
+	})
 
-		ck := p.canonicalKeys[p.ck(origKey)]
-		ck.replaced = replaced
+	// Sorting to put shorter keys first to have better replaces.
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return len(sorted[i].orig) < len(sorted[j].orig)
+	})
 
-		p.keys[i] = ck
+	for _, v := range sorted {
+		origKey := v.orig
+
+		ck, ok := p.canonicalKeys[p.ck(origKey)]
+
+		switch {
+		case !ok: // Can happen for meta keys like `const:X`.
+			ck.replaced = p.prepareKey(origKey)
+		case ck.transposeDst == "":
+			ck.replaced = p.prepareKey(ck.original)
+		default:
+			ck.replaced = p.prepareKey(ck.transposeTrimmed)
+		}
+
+		p.keys[v.idx] = ck
 	}
 
 	keys := make([]flKey, 0, len(p.keys))
@@ -357,15 +385,18 @@ func (p *Processor) prepareKeys() {
 	keyMap := make(map[int]int)
 
 	for i, pk := range p.keys {
-		if j, ok := keyExists[pk.replaced]; ok {
-			pk.t = pk.t.Update(p.keys[i].t)
-			p.keys[i] = pk
-			keyMap[i] = j
+		if pk.transposeDst == "" {
+			if j, ok := keyExists[pk.replaced]; ok {
+				pk.t = pk.t.Update(p.keys[i].t)
+				p.keys[i] = pk
+				keyMap[i] = j
 
-			continue
+				continue
+			}
+
+			keyExists[pk.replaced] = len(keys)
 		}
 
-		keyExists[pk.replaced] = len(keys)
 		keyMap[i] = len(keys)
 		keys = append(keys, pk)
 	}

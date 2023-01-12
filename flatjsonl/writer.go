@@ -158,8 +158,8 @@ func (b *baseWriter) setupKeys(keys []flKey) {
 		ik, ok := tw.trimmedKeys[key.transposeTrimmed]
 		if !ok {
 			ik.idx = len(tw.trimmedKeys)
+			key.replaced = b.p.prepareKey(key.transposeTrimmed)
 			ik.k = key
-			ik.k.replaced = b.p.prepareKey(ik.k.transposeTrimmed)
 			tw.trimmedKeys[key.transposeTrimmed] = ik
 		}
 
@@ -214,13 +214,13 @@ func (b *baseWriter) transposedWriter(dst string, keys []flKey) *baseWriter {
 	tw.isTransposed = true
 	tw.keys = keys
 	tw.trimmedKeys = map[string]idxKey{
-		".sequence": {idx: 0, k: flKey{
-			original: ".sequence",
-			replaced: b.p.prepareKey(".sequence"),
+		"._sequence": {idx: 0, k: flKey{
+			original: "._sequence",
+			replaced: b.p.prepareKey("._sequence"),
 		}},
-		".index": {idx: 1, k: flKey{
-			original: ".index",
-			replaced: b.p.prepareKey(".index"),
+		"._index": {idx: 1, k: flKey{
+			original: "._index",
+			replaced: b.p.prepareKey("._index"),
 		}},
 	}
 	tw.transposedMapping = map[int]int{}

@@ -76,6 +76,7 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 
 	for dst, tw := range c.b.transposed {
 		fn := c.b.transposedFileName(c.fn, dst)
+		tw.extName = fn
 
 		if c.fn == NopFile {
 			fn = c.fn

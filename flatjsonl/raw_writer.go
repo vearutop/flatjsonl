@@ -62,9 +62,16 @@ func (c *RawWriter) SetupKeys(keys []flKey) (err error) {
 	c.transposed = map[string]*RawWriter{}
 
 	for dst, tw := range c.b.transposed {
-		ctw, err := NewRawWriter(c.b.transposedFileName(c.fn, dst), string(c.delim))
+		fn := c.b.transposedFileName(c.fn, dst)
+		tw.extName = fn
+
+		if c.fn == NopFile {
+			fn = c.fn
+		}
+
+		ctw, err := NewRawWriter(fn, string(c.delim))
 		if err != nil {
-			return fmt.Errorf("failed to init transposed CSV writer for %s: %w", dst, err)
+			return fmt.Errorf("failed to init transposed RAW writer for %s: %w", dst, err)
 		}
 
 		ctw.b = tw
