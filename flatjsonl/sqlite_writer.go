@@ -46,6 +46,7 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 // SetupKeys creates tables.
 func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
 	c.b = &baseWriter{}
+	c.b.p = c.p
 	c.b.setupKeys(keys)
 	c.transposed = map[string]*baseWriter{}
 

@@ -40,7 +40,7 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 		fn: fn,
 	}
 
-	if fn == "<nop>" {
+	if fn == NopFile {
 		c.f = nopWriter{}
 	} else {
 		c.f, err = os.Create(fn)
@@ -66,7 +66,6 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 
 // SetupKeys writes CSV headers.
 func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
-	c.b = &baseWriter{}
 	c.b.setupKeys(keys)
 
 	if err := c.writeHead(); err != nil {
@@ -77,8 +76,9 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 
 	for dst, tw := range c.b.transposed {
 		fn := c.b.transposedFileName(c.fn, dst)
+		tw.extName = fn
 
-		if c.fn == "<nop>" {
+		if c.fn == NopFile {
 			fn = c.fn
 		}
 
@@ -103,8 +103,8 @@ func (c *CSVWriter) writeHead() error {
 
 	if c.b.isTransposed {
 		keys = make([]string, len(c.b.trimmedKeys))
-		for k, i := range c.b.trimmedKeys {
-			keys[i] = k
+		for _, i := range c.b.trimmedKeys {
+			keys[i.idx] = i.k.replaced
 		}
 	} else {
 		keys = make([]string, 0, len(c.b.keyIndexes))

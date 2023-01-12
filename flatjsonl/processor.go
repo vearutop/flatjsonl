@@ -231,6 +231,8 @@ func (p *Processor) setupWriters() error {
 			return fmt.Errorf("failed to create CSV file: %w", err)
 		}
 
+		cw.b = &baseWriter{}
+		cw.b.p = p
 		p.w.Add(cw)
 	}
 
@@ -248,6 +250,9 @@ func (p *Processor) setupWriters() error {
 		if err != nil {
 			return fmt.Errorf("failed")
 		}
+
+		rw.b = &baseWriter{}
+		rw.b.p = p
 
 		p.w.Add(rw)
 	}

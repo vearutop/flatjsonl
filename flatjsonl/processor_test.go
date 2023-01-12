@@ -298,6 +298,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 	f.ShowKeysInfo = true
 	f.Concurrency = 1
 	f.RawDelim = ","
+	f.ReplaceKeys = true
 	f.PrepareOutput()
 
 	if err := os.Remove("_testdata/transpose.sqlite"); err != nil {
@@ -316,7 +317,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 	assert.NoError(t, proc.Process())
 
 	assertFileEquals(t, "_testdata/transpose.csv",
-		`._sequence,.name
+		`sequence,name
 1,a
 2,b
 3,c
@@ -328,7 +329,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 `)
 
 	assertFileEquals(t, "_testdata/transpose_deep_arr.csv",
-		`.sequence,.index,.abaz.a,.abaz.b,.afoo.a,.afoo.b,.abar.a,.abar.b
+		`sequence,index,abaz_a,abaz_b,afoo_a,afoo_b,abar_a,abar_b
 1,0,5,6,15,12,,
 3,0,,,,,1,2
 `)
@@ -338,7 +339,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 `)
 
 	assertFileEquals(t, "_testdata/transpose_flat_map.csv",
-		`.sequence,.index,value
+		`sequence,index,value
 1,ccc,123
 1,ddd,456
 2,rrr,aaa
@@ -352,7 +353,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 `)
 
 	assertFileEquals(t, "_testdata/transpose_tags.csv",
-		`.sequence,.index,value
+		`sequence,index,value
 1,0,t1
 1,1,t2
 1,2,t3
@@ -376,7 +377,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 `)
 
 	assertFileEquals(t, "_testdata/transpose_tokens.csv",
-		`.sequence,.index,.a,.b
+		`sequence,index,a,b
 1,foo,1,2
 2,bar,3,4
 3,foo,15,12
@@ -424,5 +425,5 @@ func assertFileEquals(t *testing.T, fn string, contents string) {
 	b, err := os.ReadFile(fn)
 	require.NoError(t, err)
 
-	assert.Equal(t, contents, string(b))
+	assert.Equal(t, contents, string(b), fn)
 }

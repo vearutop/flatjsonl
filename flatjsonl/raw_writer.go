@@ -31,18 +31,22 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 
 	c.delim = []byte(delimiter)
 
-	c.f, err = os.Create(fn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create RAW file: %w", err)
-	}
-
-	switch {
-	case strings.HasSuffix(fn, ".gz"):
-		c.f = gzip.NewWriter(c.f)
-	case strings.HasSuffix(fn, ".zst"):
-		c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
+	if fn == NopFile {
+		c.f = nopWriter{}
+	} else {
+		c.f, err = os.Create(fn)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create RAW file: %w", err)
+		}
+
+		switch {
+		case strings.HasSuffix(fn, ".gz"):
+			c.f = gzip.NewWriter(c.f)
+		case strings.HasSuffix(fn, ".zst"):
+			c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -53,15 +57,21 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 
 // SetupKeys initializes writer.
 func (c *RawWriter) SetupKeys(keys []flKey) (err error) {
-	c.b = &baseWriter{}
 	c.b.setupKeys(keys)
 
 	c.transposed = map[string]*RawWriter{}
 
 	for dst, tw := range c.b.transposed {
-		ctw, err := NewRawWriter(c.b.transposedFileName(c.fn, dst), string(c.delim))
+		fn := c.b.transposedFileName(c.fn, dst)
+		tw.extName = fn
+
+		if c.fn == NopFile {
+			fn = c.fn
+		}
+
+		ctw, err := NewRawWriter(fn, string(c.delim))
 		if err != nil {
-			return fmt.Errorf("failed to init transposed CSV writer for %s: %w", dst, err)
+			return fmt.Errorf("failed to init transposed RAW writer for %s: %w", dst, err)
 		}
 
 		ctw.b = tw

@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// NopFile indicates a no op file.
+const NopFile = "<nop>"
+
 // WriteReceiver can receive a row for processing.
 type WriteReceiver interface {
 	SetupKeys(keys []flKey) error
@@ -113,15 +116,23 @@ func (w *Writer) Close() error {
 	return nil
 }
 
+type idxKey struct {
+	idx int
+	k   flKey
+}
+
 type baseWriter struct {
+	p *Processor
+
 	row          []string
 	keyIndexes   []int   // Key indexes of this projection in incoming []Value.
 	keys         []flKey // Full list of original keys.
 	filteredKeys []flKey // Reduced list of keys for this projection.
+	indexType    Type    // Type of transpose index (int for arrays, string for objects).
 
 	isTransposed bool
 	transposed   map[string]*baseWriter
-	trimmedKeys  map[string]int
+	trimmedKeys  map[string]idxKey
 
 	// transposedMapping maps original key index to reduced set of trimmed keys.
 	transposedMapping map[int]int
@@ -142,14 +153,17 @@ func (b *baseWriter) setupKeys(keys []flKey) {
 		tw := b.transposedWriter(key.transposeDst, keys)
 
 		tw.keyIndexes = append(tw.keyIndexes, i)
+		tw.indexType = key.transposeKey.t
 
-		mappedIdx, ok := tw.trimmedKeys[key.transposeTrimmed]
+		ik, ok := tw.trimmedKeys[key.transposeTrimmed]
 		if !ok {
-			mappedIdx = len(tw.trimmedKeys)
-			tw.trimmedKeys[key.transposeTrimmed] = mappedIdx
+			ik.idx = len(tw.trimmedKeys)
+			key.replaced = b.p.prepareKey(key.transposeTrimmed)
+			ik.k = key
+			tw.trimmedKeys[key.transposeTrimmed] = ik
 		}
 
-		tw.transposedMapping[i] = mappedIdx
+		tw.transposedMapping[i] = ik.idx
 	}
 
 	b.initFilteredKeys()
@@ -171,11 +185,12 @@ func (b *baseWriter) initFilteredKeys() {
 	}
 
 	b.filteredKeys = make([]flKey, len(b.trimmedKeys))
-	for k, i := range b.trimmedKeys {
-		b.filteredKeys[i] = flKey{
-			replaced: k,
-		}
+	for _, i := range b.trimmedKeys {
+		b.filteredKeys[i.idx] = i.k
 	}
+
+	b.filteredKeys[0].t = TypeInt     // .sequence
+	b.filteredKeys[1].t = b.indexType // .index
 
 	for o, t := range b.transposedMapping {
 		k := b.filteredKeys[t]
@@ -198,9 +213,15 @@ func (b *baseWriter) transposedWriter(dst string, keys []flKey) *baseWriter {
 
 	tw.isTransposed = true
 	tw.keys = keys
-	tw.trimmedKeys = map[string]int{
-		".sequence": 0,
-		".index":    1,
+	tw.trimmedKeys = map[string]idxKey{
+		"._sequence": {idx: 0, k: flKey{
+			original: "._sequence",
+			replaced: b.p.prepareKey("._sequence"),
+		}},
+		"._index": {idx: 1, k: flKey{
+			original: "._index",
+			replaced: b.p.prepareKey("._index"),
+		}},
 	}
 	tw.transposedMapping = map[int]int{}
 
