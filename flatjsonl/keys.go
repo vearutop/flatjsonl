@@ -449,12 +449,16 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 		return origKey
 	}
 
-	sk := strings.Split(origKey, ".")
+	sk := strings.Split(strings.TrimRight(origKey, "."), ".")
 	i := len(sk) - 1
 	ski := toSnakeCase(sk[i])
 	snk := strings.Trim(ski, "[]")
 
 	for {
+		if len(snk) == 0 {
+			panic("BUG: empty snk for " + origKey)
+		}
+
 		if stored, ok := p.replaceByKey[snk]; (!ok || origKey == stored) && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
 			p.replaceByKey[snk] = origKey
 			origKey = snk

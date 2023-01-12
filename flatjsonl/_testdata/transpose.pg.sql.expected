@@ -75,3 +75,5 @@ COPY "whatever_tokens" ("_seq_id","sequence","index","a","b") FROM stdin WITH (F
 3,3,baz,5,6
 \.
 
+SELECT '3/3 lines completed, 100.0%' AS status;
+

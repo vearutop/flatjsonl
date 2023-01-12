@@ -32,6 +32,8 @@ type PGDumpWriter struct {
 
 	sortedTransposed []string
 	sortedTables     []string
+
+	linesReceived int
 }
 
 type csvCopier struct {
@@ -121,6 +123,7 @@ func (c *PGDumpWriter) table(dst string) string {
 // ReceiveRow receives rows.
 func (c *PGDumpWriter) ReceiveRow(seq int64, values []Value) error {
 	c.linesTx++
+	c.linesReceived++
 
 	c.b.receiveRow(seq, values)
 
@@ -139,7 +142,7 @@ func (c *PGDumpWriter) ReceiveRow(seq int64, values []Value) error {
 		}
 	}
 
-	if c.linesTx > 1000 {
+	if c.linesTx >= 10000 {
 		c.linesTx = 0
 
 		if err := c.flush(); err != nil {
@@ -168,6 +171,18 @@ func (c *PGDumpWriter) flush() error {
 		if _, err := c.f.Write([]byte("\\.\n\n")); err != nil {
 			return err
 		}
+	}
+
+	var status string
+	if c.p.totalLines != 0 {
+		status = fmt.Sprintf("%d/%d lines completed, %.1f%%",
+			c.linesReceived, c.p.totalLines, 100*float64(c.linesReceived)/float64(c.p.totalLines))
+	} else {
+		status = fmt.Sprintf("%d lines completed", c.linesReceived)
+	}
+
+	if _, err := c.f.Write([]byte("SELECT '" + status + "' AS status;\n\n")); err != nil {
+		return err
 	}
 
 	return nil
@@ -268,7 +283,7 @@ func (c *PGDumpWriter) createTable(tn string, keys []flKey, isTransposed bool) e
 			tp = " BOOL"
 		case TypeFloat:
 			tp = " FLOAT8"
-		case TypeString:
+		case TypeString, TypeAbsent, TypeNull:
 			tp = " VARCHAR"
 		}
 

@@ -45,6 +45,8 @@ type Processor struct {
 	flKeysList    []string
 	keyHierarchy  KeyHierarchy
 	canonicalKeys map[string]flKey
+
+	totalLines int
 }
 
 // NewProcessor creates an instance of Processor.
@@ -155,6 +157,7 @@ func (p *Processor) PrepareKeys() error {
 		}
 
 		p.Log("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+		p.totalLines = int(p.pr.Lines())
 	}
 
 	p.prepareKeys()
@@ -198,7 +201,7 @@ func (p *Processor) maybeShowKeys() error {
 		fmt.Println("keys info:")
 
 		for i, k := range p.keys {
-			line := strconv.Itoa(i) + ": " + k.replaced + ", TYPE " + string(k.t)
+			line := k.replaced + ", TYPE " + string(k.t)
 
 			if k.replaced != k.original {
 				line = k.original + " REPLACED WITH " + line
@@ -208,7 +211,7 @@ func (p *Processor) maybeShowKeys() error {
 				line += ", TRANSPOSED TO " + k.transposeDst
 			}
 
-			fmt.Println(line)
+			fmt.Println(strconv.Itoa(i)+":", line)
 		}
 	}
 
