@@ -37,7 +37,7 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 		tableName: tableName,
 		replacer:  strings.NewReplacer(`"`, `""`),
 		p:         p,
-		maxCols:   p.f.SQLiteMaxCols - 1, // -1 for _seq_id.
+		maxCols:   p.f.SQLMaxCols - 1, // -1 for _seq_id.
 	}
 
 	return c, nil

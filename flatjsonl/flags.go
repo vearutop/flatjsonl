@@ -16,9 +16,11 @@ type Flags struct {
 
 	CSV string
 
-	SQLite        string
-	SQLiteMaxCols int
-	SQLTable      string
+	SQLite     string
+	SQLMaxCols int
+	SQLTable   string
+
+	PGDump string
 
 	Raw      string
 	RawDelim string
@@ -52,8 +54,9 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
 
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
-	flag.IntVar(&f.SQLiteMaxCols, "sqlite-max-cols", 500, "Maximum columns in single SQLite table (hard limit is 2000).")
+	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 500, "Maximum columns in single SQL table (SQLite will fail with more than 2000).")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
+	flag.StringVar(&f.PGDump, "pg-dump", "", "Output to PostgreSQL dump file.")
 
 	flag.StringVar(&f.Raw, "raw", "", "Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).")
 	flag.StringVar(&f.RawDelim, "raw-delim", "", "RAW file column delimiter.")
@@ -87,7 +90,7 @@ func (f *Flags) Parse() {
 	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo {
 		inputs := f.Inputs()
 
-		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" && f.Raw == "" {
+		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" && f.Raw == "" && f.PGDump == "" {
 			f.Output = inputs[0].FileName + ".csv"
 		}
 	}

@@ -17,7 +17,7 @@ common source of information for ad-hoc analytics and investigations.
 They can be processed with `jq` and grepped for a variety of data checks, however there are much more powerful and 
 convenient tools that operate on columnar table data, rather than hierarchical structures.
 
-This tool converts structured logs into tabular data (`CSV`, `SQLite`) with flexible mapping options.
+This tool converts structured logs into tabular data (`CSV`, `SQLite`, `PostgreSQL dump`) with flexible mapping options.
 
 ## How it works?
 
@@ -73,18 +73,26 @@ flatjsonl -help
 Usage of flatjsonl:
   -add-sequence
         Add auto incremented sequence number.
+  -buf-size int
+        Buffer size (max length of file line) in bytes. (default 10000000)
   -case-sensitive-keys
         Use case-sensitive keys (can fail for SQLite).
   -concurrency int
         Number of concurrent routines in reader. (default 24)
   -config string
         Configuration JSON or YAML file.
-  -cpu-prof string
-        Write CPU profile to file.
   -csv string
         Output to CSV file (gzip encoded if ends with .gz).
+  -dbg-cpu-prof string
+        Write CPU profile to file.
+  -dbg-loop-input-size int
+        (benchmark) Repeat input until total target size reached, bytes.
+  -dbg-mem-prof string
+        Write mem profile to file.
   -field-limit int
         Max length of field value, exceeding tail is truncated, 0 for unlimited.
+  -get-key string
+        Add a single key to list of included keys.
   -hide-progress
         Do not show progress in STDERR.
   -input string
@@ -97,12 +105,12 @@ Usage of flatjsonl:
         Max number of lines to process.
   -max-lines-keys int
         Max number of lines to process when scanning keys.
-  -mem-prof string
-        Write mem profile to file.
   -offset-lines int
         Skip a number of first lines.
   -output string
         Output to a file (default <input>.csv).
+  -pg-dump string
+        Output to PostgreSQL dump file.
   -progress-interval duration
         Progress update interval. (default 5s)
   -raw string
@@ -119,6 +127,8 @@ Usage of flatjsonl:
         Show keys, their replaces and types.
   -skip-zero-cols
         Skip columns with zero values.
+  -sql-max-cols int
+        Maximum columns in single SQL table (SQLite will fail with more than 2000). (default 500)
   -sql-table string
         Table name. (default "flatjsonl")
   -sqlite string
