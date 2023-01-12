@@ -481,6 +481,8 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 }
 
 func (wi *writeIterator) lineStarted(seq int64) error {
+	wi.sem <- struct{}{}
+
 	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
 	wi.pending.Store(seq, l)
 
@@ -493,15 +495,15 @@ func (wi *writeIterator) lineFinished(seq int64) error {
 		panic("BUG: could not find pending line to finish")
 	}
 
-	wi.sem <- struct{}{}
-
 	wi.finished.Store(seq, l)
 
 	return wi.checkCompleted()
 }
 
 func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
-	<-wi.sem
+	defer func() {
+		<-wi.sem
+	}()
 
 	for i, v := range wi.p.constVals {
 		val := Value{
