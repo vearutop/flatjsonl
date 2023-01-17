@@ -454,7 +454,7 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	if v.Type == TypeString { //nolint:nestif
 		// Reformat time.
 		tf, ok := wi.pkTimeFmt[pk]
-		if ok {
+		if ok && tf != "RAW" {
 			var (
 				t   time.Time
 				err error

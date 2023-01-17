@@ -283,7 +283,12 @@ func (c *PGDumpWriter) createTable(tn string, keys []flKey, isTransposed bool) e
 			tp = " BOOL"
 		case TypeFloat:
 			tp = " FLOAT8"
-		case TypeString, TypeAbsent, TypeNull:
+		case TypeString:
+			tp = " VARCHAR"
+			if _, ok := c.p.cfg.ParseTime[k.original]; ok {
+				tp = " TIMESTAMP"
+			}
+		case TypeAbsent, TypeNull:
 			tp = " VARCHAR"
 		}
 
