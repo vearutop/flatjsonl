@@ -497,9 +497,9 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 
 func (wi *writeIterator) lineStarted(seq int64) error {
 	inp := atomic.AddInt64(&wi.inProgress, 1)
-	if inp > int64(10*wi.p.f.Concurrency) {
-		time.Sleep(50 * time.Millisecond)
-	} else if inp > int64(50*wi.p.f.Concurrency) {
+	if inp > int64(100*wi.p.f.Concurrency) {
+		time.Sleep(10 * time.Millisecond)
+	} else if inp > int64(500*wi.p.f.Concurrency) {
 		time.Sleep(500 * time.Millisecond)
 	}
 
