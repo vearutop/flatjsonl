@@ -24,8 +24,8 @@ This tool converts structured logs into tabular data (`CSV`, `SQLite`, `PostgreS
 Logs of busy systems tend to be large, so performance is important if you want the job done in reasonable time.
 
 Thanks to [`github.com/valyala/fastjson`](https://github.com/valyala/fastjson),
-[`github.com/puzpuzpuz/xsync`](https://github.com/puzpuzpuz/xsync) and concurrency-friendly design, `flatjsonl` can  
-leverage multicore machines to a large extent and crunch data at high speed.
+[`github.com/puzpuzpuz/xsync`](https://github.com/puzpuzpuz/xsync) and concurrency-friendly design, 
+`flatjsonl` can leverage multicore machines to a large extent and crunch data at high speed.
 
 ```
 vearutop@bigassbox ~ $ time ~/flatjsonl -pg-dump ~/events.pg.sql.gz -input ~/events.log -sql-table events -progress-interval 1m
