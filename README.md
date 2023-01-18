@@ -19,6 +19,40 @@ convenient tools that operate on columnar table data, rather than hierarchical s
 
 This tool converts structured logs into tabular data (`CSV`, `SQLite`, `PostgreSQL dump`) with flexible mapping options.
 
+## Performance
+
+Logs of busy systems tend to be large, so performance is important if you want the job done in reasonable time.
+
+Thanks to [`github.com/valyala/fastjson`](https://github.com/valyala/fastjson),
+[`github.com/puzpuzpuz/xsync`](https://github.com/puzpuzpuz/xsync) and concurrency-friendly design, `flatjsonl` can  
+leverage multicore machines to a large extent and crunch data at high speed.
+
+```
+vearutop@bigassbox ~ $ time ~/flatjsonl -pg-dump ~/events.pg.sql.gz -input ~/events.log -sql-table events -progress-interval 1m
+```
+```
+scanning keys...
+scanning keys: 100.0% bytes read, 11396506 lines processed, 200806.2 l/s, 902.3 MB/s, elapsed 56.75s, remaining 0s, heap 44 MB
+lines: 11396506 , keys: 310
+flattening data...
+flattening data: 20.7% bytes read, 2363192 lines processed, 39385.9 l/s, 177.0 MB/s, elapsed 1m0s, remaining 3m49s, heap 569 MB
+flattening data: 41.7% bytes read, 4750006 lines processed, 39583.1 l/s, 177.9 MB/s, elapsed 2m0s, remaining 2m47s, heap 485 MB
+flattening data: 62.7% bytes read, 7140289 lines processed, 39668.1 l/s, 178.3 MB/s, elapsed 3m0s, remaining 1m47s, heap 610 MB
+flattening data: 83.6% bytes read, 9528709 lines processed, 39702.9 l/s, 178.4 MB/s, elapsed 4m0s, remaining 47s, heap 572 MB
+flattening data: 100.0% bytes read, 11396506 lines processed, 39692.4 l/s, 178.4 MB/s, elapsed 4m47.12s, remaining 0s, heap 508 MB
+lines: 11396506 , keys: 310
+
+real    5m44.002s
+user    53m24.841s
+sys     1m1.772s
+```
+```
+51G  events.log
+3.6G events.pg.sql.gz
+```
+
+
+
 ## How it works?
 
 In simplest case this tool iterates log file two times, first pass to collect all available keys and 
