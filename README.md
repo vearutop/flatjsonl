@@ -199,7 +199,7 @@ be used as column value.
 Configuration file can also have [regexp replaces](https://pkg.go.dev/regexp#Regexp.ReplaceAllString) as a map of 
 regular expression as keys and replace patterns as values.
 
-It is also possible to use simplified syntax with `*`, where `*` means key segment between two dots.
+It is also possible to use simplified syntax with `*`, where `*` means key segment (can not start with a digit) between two dots.
 
 ```json
 {
