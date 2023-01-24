@@ -101,7 +101,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		"]", "\\]",
 		"{", "\\{",
 		"}", "\\}",
-		"*", "([^.]+)",
+		"*", "([^\\d][^.]+)",
 	)
 
 	for _, reg := range p.cfg.IncludeKeysRegex {
