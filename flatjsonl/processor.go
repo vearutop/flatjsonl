@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,8 +50,28 @@ type Processor struct {
 	totalLines int
 }
 
+var memOverflow uint64
+
 // NewProcessor creates an instance of Processor.
 func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: funlen // Yeah, that's what she said.
+	if f.MemLimit > 0 {
+		go func() {
+			for {
+				time.Sleep(5 * time.Second)
+
+				lim := f.MemLimit * 1024 * 1024
+				m := runtime.MemStats{}
+				runtime.ReadMemStats(&m)
+
+				if m.HeapInuse > lim {
+					atomic.StoreUint64(&memOverflow, 1)
+				} else {
+					atomic.StoreUint64(&memOverflow, 0)
+				}
+			}
+		}()
+	}
+
 	pr := &Progress{
 		Interval: f.ProgressInterval,
 	}
