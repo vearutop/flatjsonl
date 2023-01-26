@@ -520,7 +520,7 @@ func (wi *writeIterator) lineStarted(seq int64) error {
 	inp := atomic.AddInt64(&wi.inProgress, 1)
 	if inp > int64(100*wi.p.f.Concurrency) {
 		time.Sleep(10 * time.Millisecond)
-	} else if inp > int64(500*wi.p.f.Concurrency) {
+	} else if inp > int64(500*wi.p.f.Concurrency) || atomic.LoadUint64(&memOverflow) == 1 {
 		time.Sleep(500 * time.Millisecond)
 	}
 
