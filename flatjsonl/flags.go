@@ -9,7 +9,7 @@ import (
 
 // Flags contains command-line flags.
 type Flags struct {
-	HideProgress     bool
+	Verbosity        int
 	ProgressInterval time.Duration
 	Input            string
 	Output           string
@@ -45,8 +45,6 @@ type Flags struct {
 	ShowKeysInfo bool
 
 	Concurrency int
-	MemLimit    uint64
-	OutOfOrder  bool
 }
 
 // Register registers command-line flags.
@@ -63,8 +61,9 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.Raw, "raw", "", "Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).")
 	flag.StringVar(&f.RawDelim, "raw-delim", "", "RAW file column delimiter.")
 
-	flag.BoolVar(&f.HideProgress, "hide-progress", false, "Do not show progress in STDERR.")
+	flag.IntVar(&f.Verbosity, "verbosity", 1, "Show progress in STDERR, 0 disables status, 2 adds more metrics.")
 	flag.DurationVar(&f.ProgressInterval, "progress-interval", 5*time.Second, "Progress update interval.")
+
 	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as key.")
 	flag.StringVar(&f.GetKey, "get-key", "", "Add a single key to list of included keys.")
 	flag.StringVar(&f.Config, "config", "", "Configuration JSON or YAML file.")
@@ -83,8 +82,6 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.BufSize, "buf-size", 1e7, "Buffer size (max length of file line) in bytes.")
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
-	flag.Uint64Var(&f.MemLimit, "mem-limit", 2000, "Soft memory limit in MB, 0 for unlimited.")
-	flag.BoolVar(&f.OutOfOrder, "out-of-order", false, "Allow out of order writing to result.")
 }
 
 // Parse parses and prepares command-line flags.

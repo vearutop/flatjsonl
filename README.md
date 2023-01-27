@@ -127,8 +127,6 @@ Usage of flatjsonl:
         Max length of field value, exceeding tail is truncated, 0 for unlimited.
   -get-key string
         Add a single key to list of included keys.
-  -hide-progress
-        Do not show progress in STDERR.
   -input string
         Input from JSONL files, comma-separated.
   -key-limit int
@@ -167,6 +165,8 @@ Usage of flatjsonl:
         Table name. (default "flatjsonl")
   -sqlite string
         Output to SQLite file.
+  -verbosity int
+        Show progress in STDERR, 0 disables status, 2 adds more metrics. (default 1)
   -version
         Show version and exit.
 ```

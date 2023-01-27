@@ -34,14 +34,17 @@ type Progress struct {
 	metrics  []ProgressMetric
 }
 
+// ProgressType describes metric value.
 type ProgressType string
 
+// ProgressType values.
 const (
 	ProgressBytes    = ProgressType("bytes")
 	ProgressDuration = ProgressType("duration")
 	ProgressGauge    = ProgressType("gauge")
 )
 
+// ProgressMetric is an operation metric.
 type ProgressMetric struct {
 	Name  string
 	Type  ProgressType
@@ -63,7 +66,13 @@ func DefaultStatus(s ProgressStatus) string {
 		s.DonePercent, s.LinesCompleted, s.SpeedLPS, s.SpeedMBPS,
 		s.Elapsed.Round(10*time.Millisecond).String(), s.Remaining.String(), heapMB)
 
+	return res
+}
+
+// MetricsStatus renders ProgressStatus metrics as a string.
+func MetricsStatus(s ProgressStatus) string {
 	metrics := ""
+
 	for _, m := range s.Metrics {
 		switch m.Type {
 		case ProgressBytes:
@@ -77,10 +86,10 @@ func DefaultStatus(s ProgressStatus) string {
 	}
 
 	if metrics != "" {
-		res += "\n" + metrics[:len(metrics)-2]
+		metrics = metrics[:len(metrics)-2]
 	}
 
-	return res
+	return metrics
 }
 
 // Start spawns background progress reporter.
@@ -122,6 +131,7 @@ func (p *Progress) Start(total int64, current func() int64, task string) {
 	}()
 }
 
+// AddMetrics adds more metrics to progress status message.
 func (p *Progress) AddMetrics(metrics ...ProgressMetric) {
 	p.metrics = append(p.metrics, metrics...)
 }

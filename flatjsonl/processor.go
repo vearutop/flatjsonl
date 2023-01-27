@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,28 +49,8 @@ type Processor struct {
 	totalLines int
 }
 
-var memOverflow uint64
-
 // NewProcessor creates an instance of Processor.
 func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: funlen // Yeah, that's what she said.
-	if f.MemLimit > 0 {
-		go func() {
-			for {
-				time.Sleep(5 * time.Second)
-
-				lim := f.MemLimit * 1024 * 1024
-				m := runtime.MemStats{}
-				runtime.ReadMemStats(&m)
-
-				if m.HeapInuse > lim {
-					atomic.StoreUint64(&memOverflow, 1)
-				} else {
-					atomic.StoreUint64(&memOverflow, 0)
-				}
-			}
-		}()
-	}
-
 	pr := &Progress{
 		Interval: f.ProgressInterval,
 	}
@@ -105,11 +84,23 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		flKeys: xsync.NewIntegerMapOf[uint64, flKey](),
 	}
 
-	if f.HideProgress {
+	switch f.Verbosity {
+	case 0:
 		pr.Print = func(status ProgressStatus) {}
-	} else {
+	case 1:
 		pr.Print = func(status ProgressStatus) {
 			p.Log(DefaultStatus(status))
+		}
+	case 2:
+		pr.Print = func(status ProgressStatus) {
+			s := DefaultStatus(status)
+			m := MetricsStatus(status)
+
+			if m != "" {
+				s += "\n" + m
+			}
+
+			p.Log(s)
 		}
 	}
 
@@ -375,8 +366,7 @@ type lineBuf struct {
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := writeIterator{}
 	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
-	wi.finished = xsync.NewIntegerMapOf[int64, *lineBuf]()
-	//wi.finished = &sync.Map{}
+	wi.finished = &sync.Map{}
 
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
@@ -393,10 +383,6 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 	wi.p = p
 	wi.fieldLimit = p.f.FieldLimit
 	wi.outTimeFmt = p.cfg.OutputTimeFormat
-
-	if p.f.OutOfOrder {
-		wi.outOfOrder = &sync.Mutex{}
-	}
 
 	if wi.outTimeFmt == "" {
 		wi.outTimeFmt = time.RFC3339
@@ -417,26 +403,6 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 			Type:  ProgressGauge,
 			Value: &wi.inProgress,
 		},
-		ProgressMetric{
-			Name:  "light naps",
-			Type:  ProgressGauge,
-			Value: &wi.lightNaps,
-		},
-		ProgressMetric{
-			Name:  "hard naps",
-			Type:  ProgressGauge,
-			Value: &wi.hardNaps,
-		},
-		ProgressMetric{
-			Name:  "seq expected",
-			Type:  ProgressGauge,
-			Value: &wi.seqExpected,
-		},
-		ProgressMetric{
-			Name:  "seq received",
-			Type:  ProgressGauge,
-			Value: &wi.seqReceived,
-		},
 	)
 
 	return &wi
@@ -451,7 +417,6 @@ type writeIterator struct {
 	fieldLimit int
 	outTimeFmt string
 	outputTZ   *time.Location
-	outOfOrder *sync.Mutex
 
 	// Read-write under concurrency.
 	lineBufPool sync.Pool
@@ -463,13 +428,9 @@ type writeIterator struct {
 	// Seems Store with eventual LoadAndDelete can have eviction-style inconsistency under heavy concurrent load.
 	// E.g. LoadAndDelete would not find the entry that was Stored.
 	// However, making a minimal reproducer isn't feasible.
-	//finished *sync.Map
-	finished *xsync.MapOf[int64, *lineBuf]
+	finished *sync.Map
 
-	inProgress  int64
-	lightNaps   int64
-	hardNaps    int64
-	seqReceived int64
+	inProgress int64
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -559,10 +520,8 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 func (wi *writeIterator) lineStarted(seq int64) error {
 	inp := atomic.AddInt64(&wi.inProgress, 1)
 	if inp > int64(5*wi.p.f.Concurrency) {
-		atomic.AddInt64(&wi.lightNaps, 1)
 		time.Sleep(10 * time.Millisecond)
-	} else if inp > int64(100*wi.p.f.Concurrency) || atomic.LoadUint64(&memOverflow) == 1 {
-		atomic.AddInt64(&wi.hardNaps, 1)
+	} else if inp > int64(20*wi.p.f.Concurrency) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -578,16 +537,7 @@ func (wi *writeIterator) lineFinished(seq int64) error {
 		panic("BUG: could not find pending line to finish")
 	}
 
-	if wi.outOfOrder != nil {
-		wi.outOfOrder.Lock()
-		defer wi.outOfOrder.Unlock()
-
-		return wi.complete(seq, l)
-	}
-
 	wi.finished.Store(seq, l)
-
-	atomic.StoreInt64(&wi.seqReceived, seq)
 
 	return wi.checkCompleted()
 }
@@ -629,7 +579,7 @@ func (wi *writeIterator) checkCompleted() error {
 			break
 		}
 
-		if err := wi.complete(seqExpected, l); err != nil {
+		if err := wi.complete(seqExpected, l.(*lineBuf)); err != nil {
 			return err
 		}
 	}
@@ -645,13 +595,13 @@ func (wi *writeIterator) waitPending() error {
 		min := int64(-1)
 		max := int64(-1)
 
-		wi.finished.Range(func(k int64, value *lineBuf) bool {
+		wi.finished.Range(func(key any, value any) bool {
 			cnt++
 
-			//k, ok := key.(int64)
-			//if !ok {
-			//	panic(fmt.Sprintf("BUG: int64 expected, %T received", key))
-			//}
+			k, ok := key.(int64)
+			if !ok {
+				panic(fmt.Sprintf("BUG: int64 expected, %T received", key))
+			}
 
 			if min == -1 || k < min {
 				min = k

@@ -3,27 +3,18 @@ package flatjsonl
 import (
 	"bufio"
 	"fmt"
-	"io"
-	"os"
-	"path"
-	"strings"
-
-	"github.com/klauspost/compress/zstd"
-	gzip "github.com/klauspost/pgzip"
 )
 
 // RawWriter writes rows to RAW file.
 type RawWriter struct {
-	fn    string
-	f     io.WriteCloser
-	w     *bufio.Writer
-	delim []byte
+	fn string
+	w  *bufio.Writer
 
-	uncompressed *CountingWriter
-	compressed   *CountingWriter
+	delim []byte
 
 	transposed map[string]*RawWriter
 
+	*fileWriter
 	b *baseWriter
 }
 
@@ -35,53 +26,14 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 
 	c.delim = []byte(delimiter)
 
-	if fn == NopFile {
-		c.f = nopWriter{}
-	} else {
-		c.f, err = os.Create(fn)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create RAW file: %w", err)
-		}
-
-		switch {
-		case strings.HasSuffix(fn, ".gz"):
-			c.compressed = &CountingWriter{Writer: c.f}
-			c.f = gzip.NewWriter(c.compressed)
-		case strings.HasSuffix(fn, ".zst"):
-			c.compressed = &CountingWriter{Writer: c.f}
-			c.f, err = zstd.NewWriter(c.compressed, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
-			if err != nil {
-				return nil, err
-			}
-		}
+	c.fileWriter, err = newFileWriter(fn)
+	if err != nil {
+		return nil, err
 	}
 
-	c.uncompressed = &CountingWriter{Writer: c.f}
 	c.w = bufio.NewWriter(c.uncompressed)
 
 	return c, nil
-}
-
-func (c *RawWriter) Metrics() []ProgressMetric {
-	var res []ProgressMetric
-
-	if c.compressed != nil {
-		res = append(res, ProgressMetric{
-			Name:  path.Base(c.fn) + " (comp)",
-			Type:  ProgressBytes,
-			Value: &c.compressed.writtenBytes,
-		})
-	}
-
-	if c.uncompressed != nil {
-		res = append(res, ProgressMetric{
-			Name:  path.Base(c.fn),
-			Type:  ProgressBytes,
-			Value: &c.uncompressed.writtenBytes,
-		})
-	}
-
-	return res
 }
 
 // SetupKeys initializes writer.

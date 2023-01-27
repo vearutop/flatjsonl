@@ -3,9 +3,14 @@ package flatjsonl
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/klauspost/compress/zstd"
+	gzip "github.com/klauspost/pgzip"
 )
 
 // NopFile indicates a no op file.
@@ -340,4 +345,77 @@ func (b *baseWriter) receiveRowValues(values []Value) (row []Value) {
 	}
 
 	return row
+}
+
+type nopWriter struct{}
+
+func (nopWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func (nopWriter) Close() error {
+	return nil
+}
+
+type fileWriter struct {
+	f  io.WriteCloser
+	fn string
+
+	uncompressed *CountingWriter
+	compressed   *CountingWriter
+}
+
+func newFileWriter(fn string) (*fileWriter, error) {
+	var err error
+
+	c := &fileWriter{}
+	c.fn = fn
+
+	if fn == NopFile {
+		c.f = nopWriter{}
+	} else {
+		c.f, err = os.Create(fn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create file %s: %w", fn, err)
+		}
+
+		switch {
+		case strings.HasSuffix(fn, ".gz"):
+			c.compressed = &CountingWriter{Writer: c.f}
+			c.f = gzip.NewWriter(c.compressed)
+		case strings.HasSuffix(fn, ".zst"):
+			c.compressed = &CountingWriter{Writer: c.f}
+			c.f, err = zstd.NewWriter(c.compressed, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	c.uncompressed = &CountingWriter{Writer: c.f}
+
+	return c, nil
+}
+
+// Metrics return available metrics.
+func (c *fileWriter) Metrics() []ProgressMetric {
+	var res []ProgressMetric
+
+	if c.compressed != nil {
+		res = append(res, ProgressMetric{
+			Name:  path.Base(c.fn) + " (comp)",
+			Type:  ProgressBytes,
+			Value: &c.compressed.writtenBytes,
+		})
+	}
+
+	if c.uncompressed != nil {
+		res = append(res, ProgressMetric{
+			Name:  path.Base(c.fn),
+			Type:  ProgressBytes,
+			Value: &c.uncompressed.writtenBytes,
+		})
+	}
+
+	return res
 }
