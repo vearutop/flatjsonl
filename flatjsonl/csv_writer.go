@@ -3,33 +3,17 @@ package flatjsonl
 import (
 	"encoding/csv"
 	"fmt"
-	"io"
-	"os"
-	"strings"
-
-	"github.com/klauspost/compress/zstd"
-	gzip "github.com/klauspost/pgzip"
 )
 
 // CSVWriter writes rows to CSV file.
 type CSVWriter struct {
 	fn string
-	f  io.WriteCloser
 	w  *csv.Writer
 
 	transposed map[string]*CSVWriter
 
+	*fileWriter
 	b *baseWriter
-}
-
-type nopWriter struct{}
-
-func (nopWriter) Write(p []byte) (n int, err error) {
-	return len(p), nil
-}
-
-func (nopWriter) Close() error {
-	return nil
 }
 
 // NewCSVWriter creates an instance of CSVWriter.
@@ -40,26 +24,12 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 		fn: fn,
 	}
 
-	if fn == NopFile {
-		c.f = nopWriter{}
-	} else {
-		c.f, err = os.Create(fn)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create CSV file: %w", err)
-		}
-
-		switch {
-		case strings.HasSuffix(fn, ".gz"):
-			c.f = gzip.NewWriter(c.f)
-		case strings.HasSuffix(fn, ".zst"):
-			c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
-			if err != nil {
-				return nil, err
-			}
-		}
+	c.fileWriter, err = newFileWriter(fn)
+	if err != nil {
+		return nil, err
 	}
 
-	c.w = csv.NewWriter(c.f)
+	c.w = csv.NewWriter(c.uncompressed)
 
 	return c, nil
 }

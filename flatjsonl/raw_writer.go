@@ -3,23 +3,18 @@ package flatjsonl
 import (
 	"bufio"
 	"fmt"
-	"io"
-	"os"
-	"strings"
-
-	"github.com/klauspost/compress/zstd"
-	gzip "github.com/klauspost/pgzip"
 )
 
 // RawWriter writes rows to RAW file.
 type RawWriter struct {
-	fn    string
-	f     io.WriteCloser
-	w     *bufio.Writer
+	fn string
+	w  *bufio.Writer
+
 	delim []byte
 
 	transposed map[string]*RawWriter
 
+	*fileWriter
 	b *baseWriter
 }
 
@@ -31,26 +26,12 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 
 	c.delim = []byte(delimiter)
 
-	if fn == NopFile {
-		c.f = nopWriter{}
-	} else {
-		c.f, err = os.Create(fn)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create RAW file: %w", err)
-		}
-
-		switch {
-		case strings.HasSuffix(fn, ".gz"):
-			c.f = gzip.NewWriter(c.f)
-		case strings.HasSuffix(fn, ".zst"):
-			c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
-			if err != nil {
-				return nil, err
-			}
-		}
+	c.fileWriter, err = newFileWriter(fn)
+	if err != nil {
+		return nil, err
 	}
 
-	c.w = bufio.NewWriter(c.f)
+	c.w = bufio.NewWriter(c.uncompressed)
 
 	return c, nil
 }
