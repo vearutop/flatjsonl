@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/klauspost/compress/zstd"
@@ -17,6 +18,9 @@ type RawWriter struct {
 	f     io.WriteCloser
 	w     *bufio.Writer
 	delim []byte
+
+	uncompressed *CountingWriter
+	compressed   *CountingWriter
 
 	transposed map[string]*RawWriter
 
@@ -41,18 +45,43 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 
 		switch {
 		case strings.HasSuffix(fn, ".gz"):
-			c.f = gzip.NewWriter(c.f)
+			c.compressed = &CountingWriter{Writer: c.f}
+			c.f = gzip.NewWriter(c.compressed)
 		case strings.HasSuffix(fn, ".zst"):
-			c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
+			c.compressed = &CountingWriter{Writer: c.f}
+			c.f, err = zstd.NewWriter(c.compressed, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	c.w = bufio.NewWriter(c.f)
+	c.uncompressed = &CountingWriter{Writer: c.f}
+	c.w = bufio.NewWriter(c.uncompressed)
 
 	return c, nil
+}
+
+func (c *RawWriter) Metrics() []ProgressMetric {
+	var res []ProgressMetric
+
+	if c.compressed != nil {
+		res = append(res, ProgressMetric{
+			Name:  path.Base(c.fn) + " (comp)",
+			Type:  ProgressBytes,
+			Value: &c.compressed.writtenBytes,
+		})
+	}
+
+	if c.uncompressed != nil {
+		res = append(res, ProgressMetric{
+			Name:  path.Base(c.fn),
+			Type:  ProgressBytes,
+			Value: &c.uncompressed.writtenBytes,
+		})
+	}
+
+	return res
 }
 
 // SetupKeys initializes writer.

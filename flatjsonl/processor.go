@@ -13,7 +13,7 @@ import (
 	"time"
 	_ "time/tzdata" // Loading timezones.
 
-	"github.com/puzpuzpuz/xsync/v2"
+	xsync "github.com/puzpuzpuz/xsync/v2"
 	"github.com/swaggest/assertjson"
 )
 
@@ -86,7 +86,9 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		inputs: inputs,
 
 		pr: pr,
-		w:  &Writer{},
+		w: &Writer{
+			Progress: pr,
+		},
 		rd: &Reader{
 			Concurrency: f.Concurrency,
 			AddSequence: f.AddSequence,
@@ -373,7 +375,8 @@ type lineBuf struct {
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := writeIterator{}
 	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
-	wi.finished = &sync.Map{}
+	wi.finished = xsync.NewIntegerMapOf[int64, *lineBuf]()
+	//wi.finished = &sync.Map{}
 
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
@@ -391,6 +394,10 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 	wi.fieldLimit = p.f.FieldLimit
 	wi.outTimeFmt = p.cfg.OutputTimeFormat
 
+	if p.f.OutOfOrder {
+		wi.outOfOrder = &sync.Mutex{}
+	}
+
 	if wi.outTimeFmt == "" {
 		wi.outTimeFmt = time.RFC3339
 	}
@@ -404,6 +411,34 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 		}
 	}
 
+	p.pr.AddMetrics(
+		ProgressMetric{
+			Name:  "rows in progress",
+			Type:  ProgressGauge,
+			Value: &wi.inProgress,
+		},
+		ProgressMetric{
+			Name:  "light naps",
+			Type:  ProgressGauge,
+			Value: &wi.lightNaps,
+		},
+		ProgressMetric{
+			Name:  "hard naps",
+			Type:  ProgressGauge,
+			Value: &wi.hardNaps,
+		},
+		ProgressMetric{
+			Name:  "seq expected",
+			Type:  ProgressGauge,
+			Value: &wi.seqExpected,
+		},
+		ProgressMetric{
+			Name:  "seq received",
+			Type:  ProgressGauge,
+			Value: &wi.seqReceived,
+		},
+	)
+
 	return &wi
 }
 
@@ -416,6 +451,7 @@ type writeIterator struct {
 	fieldLimit int
 	outTimeFmt string
 	outputTZ   *time.Location
+	outOfOrder *sync.Mutex
 
 	// Read-write under concurrency.
 	lineBufPool sync.Pool
@@ -427,9 +463,13 @@ type writeIterator struct {
 	// Seems Store with eventual LoadAndDelete can have eviction-style inconsistency under heavy concurrent load.
 	// E.g. LoadAndDelete would not find the entry that was Stored.
 	// However, making a minimal reproducer isn't feasible.
-	finished *sync.Map
+	//finished *sync.Map
+	finished *xsync.MapOf[int64, *lineBuf]
 
-	inProgress int64
+	inProgress  int64
+	lightNaps   int64
+	hardNaps    int64
+	seqReceived int64
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -518,10 +558,12 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 
 func (wi *writeIterator) lineStarted(seq int64) error {
 	inp := atomic.AddInt64(&wi.inProgress, 1)
-	if inp > int64(100*wi.p.f.Concurrency) {
+	if inp > int64(5*wi.p.f.Concurrency) {
+		atomic.AddInt64(&wi.lightNaps, 1)
 		time.Sleep(10 * time.Millisecond)
-	} else if inp > int64(500*wi.p.f.Concurrency) || atomic.LoadUint64(&memOverflow) == 1 {
-		time.Sleep(500 * time.Millisecond)
+	} else if inp > int64(100*wi.p.f.Concurrency) || atomic.LoadUint64(&memOverflow) == 1 {
+		atomic.AddInt64(&wi.hardNaps, 1)
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
@@ -536,7 +578,16 @@ func (wi *writeIterator) lineFinished(seq int64) error {
 		panic("BUG: could not find pending line to finish")
 	}
 
+	if wi.outOfOrder != nil {
+		wi.outOfOrder.Lock()
+		defer wi.outOfOrder.Unlock()
+
+		return wi.complete(seq, l)
+	}
+
 	wi.finished.Store(seq, l)
+
+	atomic.StoreInt64(&wi.seqReceived, seq)
 
 	return wi.checkCompleted()
 }
@@ -578,7 +629,7 @@ func (wi *writeIterator) checkCompleted() error {
 			break
 		}
 
-		if err := wi.complete(seqExpected, l.(*lineBuf)); err != nil {
+		if err := wi.complete(seqExpected, l); err != nil {
 			return err
 		}
 	}
@@ -594,13 +645,13 @@ func (wi *writeIterator) waitPending() error {
 		min := int64(-1)
 		max := int64(-1)
 
-		wi.finished.Range(func(key, value any) bool {
+		wi.finished.Range(func(k int64, value *lineBuf) bool {
 			cnt++
 
-			k, ok := key.(int64)
-			if !ok {
-				panic(fmt.Sprintf("BUG: int64 expected, %T received", key))
-			}
+			//k, ok := key.(int64)
+			//if !ok {
+			//	panic(fmt.Sprintf("BUG: int64 expected, %T received", key))
+			//}
 
 			if min == -1 || k < min {
 				min = k

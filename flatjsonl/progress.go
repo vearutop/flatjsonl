@@ -17,6 +17,7 @@ type ProgressStatus struct {
 	SpeedLPS       float64
 	Elapsed        time.Duration
 	Remaining      time.Duration
+	Metrics        []ProgressMetric
 }
 
 // Progress reports reading performance.
@@ -30,6 +31,21 @@ type Progress struct {
 	prnt     func(s ProgressStatus)
 	start    time.Time
 	tot      float64
+	metrics  []ProgressMetric
+}
+
+type ProgressType string
+
+const (
+	ProgressBytes    = ProgressType("bytes")
+	ProgressDuration = ProgressType("duration")
+	ProgressGauge    = ProgressType("gauge")
+)
+
+type ProgressMetric struct {
+	Name  string
+	Type  ProgressType
+	Value *int64
 }
 
 // DefaultStatus renders ProgressStatus as a string.
@@ -43,9 +59,28 @@ func DefaultStatus(s ProgressStatus) string {
 
 	heapMB := ms.HeapInuse / (1024 * 1024)
 
-	return fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, elapsed %s, remaining %s, heap %d MB",
+	res := fmt.Sprintf(s.Task+"%.1f%% bytes read, %d lines processed, %.1f l/s, %.1f MB/s, elapsed %s, remaining %s, heap %d MB",
 		s.DonePercent, s.LinesCompleted, s.SpeedLPS, s.SpeedMBPS,
 		s.Elapsed.Round(10*time.Millisecond).String(), s.Remaining.String(), heapMB)
+
+	metrics := ""
+	for _, m := range s.Metrics {
+		switch m.Type {
+		case ProgressBytes:
+			spdMBPS := float64(atomic.LoadInt64(m.Value)) / (s.Elapsed.Seconds() * 1024 * 1024)
+			metrics += fmt.Sprintf("%s: %.1f MB/s, ", m.Name, spdMBPS)
+		case ProgressDuration:
+			metrics += m.Name + ": " + time.Duration(atomic.LoadInt64(m.Value)).String() + ", "
+		case ProgressGauge:
+			metrics += fmt.Sprintf("%s: %d, ", m.Name, atomic.LoadInt64(m.Value))
+		}
+	}
+
+	if metrics != "" {
+		res += "\n" + metrics[:len(metrics)-2]
+	}
+
+	return res
 }
 
 // Start spawns background progress reporter.
@@ -87,10 +122,15 @@ func (p *Progress) Start(total int64, current func() int64, task string) {
 	}()
 }
 
+func (p *Progress) AddMetrics(metrics ...ProgressMetric) {
+	p.metrics = append(p.metrics, metrics...)
+}
+
 func (p *Progress) printStatus(last bool) {
 	s := ProgressStatus{}
 	s.Task = p.task
 	s.LinesCompleted = atomic.LoadInt64(&p.lines)
+	s.Metrics = p.metrics
 
 	b := float64(p.current())
 	s.DonePercent = 100 * b / p.tot
@@ -119,6 +159,7 @@ func (p *Progress) Lines() int64 {
 // Stop stops progress reporting.
 func (p *Progress) Stop() {
 	p.printStatus(true)
+	p.metrics = nil
 
 	close(p.done)
 }
@@ -142,4 +183,30 @@ func (cr *CountingReader) Read(p []byte) (n int, err error) {
 // Bytes returns number of read bytes.
 func (cr *CountingReader) Bytes() int64 {
 	return atomic.LoadInt64(&cr.readBytes)
+}
+
+// CountingWriter wraps io.Writer to count bytes.
+type CountingWriter struct {
+	Writer io.Writer
+
+	writtenBytes int64
+}
+
+// Write writes and counts bytes.
+func (cr *CountingWriter) Write(p []byte) (n int, err error) {
+	n, err = cr.Writer.Write(p)
+
+	atomic.AddInt64(&cr.writtenBytes, int64(n))
+
+	return n, err
+}
+
+// Bytes returns number of written bytes.
+func (cr *CountingWriter) Bytes() int64 {
+	return atomic.LoadInt64(&cr.writtenBytes)
+}
+
+// MetricsExposer provides metric counters.
+type MetricsExposer interface {
+	Metrics() []ProgressMetric
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/klauspost/compress/zstd"
@@ -17,9 +18,34 @@ type CSVWriter struct {
 	f  io.WriteCloser
 	w  *csv.Writer
 
+	uncompressed *CountingWriter
+	compressed   *CountingWriter
+
 	transposed map[string]*CSVWriter
 
 	b *baseWriter
+}
+
+func (c *CSVWriter) Metrics() []ProgressMetric {
+	var res []ProgressMetric
+
+	if c.compressed != nil {
+		res = append(res, ProgressMetric{
+			Name:  path.Base(c.fn) + " (comp)",
+			Type:  ProgressBytes,
+			Value: &c.compressed.writtenBytes,
+		})
+	}
+
+	if c.uncompressed != nil {
+		res = append(res, ProgressMetric{
+			Name:  path.Base(c.fn),
+			Type:  ProgressBytes,
+			Value: &c.uncompressed.writtenBytes,
+		})
+	}
+
+	return res
 }
 
 type nopWriter struct{}
@@ -50,16 +76,19 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 
 		switch {
 		case strings.HasSuffix(fn, ".gz"):
-			c.f = gzip.NewWriter(c.f)
+			c.compressed = &CountingWriter{Writer: c.f}
+			c.f = gzip.NewWriter(c.compressed)
 		case strings.HasSuffix(fn, ".zst"):
-			c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
+			c.compressed = &CountingWriter{Writer: c.f}
+			c.f, err = zstd.NewWriter(c.compressed, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	c.w = csv.NewWriter(c.f)
+	c.uncompressed = &CountingWriter{Writer: c.f}
+	c.w = csv.NewWriter(c.uncompressed)
 
 	return c, nil
 }

@@ -46,6 +46,7 @@ type Flags struct {
 
 	Concurrency int
 	MemLimit    uint64
+	OutOfOrder  bool
 }
 
 // Register registers command-line flags.
@@ -82,7 +83,8 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.BufSize, "buf-size", 1e7, "Buffer size (max length of file line) in bytes.")
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
-	flag.Uint64Var(&f.MemLimit, "mem-limit", 1000, "Soft memory limit in MB, 0 for unlimited.")
+	flag.Uint64Var(&f.MemLimit, "mem-limit", 2000, "Soft memory limit in MB, 0 for unlimited.")
+	flag.BoolVar(&f.OutOfOrder, "out-of-order", false, "Allow out of order writing to result.")
 }
 
 // Parse parses and prepares command-line flags.

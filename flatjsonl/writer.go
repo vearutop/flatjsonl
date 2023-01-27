@@ -21,6 +21,7 @@ type WriteReceiver interface {
 // Writer dispatches rows to multiple receivers.
 type Writer struct {
 	receivers []WriteReceiver
+	Progress  *Progress
 }
 
 // Value encapsulates value of an allowed Type.
@@ -92,6 +93,10 @@ func (w *Writer) ReceiveRow(seq int64, values []Value) error {
 // Add adds another row receiver.
 func (w *Writer) Add(r WriteReceiver) {
 	w.receivers = append(w.receivers, r)
+
+	if m, ok := r.(MetricsExposer); ok {
+		w.Progress.AddMetrics(m.Metrics()...)
+	}
 }
 
 // HasReceivers is true if there are receivers.
