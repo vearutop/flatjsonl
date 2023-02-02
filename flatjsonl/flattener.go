@@ -22,7 +22,8 @@ type FastWalker struct {
 	FnBool   func(seq int64, flatPath []byte, path []string, value bool)
 	FnNull   func(seq int64, flatPath []byte, path []string)
 
-	WantPath bool
+	WantPath       bool
+	ExtractStrings bool
 
 	buf []byte
 }
@@ -106,7 +107,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 	fv.FnString(seq, flatPath, path, s)
 
 	// Check if string has nested JSON.
-	if len(s) > 2 && (s[0] == '{' || s[0] == '[') {
+	if fv.ExtractStrings && len(s) > 2 && (s[0] == '{' || s[0] == '[') {
 		p := pl.Get()
 		defer pl.Put(p)
 

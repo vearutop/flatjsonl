@@ -69,10 +69,11 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 			Progress: pr,
 		},
 		rd: &Reader{
-			Concurrency: f.Concurrency,
-			AddSequence: f.AddSequence,
-			Progress:    pr,
-			Buf:         make([]byte, f.BufSize),
+			Concurrency:    f.Concurrency,
+			AddSequence:    f.AddSequence,
+			Progress:       pr,
+			Buf:            make([]byte, f.BufSize),
+			ExtractStrings: f.ExtractStrings,
 		},
 		includeKeys:   map[string]int{},
 		constVals:     map[int]string{},
@@ -434,6 +435,7 @@ type writeIterator struct {
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
+	w.ExtractStrings = wi.p.f.ExtractStrings
 	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]

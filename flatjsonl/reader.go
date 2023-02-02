@@ -42,7 +42,8 @@ type Reader struct {
 
 	Sequence int64
 
-	MatchPrefix *regexp.Regexp
+	MatchPrefix    *regexp.Regexp
+	ExtractStrings bool
 }
 
 type readSession struct {
@@ -169,6 +170,7 @@ func (rd *Reader) Read(sess *readSession) error {
 	for i := 0; i < cap(semaphore); i++ {
 		w := &FastWalker{}
 		sess.setupWalker(w)
+		w.ExtractStrings = rd.ExtractStrings
 
 		semaphore <- &syncWorker{
 			i:        i,

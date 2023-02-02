@@ -62,7 +62,7 @@ During each pass, each line is decoded and traversed recursively.
 Keys for nested elements are declared with dot-separated syntax (same as in `jq`), array indexes are enclosed in `[x]`, 
 e.g. `.deeper.subProperty.[0].foo`.
 
-String values are checked for JSON contents and are also traversed if JSON is found.
+String values are checked for JSON contents and are also traversed if JSON is found (with `-extract-strings` flag).
 
 If `includeKeys` is not empty in [configuration file](#configuration-file), first pass is skipped.
 
@@ -123,6 +123,8 @@ Usage of flatjsonl:
         (benchmark) Repeat input until total target size reached, bytes.
   -dbg-mem-prof string
         Write mem profile to file.
+  -extract-strings
+        Check string values for JSON content and extract when available.
   -field-limit int
         Max length of field value, exceeding tail is truncated, 0 for unlimited.
   -get-key string
