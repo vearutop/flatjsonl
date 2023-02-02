@@ -17,6 +17,7 @@ import (
 
 func TestNewProcessor(t *testing.T) {
 	f := flatjsonl.Flags{}
+	f.ExtractStrings = true
 	f.AddSequence = true
 	f.Input = "_testdata/test.log"
 	f.Output = "_testdata/test.csv,_testdata/test.sqlite"
@@ -58,6 +59,7 @@ func TestNewProcessor(t *testing.T) {
 
 func TestNewProcessor_concurrency(t *testing.T) {
 	f := flatjsonl.Flags{}
+	f.ExtractStrings = true
 	f.AddSequence = true
 	f.Input = "_testdata/test.log"
 	f.Output = "_testdata/test.csv,_testdata/test.sqlite"
@@ -216,6 +218,7 @@ false,bar,true
 
 func TestNewProcessor_rawWriter(t *testing.T) {
 	f := flatjsonl.Flags{}
+	f.ExtractStrings = true
 	f.AddSequence = true
 	f.Input = "_testdata/test.log"
 	f.Output = "_testdata/test.raw.gz"
