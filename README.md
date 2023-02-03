@@ -259,5 +259,5 @@ flatjsonl -match-line-prefix '([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)' -replace-ke
 
 Extract a single column from JSONL log (equivalent to `cat huge.log | jq .foo.bar.baz > entries.log`), `flatjsonl` is optimized for multi-core processors, so it can bring perfromance improvement compared to single-threaded `jq`.
 ```
-flatjsonl -input thuge.log -raw entries.log -get-key ".foo.bar.baz"
+flatjsonl -input huge.log -raw entries.log -get-key ".foo.bar.baz"
 ```
