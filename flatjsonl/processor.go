@@ -550,6 +550,8 @@ func init() {
 			// 1 GB soft limit to start delays.
 			if m.HeapInuse > 1e9 {
 				atomic.StoreInt64(&throttle, 1)
+
+				return
 			}
 
 			time.Sleep(time.Second / 10)
