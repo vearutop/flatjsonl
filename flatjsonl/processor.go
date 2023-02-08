@@ -483,11 +483,10 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	l, _ := wi.pending.Load(seq)
 	pk := l.h.hashBytes(flatPath)
-	//
-	//if wi.singleKeyHash != 0 && pk != wi.singleKeyHash {
-	//	//panic("!!")
-	//	return
-	//}
+
+	if wi.singleKeyHash != 0 && pk != wi.singleKeyHash {
+		return
+	}
 
 	i, ok := wi.pkIndex[pk]
 	if !ok {
