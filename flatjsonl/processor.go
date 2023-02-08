@@ -90,6 +90,8 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		flKeys: xsync.NewIntegerMapOf[uint64, flKey](),
 	}
 
+	p.rd.Processor = p
+
 	switch f.Verbosity {
 	case 0:
 		pr.Print = func(status ProgressStatus) {}
@@ -537,9 +539,7 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	}
 }
 
-var (
-	throttle int64
-)
+var throttle int64
 
 func init() {
 	go func() {
@@ -552,12 +552,7 @@ func init() {
 				atomic.StoreInt64(&throttle, 1)
 			}
 
-			// 200 MB soft limit to stop delays.
-			if m.HeapInuse < 200e6 {
-				atomic.StoreInt64(&throttle, 0)
-			}
-
-			time.Sleep(time.Second)
+			time.Sleep(time.Second / 10)
 		}
 	}()
 }

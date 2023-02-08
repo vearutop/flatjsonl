@@ -39,11 +39,15 @@ type Reader struct {
 	Progress    *Progress
 	Buf         []byte
 	Concurrency int
+	Processor   *Processor
 
 	Sequence int64
 
 	MatchPrefix    *regexp.Regexp
 	ExtractStrings bool
+
+	singleKeyFlat []byte
+	singleKeyPath []string
 }
 
 type readSession struct {
@@ -189,6 +193,14 @@ func (rd *Reader) Read(sess *readSession) error {
 		doLineErr error
 	)
 
+	if len(rd.Processor.includeKeys) == 1 {
+		for _, i := range rd.Processor.includeKeys {
+			kk := rd.Processor.keys[i]
+			rd.singleKeyPath = kk.path
+			rd.singleKeyFlat = []byte("." + strings.Join(kk.path, "."))
+		}
+	}
+
 	for sess.scanner.Scan() {
 		if err := sess.scanner.Err(); err != nil {
 			return fmt.Errorf("scan failed: %w", err)
@@ -275,8 +287,6 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	if w.walker.WantPath {
 		path = w.path[:0]
 	}
-	_ = flatPath
-	_ = path
 
 	pv, err := p.ParseBytes(line)
 	if err != nil {
@@ -284,10 +294,11 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
 		}
 	} else {
-		// TODO AAA
-
-		//w.walker.GetKey(seq, []byte(".topics.draft_key"), []string{"topics", "draft_key"}, pv)
-		w.walker.WalkFastJSON(seq, flatPath, path, pv)
+		if rd.singleKeyPath != nil {
+			w.walker.GetKey(seq, rd.singleKeyFlat, rd.singleKeyPath, pv)
+		} else {
+			w.walker.WalkFastJSON(seq, flatPath, path, pv)
+		}
 	}
 
 	if sess.lineFinished != nil {
