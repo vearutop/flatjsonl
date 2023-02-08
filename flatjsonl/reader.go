@@ -39,11 +39,15 @@ type Reader struct {
 	Progress    *Progress
 	Buf         []byte
 	Concurrency int
+	Processor   *Processor
 
 	Sequence int64
 
 	MatchPrefix    *regexp.Regexp
 	ExtractStrings bool
+
+	singleKeyFlat []byte
+	singleKeyPath []string
 }
 
 type readSession struct {
@@ -189,6 +193,14 @@ func (rd *Reader) Read(sess *readSession) error {
 		doLineErr error
 	)
 
+	if len(rd.Processor.includeKeys) == 1 {
+		for _, i := range rd.Processor.includeKeys {
+			kk := rd.Processor.keys[i]
+			rd.singleKeyPath = kk.path
+			rd.singleKeyFlat = []byte("." + strings.Join(kk.path, "."))
+		}
+	}
+
 	for sess.scanner.Scan() {
 		if err := sess.scanner.Err(); err != nil {
 			return fmt.Errorf("scan failed: %w", err)
@@ -242,6 +254,13 @@ func (rd *Reader) Read(sess *readSession) error {
 }
 
 func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
+	defer func() {
+		if r := recover(); r != nil {
+			println(string(w.line))
+			println(r)
+		}
+	}()
+
 	if sess.lineStarted != nil {
 		if err := sess.lineStarted(seq); err != nil {
 			return fmt.Errorf("failure in line started callback, line %d: %w", n, err)
@@ -275,7 +294,11 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
 		}
 	} else {
-		w.walker.WalkFastJSON(seq, flatPath, path, pv)
+		if rd.singleKeyPath != nil {
+			w.walker.GetKey(seq, rd.singleKeyFlat, rd.singleKeyPath, pv)
+		} else {
+			w.walker.WalkFastJSON(seq, flatPath, path, pv)
+		}
 	}
 
 	if sess.lineFinished != nil {
