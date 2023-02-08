@@ -28,6 +28,14 @@ type FastWalker struct {
 	buf []byte
 }
 
+// GetKey walks into a single key.
+func (fv *FastWalker) GetKey(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
+	vv := v.Get(path...)
+	if vv != nil {
+		fv.WalkFastJSON(seq, flatPath, path, vv)
+	}
+}
+
 // WalkFastJSON iterates fastjson.Value JSON structure.
 func (fv *FastWalker) WalkFastJSON(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
 	switch v.Type() {
@@ -40,7 +48,7 @@ func (fv *FastWalker) WalkFastJSON(seq int64, flatPath []byte, path []string, v 
 	case fastjson.TypeNumber:
 		n, err := v.Float64()
 		if err != nil {
-			panic(fmt.Sprintf("BUG: failed to use JSON number: %v", err))
+			panic(fmt.Sprintf("BUG: failed to use JSON number %q at %d:%s: %v", v.String(), seq, string(flatPath), err))
 		}
 
 		fv.buf = fv.buf[:0]

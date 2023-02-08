@@ -86,10 +86,6 @@ func main() { //nolint:cyclop
 		}
 	}
 
-	if f.GetKey != "" {
-		cfg.IncludeKeys = append(cfg.IncludeKeys, f.GetKey)
-	}
-
 	proc := flatjsonl.NewProcessor(f, cfg, inputs...)
 
 	if err := proc.Process(); err != nil {

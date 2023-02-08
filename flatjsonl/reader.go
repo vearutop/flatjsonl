@@ -242,6 +242,13 @@ func (rd *Reader) Read(sess *readSession) error {
 }
 
 func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
+	defer func() {
+		if r := recover(); r != nil {
+			println(string(w.line))
+			println(r)
+		}
+	}()
+
 	if sess.lineStarted != nil {
 		if err := sess.lineStarted(seq); err != nil {
 			return fmt.Errorf("failure in line started callback, line %d: %w", n, err)
@@ -268,6 +275,8 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	if w.walker.WantPath {
 		path = w.path[:0]
 	}
+	_ = flatPath
+	_ = path
 
 	pv, err := p.ParseBytes(line)
 	if err != nil {
@@ -275,6 +284,9 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
 		}
 	} else {
+		// TODO AAA
+
+		//w.walker.GetKey(seq, []byte(".topics.draft_key"), []string{"topics", "draft_key"}, pv)
 		w.walker.WalkFastJSON(seq, flatPath, path, pv)
 	}
 

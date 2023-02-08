@@ -22,6 +22,11 @@ func BenchmarkNewProcessor(b *testing.B) {
 			SkipZeroCols:    true,
 			Config:          "_testdata/config.json",
 		},
+		"test_get_key": {
+			Input:  "_testdata/large.json",
+			GetKey: ".topics.draft_key",
+			Raw:    "<nop>",
+		},
 		"transpose": {
 			AddSequence: true,
 			Input:       "_testdata/transpose.jsonl",

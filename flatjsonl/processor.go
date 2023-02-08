@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +54,10 @@ type Processor struct {
 func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: funlen // Yeah, that's what she said.
 	pr := &Progress{
 		Interval: f.ProgressInterval,
+	}
+
+	if f.GetKey != "" {
+		cfg.IncludeKeys = append(cfg.IncludeKeys, f.GetKey)
 	}
 
 	p := &Processor{
@@ -369,6 +374,13 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
 
+	if len(p.includeKeys) == 1 {
+		for _, i := range p.includeKeys {
+			kk := p.keys[i]
+			wi.singleKeyHash = newHasher().hashBytes([]byte("." + strings.Join(kk.path, ".")))
+		}
+	}
+
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
 			return &lineBuf{
@@ -432,6 +444,8 @@ type writeIterator struct {
 	finished *sync.Map
 
 	inProgress int64
+
+	singleKeyHash uint64
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
@@ -469,6 +483,11 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	l, _ := wi.pending.Load(seq)
 	pk := l.h.hashBytes(flatPath)
+	//
+	//if wi.singleKeyHash != 0 && pk != wi.singleKeyHash {
+	//	//panic("!!")
+	//	return
+	//}
 
 	i, ok := wi.pkIndex[pk]
 	if !ok {
@@ -519,12 +538,41 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	}
 }
 
+var (
+	throttle int64
+)
+
+func init() {
+	go func() {
+		for {
+			m := runtime.MemStats{}
+			runtime.ReadMemStats(&m)
+
+			// 1 GB soft limit to start delays.
+			if m.HeapInuse > 1e9 {
+				atomic.StoreInt64(&throttle, 1)
+			}
+
+			// 200 MB soft limit to stop delays.
+			if m.HeapInuse < 200e6 {
+				atomic.StoreInt64(&throttle, 0)
+			}
+
+			time.Sleep(time.Second)
+		}
+	}()
+}
+
 func (wi *writeIterator) lineStarted(seq int64) error {
 	inp := atomic.AddInt64(&wi.inProgress, 1)
 	if inp > int64(5*wi.p.f.Concurrency) {
-		time.Sleep(10 * time.Millisecond)
+		if atomic.LoadInt64(&throttle) == 1 {
+			time.Sleep(10 * time.Millisecond)
+		}
 	} else if inp > int64(20*wi.p.f.Concurrency) {
-		time.Sleep(100 * time.Millisecond)
+		if atomic.LoadInt64(&throttle) == 1 {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 
 	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
