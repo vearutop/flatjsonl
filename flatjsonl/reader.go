@@ -3,9 +3,12 @@ package flatjsonl
 import (
 	"bufio"
 	"bytes"
+	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"regexp"
 	"runtime"
@@ -91,6 +94,8 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		cmp string
 	)
 
+	uncompressedFilename := in.FileName
+
 	if in.FileName != "" { //nolint:nestif
 		fj, err := os.Open(in.FileName)
 		if err != nil {
@@ -116,8 +121,10 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		switch {
 		case strings.HasSuffix(in.FileName, ".gz"):
 			cmp = "gzip"
+			uncompressedFilename = strings.TrimSuffix(uncompressedFilename, ".gz")
 		case strings.HasSuffix(in.FileName, ".zst"):
 			cmp = "zst"
+			uncompressedFilename = strings.TrimSuffix(uncompressedFilename, ".zst")
 		}
 	} else {
 		r = in.Reader
@@ -143,6 +150,41 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		if sess.r, err = zstd.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
+	}
+
+	if strings.HasSuffix(uncompressedFilename, ".csv") {
+		r, w := io.Pipe()
+
+		cr := csv.NewReader(sess.r)
+		sess.r = r
+
+		go func() {
+			j := json.NewEncoder(w)
+
+			for {
+				record, err := cr.Read()
+				if err == io.EOF {
+					break
+				}
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				err = j.Encode(struct {
+					Row []string `json:"row"`
+				}{
+					Row: record,
+				})
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+
+			if err := w.Close(); err != nil {
+				log.Fatal(err)
+			}
+		}()
 	}
 
 	sess.scanner = bufio.NewScanner(sess.r)
