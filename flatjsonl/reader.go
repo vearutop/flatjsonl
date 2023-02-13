@@ -288,14 +288,19 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 		path = w.path[:0]
 	}
 
-	pv, err := p.ParseBytes(line)
-	if err != nil {
-		if rd.OnError != nil {
-			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
+	if rd.singleKeyPath != nil {
+		err := w.walker.ParseKey(seq, p, flatPath, path, line)
+		if err != nil {
+			if rd.OnError != nil {
+				rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
+			}
 		}
 	} else {
-		if rd.singleKeyPath != nil {
-			w.walker.GetKey(seq, rd.singleKeyFlat, rd.singleKeyPath, pv)
+		pv, err := p.ParseBytes(line)
+		if err != nil {
+			if rd.OnError != nil {
+				rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
+			}
 		} else {
 			w.walker.WalkFastJSON(seq, flatPath, path, pv)
 		}

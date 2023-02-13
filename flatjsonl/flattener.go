@@ -1,6 +1,7 @@
 package flatjsonl
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -34,6 +35,34 @@ func (fv *FastWalker) GetKey(seq int64, flatPath []byte, path []string, v *fastj
 	if vv != nil {
 		fv.WalkFastJSON(seq, flatPath, path, vv)
 	}
+}
+
+var errFound = errors.New("found")
+
+// ParseKey walks into a single key.
+func (fv *FastWalker) ParseKey(seq int64, p *fastjson.Parser, flatPath []byte, path []string, line []byte) error {
+	p.Visit = func(val *fastjson.Value, vpath []string) error {
+		if len(vpath) != len(path) {
+			return nil
+		}
+
+		for i, v := range path {
+			if v != vpath[i] {
+				return nil
+			}
+		}
+
+		fv.WalkFastJSON(seq, flatPath, path, val)
+
+		return errFound
+	}
+
+	_, err := p.ParseBytes(line)
+	if err == errFound {
+		return nil
+	}
+
+	return err
 }
 
 // WalkFastJSON iterates fastjson.Value JSON structure.
