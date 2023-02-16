@@ -15,7 +15,7 @@ Logs, structured as [`JSON Lines`](https://jsonlines.org/) (and sometimes prefix
 common source of information for ad-hoc analytics and investigations. 
 
 They can be processed with `jq` and grepped for a variety of data checks, however there are much more powerful and 
-convenient tools that operate on columnar table data, rather than hierarchical structures.
+convenient tools that operate on rows and columns, rather than hierarchical structures.
 
 This tool converts structured logs into tabular data (`CSV`, `SQLite`, `PostgreSQL dump`) with flexible mapping options.
 
