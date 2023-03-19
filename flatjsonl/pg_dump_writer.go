@@ -276,7 +276,7 @@ func (c *PGDumpWriter) createTable(tn string, keys []flKey, isTransposed bool) e
 
 		tp := ""
 
-		switch k.t { //nolint: exhaustive
+		switch k.t {
 		case TypeInt:
 			tp = " INT8"
 		case TypeBool:
