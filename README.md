@@ -257,7 +257,7 @@ unique tails and with columns matched from line prefix (for lines formatted as `
 flatjsonl -match-line-prefix '([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)' -replace-keys part1.log part2.log part3.log
 ```
 
-Extract a single column from JSONL log (equivalent to `cat huge.log | jq .foo.bar.baz > entries.log`), `flatjsonl` is optimized for multi-core processors, so it can bring perfromance improvement compared to single-threaded `jq`.
+Extract a single column from JSONL log (equivalent to `cat huge.log | jq -c ".foo.bar.baz" > entries.log`), `flatjsonl` is optimized for multi-core processors, so it can bring perfromance improvement compared to single-threaded `jq`.
 ```
 flatjsonl -input huge.log -raw entries.log -get-key ".foo.bar.baz"
 ```
