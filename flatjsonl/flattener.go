@@ -31,38 +31,28 @@ type FastWalker struct {
 // GetKey walks into a single key.
 func (fv *FastWalker) GetKey(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
 	vv := v.Get(path...)
-	if vv != nil {
-		fv.walkFastJSON(seq, flatPath, path, vv, true)
+	if vv == nil {
+		return
+	}
+
+	switch v.Type() {
+	case fastjson.TypeObject, fastjson.TypeArray:
+		fv.buf = fv.buf[:0]
+		fv.buf = v.MarshalTo(fv.buf)
+
+		fv.FnString(seq, flatPath, path, fv.buf)
+	default:
+		fv.WalkFastJSON(seq, flatPath, path, vv)
 	}
 }
 
 // WalkFastJSON iterates fastjson.Value JSON structure.
 func (fv *FastWalker) WalkFastJSON(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
-	fv.walkFastJSON(seq, flatPath, path, v, false)
-}
-
-// WalkFastJSON iterates fastjson.Value JSON structure.
-func (fv *FastWalker) walkFastJSON(seq int64, flatPath []byte, path []string, v *fastjson.Value, getKey bool) {
 	switch v.Type() {
 	case fastjson.TypeObject:
-		if getKey {
-			fv.buf = fv.buf[:0]
-			fv.buf = v.MarshalTo(fv.buf)
-
-			fv.FnString(seq, flatPath, path, fv.buf)
-		} else {
-			fv.walkFastJSONObject(seq, flatPath, path, v)
-		}
-
+		fv.walkFastJSONObject(seq, flatPath, path, v)
 	case fastjson.TypeArray:
-		if getKey {
-			fv.buf = fv.buf[:0]
-			fv.buf = v.MarshalTo(fv.buf)
-
-			fv.FnString(seq, flatPath, path, fv.buf)
-		} else {
-			fv.walkFastJSONArray(seq, flatPath, path, v)
-		}
+		fv.walkFastJSONArray(seq, flatPath, path, v)
 	case fastjson.TypeString:
 		fv.walkFastJSONString(seq, flatPath, path, v)
 	case fastjson.TypeNumber:
