@@ -3,17 +3,17 @@ module github.com/vearutop/flatjsonl
 go 1.19
 
 require (
-	github.com/bool64/dev v0.2.26
+	github.com/bool64/dev v0.2.27
 	github.com/bool64/sqluct v0.1.12
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/klauspost/compress v1.16.3
 	github.com/klauspost/pgzip v1.2.5
 	github.com/puzpuzpuz/xsync/v2 v2.4.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/swaggest/assertjson v1.7.0
 	github.com/valyala/fastjson v1.6.4
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.21.0
+	modernc.org/sqlite v1.21.1
 )
 
 require (
@@ -28,7 +28,7 @@ require (
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
-	github.com/mattn/go-isatty v0.0.17 // indirect
+	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
