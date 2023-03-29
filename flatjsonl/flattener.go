@@ -41,8 +41,29 @@ func (fv *FastWalker) GetKey(seq int64, flatPath []byte, path []string, v *fastj
 		fv.buf = v.MarshalTo(fv.buf)
 
 		fv.FnString(seq, flatPath, path, fv.buf)
+	case fastjson.TypeString:
+		fv.walkFastJSONString(seq, flatPath, path, v)
+	case fastjson.TypeNumber:
+		n, err := v.Float64()
+		if err != nil {
+			panic(fmt.Sprintf("BUG: failed to use JSON number %q at %d:%s: %v", v.String(), seq, string(flatPath), err))
+		}
+
+		fv.buf = fv.buf[:0]
+		fv.buf = v.MarshalTo(fv.buf)
+
+		fv.FnNumber(seq, flatPath, path, n, fv.buf)
+	case fastjson.TypeFalse, fastjson.TypeTrue:
+		b, err := v.Bool()
+		if err != nil {
+			panic(fmt.Sprintf("BUG: failed to use JSON bool: %v", err))
+		}
+
+		fv.FnBool(seq, flatPath, path, b)
+	case fastjson.TypeNull:
+		fv.FnNull(seq, flatPath, path)
 	default:
-		fv.WalkFastJSON(seq, flatPath, path, vv)
+		panic(fmt.Sprintf("BUG: don't know how to walk: %s", v.Type()))
 	}
 }
 
