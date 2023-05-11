@@ -113,6 +113,10 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		r = fj
 		s = st.Size()
 
+		if s == 0 {
+			return nil, fmt.Errorf("empty file %s", in.FileName)
+		}
+
 		switch {
 		case strings.HasSuffix(in.FileName, ".gz"):
 			cmp = "gzip"

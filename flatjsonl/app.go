@@ -1,12 +1,11 @@
 package flatjsonl
 
 import (
-	"flag"
-	"fmt"
 	"log"
 	"os"
 	"runtime/pprof"
 
+	kingpin "github.com/alecthomas/kingpin/v2"
 	"github.com/bool64/dev/version"
 	"github.com/swaggest/assertjson/json5"
 	"gopkg.in/yaml.v3"
@@ -15,31 +14,21 @@ import (
 // Main is the entry point for flatjsonl CLI tool.
 func Main() { //nolint:cyclop
 	var (
-		showVersion   bool
-		cpuProfile    string
-		memProfile    string
-		loopInputSize int
+		cpuProfile    = kingpin.Flag("dbg-cpu-prof", "Write CPU profile to file.").String()
+		memProfile    = kingpin.Flag("dbg-mem-prof", "Write mem profile to file.").String()
+		loopInputSize = kingpin.Flag("dbg-loop-input-size", "(benchmark) Repeat input until total target size reached, bytes.").Int()
 	)
+
+	kingpin.Version(version.Info().Version)
 
 	f := Flags{}
 
 	f.Register()
-	flag.BoolVar(&showVersion, "version", false, "Show version and exit.")
-	flag.StringVar(&cpuProfile, "dbg-cpu-prof", "", "Write CPU profile to file.")
-	flag.StringVar(&memProfile, "dbg-mem-prof", "", "Write mem profile to file.")
-	flag.IntVar(&loopInputSize, "dbg-loop-input-size", 0,
-		"(benchmark) Repeat input until total target size reached, bytes.")
 
 	f.Parse()
 
-	if showVersion {
-		fmt.Println(version.Info().Version)
-
-		return
-	}
-
-	if cpuProfile != "" {
-		f, err := os.Create(cpuProfile)
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -53,13 +42,13 @@ func Main() { //nolint:cyclop
 
 	inputs := f.Inputs()
 	if len(inputs) == 0 {
-		flag.Usage()
+		kingpin.Usage()
 
 		return
 	}
 
-	if loopInputSize > 0 {
-		i, err := LoopReaderFromFile(inputs[0].FileName, loopInputSize)
+	if *loopInputSize > 0 {
+		i, err := LoopReaderFromFile(inputs[0].FileName, *loopInputSize)
 		if err != nil {
 			log.Fatalf("failed to init loop reader: %v", err)
 		}
@@ -91,8 +80,8 @@ func Main() { //nolint:cyclop
 		log.Fatal(err)
 	}
 
-	if memProfile != "" {
-		f, err := os.Create(memProfile)
+	if *memProfile != "" {
+		f, err := os.Create(*memProfile)
 		if err != nil {
 			log.Fatal(err)
 		}

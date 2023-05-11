@@ -2,7 +2,9 @@ package flatjsonl
 
 import (
 	"flag"
+	"github.com/alecthomas/kingpin/v2"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -11,7 +13,7 @@ import (
 type Flags struct {
 	Verbosity        int
 	ProgressInterval time.Duration
-	Input            string
+	Input            []string
 	Output           string
 
 	CSV string
@@ -50,45 +52,47 @@ type Flags struct {
 
 // Register registers command-line flags.
 func (f *Flags) Register() {
-	flag.StringVar(&f.Input, "input", "", "Input from JSONL files, comma-separated.")
-	flag.StringVar(&f.Output, "output", "", "Output to a file (default <input>.csv).")
-	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
+	kingpin.Flag("input", "Input from JSONL files, comma-separated.").StringsVar(&f.Input)
 
-	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
-	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 500, "Maximum columns in single SQL table (SQLite will fail with more than 2000).")
-	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
-	flag.StringVar(&f.PGDump, "pg-dump", "", "Output to PostgreSQL dump file.")
+	kingpin.Flag("output", "Output to a file (default <input>.csv).").StringVar(&f.Output)
+	kingpin.Flag("csv", "Output to CSV file (gzip encoded if ends with .gz).").StringVar(&f.CSV)
 
-	flag.StringVar(&f.Raw, "raw", "", "Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).")
-	flag.StringVar(&f.RawDelim, "raw-delim", "", "RAW file column delimiter.")
+	kingpin.Flag("sqlite", "Output to SQLite file.").StringVar(&f.SQLite)
+	kingpin.Flag("sql-max-cols", "Maximum columns in single SQL table (SQLite will fail with more than 2000).").
+		Default("500").IntVar(&f.SQLMaxCols)
+	kingpin.Flag("sql-table", "Table name.").Default("flatjsonl").StringVar(&f.SQLTable)
+	kingpin.Flag("pg-dump", "Output to PostgreSQL dump file.").StringVar(&f.PGDump)
 
-	flag.IntVar(&f.Verbosity, "verbosity", 1, "Show progress in STDERR, 0 disables status, 2 adds more metrics.")
-	flag.DurationVar(&f.ProgressInterval, "progress-interval", 5*time.Second, "Progress update interval.")
+	kingpin.Flag("raw", "Output to RAW file (column values are written as is without escaping, gzip encoded if ends with .gz).").StringVar(&f.Raw)
+	kingpin.Flag("raw-delim", "RAW file column delimiter.").StringVar(&f.RawDelim)
 
-	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as key.")
-	flag.BoolVar(&f.ExtractStrings, "extract-strings", false, "Check string values for JSON content and extract when available.")
-	flag.StringVar(&f.GetKey, "get-key", "", "Add a single key to list of included keys.")
-	flag.StringVar(&f.Config, "config", "", "Configuration JSON or YAML file.")
-	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
-	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")
-	flag.BoolVar(&f.ShowKeysInfo, "show-keys-info", false, "Show keys, their replaces and types.")
-	flag.BoolVar(&f.SkipZeroCols, "skip-zero-cols", false, "Skip columns with zero values.")
-	flag.BoolVar(&f.AddSequence, "add-sequence", false, "Add auto incremented sequence number.")
-	flag.BoolVar(&f.CaseSensitiveKeys, "case-sensitive-keys", false, "Use case-sensitive keys (can fail for SQLite).")
-	flag.StringVar(&f.MatchLinePrefix, "match-line-prefix", "", "Regular expression to capture parts of line prefix (preceding JSON).")
-	flag.IntVar(&f.MaxLines, "max-lines", 0, "Max number of lines to process.")
-	flag.IntVar(&f.OffsetLines, "offset-lines", 0, "Skip a number of first lines.")
-	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
-	flag.IntVar(&f.FieldLimit, "field-limit", 0, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
-	flag.IntVar(&f.KeyLimit, "key-limit", 0, "Max length of key, exceeding tail is truncated, 0 for unlimited.")
-	flag.IntVar(&f.BufSize, "buf-size", 1e7, "Buffer size (max length of file line) in bytes.")
+	kingpin.Flag("verbosity", "Show progress in STDERR, 0 disables status, 2 adds more metrics.").Default("1").IntVar(&f.Verbosity)
+	kingpin.Flag("progress-interval", "Progress update interval.").Default("5s").DurationVar(&f.ProgressInterval)
 
-	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
+	kingpin.Flag("replace-keys", "Use unique tail segment converted to snake_case as key.").BoolVar(&f.ReplaceKeys)
+	kingpin.Flag("extract-strings", "Check string values for JSON content and extract when available.").BoolVar(&f.ExtractStrings)
+	kingpin.Flag("get-key", "Add a single key to list of included keys.").StringVar(&f.GetKey)
+	kingpin.Flag("config", "Configuration JSON or YAML file.").StringVar(&f.Config)
+	kingpin.Flag("show-keys-flat", "Show all available keys as flat list.").BoolVar(&f.ShowKeysFlat)
+	kingpin.Flag("show-keys-hier", "Show all available keys as hierarchy.").BoolVar(&f.ShowKeysHier)
+	kingpin.Flag("show-keys-info", "Show keys, their replaces and types.").BoolVar(&f.ShowKeysInfo)
+	kingpin.Flag("skip-zero-cols", "Skip columns with zero values.").BoolVar(&f.SkipZeroCols)
+	kingpin.Flag("add-sequence", "Add auto incremented sequence number.").BoolVar(&f.AddSequence)
+	kingpin.Flag("case-sensitive-keys", "Use case-sensitive keys (can fail for SQLite).").BoolVar(&f.CaseSensitiveKeys)
+	kingpin.Flag("match-line-prefix", "Regular expression to capture parts of line prefix (preceding JSON).").StringVar(&f.MatchLinePrefix)
+	kingpin.Flag("max-lines", "Max number of lines to process.").IntVar(&f.MaxLines)
+	kingpin.Flag("offset-lines", "Skip a number of first lines.").IntVar(&f.OffsetLines)
+	kingpin.Flag("max-lines-keys", "Max number of lines to process when scanning keys.").IntVar(&f.MaxLinesKeys)
+	kingpin.Flag("field-limit", "Max length of field value, exceeding tail is truncated, 0 for unlimited.").IntVar(&f.FieldLimit)
+	kingpin.Flag("key-limit", "Max length of key, exceeding tail is truncated, 0 for unlimited.").IntVar(&f.KeyLimit)
+	kingpin.Flag("buf-size", "Buffer size (max length of file line) in bytes.").Default("1e7").IntVar(&f.BufSize)
+
+	kingpin.Flag("concurrency", "Number of concurrent routines in reader.").Default(strconv.Itoa(2 * runtime.NumCPU())).IntVar(&f.Concurrency)
 }
 
 // Parse parses and prepares command-line flags.
 func (f *Flags) Parse() {
-	flag.Parse()
+	kingpin.Parse()
 
 	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo {
 		inputs := f.Inputs()
@@ -158,8 +162,12 @@ func (f *Flags) PrepareOutput() {
 func (f *Flags) Inputs() []Input {
 	inputs := flag.Args()
 
-	if f.Input != "" {
-		inputs = append(inputs, strings.Split(f.Input, ",")...)
+	if len(f.Input) > 0 {
+		if len(f.Input) == 0 {
+			inputs = append(inputs, strings.Split(f.Input[0], ",")...)
+		} else {
+			inputs = append(inputs, f.Input...)
+		}
 	}
 
 	res := make([]Input, 0, len(inputs))

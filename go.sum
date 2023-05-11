@@ -1,6 +1,10 @@
 github.com/DATA-DOG/go-sqlmock v1.5.0 h1:Shsta01QNfFxHCfpW6YH2STWB0MudeXXEWMr20OEh60=
 github.com/Masterminds/squirrel v1.5.3 h1:YPpoceAcxuzIljlr5iWpNKaql7hLeG1KLSrhvdHpkZc=
 github.com/Masterminds/squirrel v1.5.3/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
+github.com/alecthomas/kingpin/v2 v2.3.2 h1:H0aULhgmSzN8xQ3nX1uxtdlTHYoPLu5AhHxWrKI6ocU=
+github.com/alecthomas/kingpin/v2 v2.3.2/go.mod h1:0gyi0zQnjuFk8xrkNKamJoyUo382HRL7ATRpFZCw6tE=
+github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 h1:s6gZFSlWYmbqAuRjVTiNNhvNRfY2Wxp9nhfyel4rklc=
+github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137/go.mod h1:OMCwj8VM1Kc9e19TLln2VL61YJF0x1XFtfdL4JdbSyE=
 github.com/bool64/ctxd v1.2.0 h1:x/ObTZswHT7TNJdQcPWw6YplnZ3oRyFZ+i+YqDb9Ib4=
 github.com/bool64/ctxd v1.2.0/go.mod h1:cSMhQNUcfu8XZRAUSrrFZhNd4DzK6LFN3DR5yeGW74o=
 github.com/bool64/dev v0.2.27 h1:mFT+B74mFVgUeUmm/EbfM6ELPA55lEXBjQ/AOHCwCOc=
@@ -77,6 +81,8 @@ github.com/swaggest/assertjson v1.8.0/go.mod h1:/8kNRmDZAZfavS5VeWYtCimLGebn0Ak1
 github.com/swaggest/usecase v1.2.0 h1:cHVFqxIbHfyTXp02JmWXk+ZADaSa87UZP+b3qL5Nz90=
 github.com/valyala/fastjson v1.6.4 h1:uAUNq9Z6ymTgGhcm0UynUAB6tlbakBrz6CQFax3BXVQ=
 github.com/valyala/fastjson v1.6.4/go.mod h1:CLCAqky6SMuOcxStkYQvblddUtoRxhYMGLrsQns1aXY=
+github.com/xhit/go-str2duration/v2 v2.1.0 h1:lxklc02Drh6ynqX+DdPyp5pCKLUQpRT8bp8Ydu2Bstc=
+github.com/xhit/go-str2duration/v2 v2.1.0/go.mod h1:ohY8p+0f07DiV6Em5LKB0s2YpLtXVyJfNt1+BlmyAsU=
 github.com/yosuke-furukawa/json5 v0.1.2-0.20201207051438-cf7bb3f354ff h1:7YqG491bE4vstXRz1lD38rbSgbXnirvROz1lZiOnPO8=
 github.com/yosuke-furukawa/json5 v0.1.2-0.20201207051438-cf7bb3f354ff/go.mod h1:sw49aWDqNdRJ6DYUtIQiaA3xyj2IL9tjeNYmX2ixwcU=
 github.com/yudai/gojsondiff v1.0.0 h1:27cbfqXLVEJ1o8I6v3y9lg8Ydm53EKqHXAOMxEGlCOA=
