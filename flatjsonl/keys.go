@@ -1,6 +1,7 @@
 package flatjsonl
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -194,8 +195,13 @@ func (p *Processor) scanAvailableKeys() error {
 		err := func() error {
 			sess, err := p.rd.session(input, "scanning keys")
 			if err != nil {
+				if errors.Is(err, errEmptyFile) {
+					return nil
+				}
+
 				return err
 			}
+
 			defer sess.Close()
 
 			sess.setupWalker = func(w *FastWalker) {

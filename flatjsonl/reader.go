@@ -14,10 +14,13 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/bool64/ctxd"
 	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
 	"github.com/valyala/fastjson"
 )
+
+const errEmptyFile = ctxd.SentinelError("empty file")
 
 // Input can be either a file name or a reader.
 type Input struct {
@@ -113,6 +116,10 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		r = fj
 		s = st.Size()
 
+		if s == 0 {
+			return nil, errEmptyFile
+		}
+
 		switch {
 		case strings.HasSuffix(in.FileName, ".gz"):
 			cmp = "gzip"
@@ -196,7 +203,17 @@ func (rd *Reader) Read(sess *readSession) error {
 	if len(rd.Processor.includeKeys) == 1 {
 		for _, i := range rd.Processor.includeKeys {
 			kk := rd.Processor.keys[i]
-			rd.singleKeyPath = kk.path
+			path := make([]string, 0, len(kk.path))
+
+			for _, s := range kk.path {
+				if s[0] == '[' && s[len(s)-1] == ']' {
+					s = s[1 : len(s)-1]
+				}
+
+				path = append(path, s)
+			}
+
+			rd.singleKeyPath = path
 			rd.singleKeyFlat = []byte("." + strings.Join(kk.path, "."))
 		}
 	}
