@@ -457,7 +457,7 @@ type writeIterator struct {
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.ExtractStrings = wi.p.f.ExtractStrings
-	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
+	w.FnString = func(seq int64, flatPath []byte, pl int, path []string, value []byte) {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
@@ -467,20 +467,20 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			String: string(value),
 		}, flatPath)
 	}
-	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
+	w.FnNumber = func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte) {
 		wi.setValue(seq, Value{
 			Type:      TypeFloat,
 			Number:    value,
 			RawNumber: string(raw),
 		}, flatPath)
 	}
-	w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
+	w.FnBool = func(seq int64, flatPath []byte, pl int, path []string, value bool) {
 		wi.setValue(seq, Value{
 			Type: TypeBool,
 			Bool: value,
 		}, flatPath)
 	}
-	w.FnNull = func(seq int64, flatPath []byte, path []string) {
+	w.FnNull = func(seq int64, flatPath []byte, pl int, path []string) {
 		wi.setValue(seq, Value{
 			Type: TypeNull,
 		}, flatPath)
