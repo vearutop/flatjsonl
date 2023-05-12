@@ -92,7 +92,7 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	return k
 }
 
-func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) {
+func (p *Processor) scanKey(pk, par uint64, path []string, t Type, isZero bool) {
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
@@ -178,7 +178,7 @@ func (h hasher) hashBytes(flatPath []byte) uint64 {
 
 // hashParentBytes takes flat path to element as a parent path and last segment.
 // It returns hashes for parent path and for full path.
-func (h hasher) hashParentBytes(flatPath []byte, pl int) (uint64, uint64) {
+func (h hasher) hashParentBytes(flatPath []byte, pl int) (pk uint64, par uint64) {
 	h.digest.Reset()
 
 	p1 := flatPath[:pl]
@@ -188,16 +188,16 @@ func (h hasher) hashParentBytes(flatPath []byte, pl int) (uint64, uint64) {
 		panic("hashing failed: " + err.Error())
 	}
 
-	p := h.digest.Sum64()
+	par = h.digest.Sum64()
 
-	p2 := flatPath[pl+1:]
+	p2 := flatPath[pl:]
 
 	_, err = h.digest.Write(p2)
 	if err != nil {
 		panic("hashing failed: " + err.Error())
 	}
 
-	return p, h.digest.Sum64()
+	return h.digest.Sum64(), par
 }
 
 func (p *Processor) scanAvailableKeys() error {
@@ -234,21 +234,26 @@ func (p *Processor) scanAvailableKeys() error {
 				w.WantPath = true
 
 				w.FnString = func(seq int64, flatPath []byte, pl int, path []string, value []byte) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeString, len(value) == 0)
+					pk, par := h.hashParentBytes(flatPath, pl)
+					p.scanKey(pk, par, path, TypeString, len(value) == 0)
 				}
 				w.FnNumber = func(seq int64, flatPath []byte, pl int, path []string, value float64, _ []byte) {
+					pk, par := h.hashParentBytes(flatPath, pl)
+
 					isInt := float64(int(value)) == value
 					if isInt {
-						p.scanKey(h.hashBytes(flatPath), path, TypeInt, value == 0)
+						p.scanKey(pk, par, path, TypeInt, value == 0)
 					} else {
-						p.scanKey(h.hashBytes(flatPath), path, TypeFloat, value == 0)
+						p.scanKey(pk, par, path, TypeFloat, value == 0)
 					}
 				}
 				w.FnBool = func(seq int64, flatPath []byte, pl int, path []string, value bool) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeBool, !value)
+					pk, par := h.hashParentBytes(flatPath, pl)
+					p.scanKey(pk, par, path, TypeBool, !value)
 				}
 				w.FnNull = func(seq int64, flatPath []byte, pl int, path []string) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeNull, true)
+					pk, par := h.hashParentBytes(flatPath, pl)
+					p.scanKey(pk, par, path, TypeNull, true)
 				}
 			}
 
