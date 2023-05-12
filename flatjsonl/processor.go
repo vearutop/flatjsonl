@@ -1,6 +1,7 @@
 package flatjsonl
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -346,11 +347,11 @@ func (p *Processor) iterateForWriters() error {
 	for _, input := range p.inputs {
 		sess, err := p.rd.session(input, "flattening data")
 		if err != nil {
-			return err
-		}
+			if errors.Is(err, errEmptyFile) {
+				continue
+			}
 
-		if sess == nil {
-			continue
+			return err
 		}
 
 		sess.lineStarted = wi.lineStarted

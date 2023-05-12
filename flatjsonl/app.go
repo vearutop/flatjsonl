@@ -13,7 +13,7 @@ import (
 )
 
 // Main is the entry point for flatjsonl CLI tool.
-func Main() { //nolint:cyclop
+func Main() {
 	var (
 		showVersion   bool
 		cpuProfile    string
