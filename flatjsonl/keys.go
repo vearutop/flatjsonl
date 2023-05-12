@@ -196,6 +196,11 @@ func (p *Processor) scanAvailableKeys() error {
 			if err != nil {
 				return err
 			}
+
+			if sess == nil {
+				return nil
+			}
+
 			defer sess.Close()
 
 			sess.setupWalker = func(w *FastWalker) {

@@ -349,6 +349,10 @@ func (p *Processor) iterateForWriters() error {
 			return err
 		}
 
+		if sess == nil {
+			continue
+		}
+
 		sess.lineStarted = wi.lineStarted
 		sess.setupWalker = wi.setupWalker
 		sess.lineFinished = wi.lineFinished

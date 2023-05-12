@@ -164,6 +164,10 @@ func (f *Flags) Inputs() []Input {
 
 	res := make([]Input, 0, len(inputs))
 	for _, fn := range inputs {
+		if strings.HasPrefix(fn, "-") {
+			break
+		}
+
 		res = append(res, Input{FileName: fn})
 	}
 
