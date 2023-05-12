@@ -41,7 +41,8 @@ type Processor struct {
 	// keys are ordered replaced column names, indexes match values of includeKeys.
 	keys []flKey
 
-	flKeys *xsync.MapOf[uint64, flKey]
+	flKeys  *xsync.MapOf[uint64, flKey]
+	parents *xsync.MapOf[uint64, parentKey]
 
 	mu            sync.Mutex
 	flKeysList    []string
@@ -88,7 +89,8 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		flKeysList:   make([]string, 0),
 		keyHierarchy: KeyHierarchy{Name: "."},
 
-		flKeys: xsync.NewIntegerMapOf[uint64, flKey](),
+		flKeys:  xsync.NewIntegerMapOf[uint64, flKey](),
+		parents: xsync.NewIntegerMapOf[uint64, parentKey](),
 	}
 
 	p.rd.Processor = p

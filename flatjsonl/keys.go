@@ -25,6 +25,11 @@ type flKey struct {
 	transposeTrimmed string
 }
 
+type parentKey struct {
+	path        []string
+	cardinality int64
+}
+
 type intOrString struct {
 	t Type
 	i int
@@ -53,7 +58,7 @@ func (is intOrString) String() string {
 	return strconv.Itoa(is.i)
 }
 
-func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey {
+func (p *Processor) initKey(pk, par uint64, path []string, t Type, isZero bool) flKey {
 	k, ok := p.flKeys.Load(pk)
 	if ok {
 		return k
@@ -88,6 +93,16 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	}
 
 	p.flKeys.Store(pk, k)
+	p.parents.Compute(par, func(v parentKey, loaded bool) (newValue parentKey, del bool) {
+		v.cardinality++
+
+		if !loaded {
+			v.path = make([]string, len(path)-1)
+			copy(v.path, path)
+		}
+
+		return v, false
+	})
 
 	return k
 }
@@ -96,7 +111,7 @@ func (p *Processor) scanKey(pk, par uint64, path []string, t Type, isZero bool) 
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
-		k = p.initKey(pk, path, t, isZero)
+		k = p.initKey(pk, par, path, t, isZero)
 	}
 
 	updType := false
