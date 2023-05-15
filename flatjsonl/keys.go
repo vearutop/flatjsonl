@@ -27,7 +27,7 @@ type flKey struct {
 
 type parentKey struct {
 	path        []string
-	cardinality int64
+	cardinality int
 }
 
 type intOrString struct {
@@ -83,25 +83,40 @@ func (p *Processor) initKey(pk, par uint64, path []string, t Type, isZero bool) 
 		}
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if _, ok := p.canonicalKeys[k.canonical]; !ok {
-		p.flKeysList = append(p.flKeysList, k.original)
-		p.keyHierarchy.Add(path)
-		p.canonicalKeys[k.canonical] = k
-	}
-
-	p.flKeys.Store(pk, k)
-	p.parents.Compute(par, func(v parentKey, loaded bool) (newValue parentKey, del bool) {
-		v.cardinality++
-
-		if !loaded {
-			v.path = make([]string, len(path)-1)
-			copy(v.path, path)
+	k, _ = p.flKeys.Compute(pk, func(oldValue flKey, loaded bool) (newValue flKey, del bool) {
+		if loaded {
+			return oldValue, false
 		}
 
-		return v, false
+		parentCardinality := 0
+		p.parents.Compute(par, func(v parentKey, loaded bool) (newValue parentKey, del bool) {
+			v.cardinality++
+
+			if !loaded {
+				v.path = make([]string, len(path)-1)
+				copy(v.path, path)
+			}
+
+			parentCardinality = v.cardinality
+
+			return v, false
+		})
+
+		if parentCardinality > 50 {
+			println("CARDINALITY", parentCardinality, strings.Join(path, "."))
+			//return oldValue, true
+		}
+
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
+		if _, ok := p.canonicalKeys[k.canonical]; !ok {
+			p.flKeysList = append(p.flKeysList, k.original)
+			p.keyHierarchy.Add(path)
+			p.canonicalKeys[k.canonical] = k
+		}
+
+		return k, false
 	})
 
 	return k
