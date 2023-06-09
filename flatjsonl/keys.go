@@ -88,6 +88,7 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	}
 
 	p.flKeys.Store(pk, k)
+	atomic.AddInt64(&p.totalKeys, 1)
 
 	return k
 }

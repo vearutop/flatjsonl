@@ -50,6 +50,7 @@ type Processor struct {
 	canonicalKeys map[string]flKey
 
 	totalLines int
+	totalKeys  int64
 }
 
 // NewProcessor creates an instance of Processor.

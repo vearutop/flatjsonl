@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/bool64/ctxd v1.2.0
 	github.com/bool64/dev v0.2.28
-	github.com/bool64/progress v0.2.0
+	github.com/bool64/progress v0.2.1
 	github.com/bool64/sqluct v0.1.12
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/klauspost/compress v1.16.5
@@ -51,5 +51,3 @@ require (
 	modernc.org/strutil v1.1.3 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
-
-replace github.com/bool64/progress => /Users/vearutop/dev/progress
