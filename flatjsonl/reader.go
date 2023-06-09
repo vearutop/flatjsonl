@@ -240,7 +240,7 @@ func (rd *Reader) Read(sess *readSession) error {
 		}
 
 		line := sess.scanner.Bytes()
-		n++
+		n := atomic.AddInt64(&n, 1)
 
 		if rd.OffsetLines > 0 && n <= rd.OffsetLines {
 			continue
