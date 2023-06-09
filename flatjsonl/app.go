@@ -33,7 +33,7 @@ func Main() {
 	f.Parse()
 
 	if showVersion {
-		fmt.Println(version.Info().Version)
+		fmt.Println(version.Module("github.com/vearutop/flatjsonl").Version)
 
 		return
 	}
