@@ -14,6 +14,7 @@ import (
 	"time"
 	_ "time/tzdata" // Loading timezones.
 
+	"github.com/bool64/progress"
 	xsync "github.com/puzpuzpuz/xsync/v2"
 	"github.com/swaggest/assertjson"
 )
@@ -26,7 +27,7 @@ type Processor struct {
 	f      Flags
 	inputs []Input
 
-	pr *Progress
+	pr *progress.Progress
 	w  *Writer
 	rd *Reader
 
@@ -53,7 +54,7 @@ type Processor struct {
 
 // NewProcessor creates an instance of Processor.
 func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: funlen // Yeah, that's what she said.
-	pr := &Progress{
+	pr := &progress.Progress{
 		Interval: f.ProgressInterval,
 	}
 
@@ -95,15 +96,15 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 
 	switch f.Verbosity {
 	case 0:
-		pr.Print = func(status ProgressStatus) {}
+		pr.Print = func(status progress.Status) {}
 	case 1:
-		pr.Print = func(status ProgressStatus) {
-			p.Log(DefaultStatus(status))
+		pr.Print = func(status progress.Status) {
+			p.Log(progress.DefaultStatus(status))
 		}
 	case 2:
-		pr.Print = func(status ProgressStatus) {
-			s := DefaultStatus(status)
-			m := MetricsStatus(status)
+		pr.Print = func(status progress.Status) {
+			s := progress.DefaultStatus(status)
+			m := progress.MetricsStatus(status)
 
 			if m != "" {
 				s += "\n" + m
@@ -418,10 +419,10 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 	}
 
 	p.pr.AddMetrics(
-		ProgressMetric{
+		progress.Metric{
 			Name:  "rows in progress",
-			Type:  ProgressGauge,
-			Value: &wi.inProgress,
+			Type:  progress.Gauge,
+			Value: func() int64 { return atomic.LoadInt64(&wi.inProgress) },
 		},
 	)
 

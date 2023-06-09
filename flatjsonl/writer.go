@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bool64/progress"
 	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
 )
@@ -26,7 +27,7 @@ type WriteReceiver interface {
 // Writer dispatches rows to multiple receivers.
 type Writer struct {
 	receivers []WriteReceiver
-	Progress  *Progress
+	Progress  *progress.Progress
 }
 
 // Value encapsulates value of an allowed Type.
@@ -99,7 +100,7 @@ func (w *Writer) ReceiveRow(seq int64, values []Value) error {
 func (w *Writer) Add(r WriteReceiver) {
 	w.receivers = append(w.receivers, r)
 
-	if m, ok := r.(MetricsExposer); ok {
+	if m, ok := r.(progress.MetricsExposer); ok {
 		w.Progress.AddMetrics(m.Metrics()...)
 	}
 }
@@ -361,8 +362,8 @@ type fileWriter struct {
 	f  io.WriteCloser
 	fn string
 
-	uncompressed *CountingWriter
-	compressed   *CountingWriter
+	uncompressed *progress.CountingWriter
+	compressed   *progress.CountingWriter
 }
 
 func newFileWriter(fn string) (*fileWriter, error) {
@@ -381,10 +382,10 @@ func newFileWriter(fn string) (*fileWriter, error) {
 
 		switch {
 		case strings.HasSuffix(fn, ".gz"):
-			c.compressed = &CountingWriter{Writer: c.f}
+			c.compressed = &progress.CountingWriter{Writer: c.f}
 			c.f = gzip.NewWriter(c.compressed)
 		case strings.HasSuffix(fn, ".zst"):
-			c.compressed = &CountingWriter{Writer: c.f}
+			c.compressed = &progress.CountingWriter{Writer: c.f}
 			c.f, err = zstd.NewWriter(c.compressed, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
 			if err != nil {
 				return nil, err
@@ -392,28 +393,28 @@ func newFileWriter(fn string) (*fileWriter, error) {
 		}
 	}
 
-	c.uncompressed = &CountingWriter{Writer: c.f}
+	c.uncompressed = &progress.CountingWriter{Writer: c.f}
 
 	return c, nil
 }
 
 // Metrics return available metrics.
-func (c *fileWriter) Metrics() []ProgressMetric {
-	var res []ProgressMetric
+func (c *fileWriter) Metrics() []progress.Metric {
+	var res []progress.Metric
 
 	if c.compressed != nil {
-		res = append(res, ProgressMetric{
+		res = append(res, progress.Metric{
 			Name:  path.Base(c.fn) + " (comp)",
-			Type:  ProgressBytes,
-			Value: &c.compressed.writtenBytes,
+			Type:  progress.Bytes,
+			Value: c.compressed.Bytes,
 		})
 	}
 
 	if c.uncompressed != nil {
-		res = append(res, ProgressMetric{
+		res = append(res, progress.Metric{
 			Name:  path.Base(c.fn),
-			Type:  ProgressBytes,
-			Value: &c.uncompressed.writtenBytes,
+			Type:  progress.Bytes,
+			Value: c.uncompressed.Bytes,
 		})
 	}
 

@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	"github.com/bool64/ctxd"
+	"github.com/bool64/progress"
 	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
 	"github.com/valyala/fastjson"
@@ -39,7 +40,7 @@ type Reader struct {
 	MaxLines    int64
 	OffsetLines int64
 	OnError     func(err error)
-	Progress    *Progress
+	Progress    *progress.Progress
 	Buf         []byte
 	Concurrency int
 	Processor   *Processor
@@ -54,7 +55,7 @@ type Reader struct {
 }
 
 type readSession struct {
-	pr      *Progress
+	pr      *progress.Progress
 	scanner *bufio.Scanner
 	fj      *os.File
 	r       io.Reader
@@ -85,7 +86,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 
 	sess.pr = rd.Progress
 	if sess.pr == nil {
-		sess.pr = &Progress{}
+		sess.pr = &progress.Progress{}
 	}
 
 	var (
@@ -133,11 +134,16 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		cmp = in.Reader.Compression()
 	}
 
-	cr := &CountingReader{Reader: r}
+	cr := &progress.CountingReader{Reader: r}
 
-	sess.pr.Start(s, func() int64 {
-		return cr.Bytes()
-	}, task)
+	sess.pr.Start(func(t *progress.Task) {
+		t.Task = task
+		t.TotalBytes = func() int64 {
+			return s
+		}
+		t.CurrentBytes = cr.Bytes
+		t.CurrentLines = cr.Lines
+	})
 
 	sess.r = cr
 
@@ -218,13 +224,15 @@ func (rd *Reader) Read(sess *readSession) error {
 		}
 	}
 
+	var n int64
+
 	for sess.scanner.Scan() {
 		if err := sess.scanner.Err(); err != nil {
 			return fmt.Errorf("scan failed: %w", err)
 		}
 
 		line := sess.scanner.Bytes()
-		n := sess.pr.CountLine()
+		n++
 
 		if rd.OffsetLines > 0 && n <= rd.OffsetLines {
 			continue

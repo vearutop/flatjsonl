@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/vearutop/flatjsonl/flatjsonl"
+	"github.com/bool64/progress"
 )
 
 func main() { //nolint
@@ -56,11 +56,11 @@ func main() { //nolint
 		log.Fatal(err)
 	}
 
-	cr1 := &flatjsonl.CountingReader{Reader: f1}
+	cr1 := &progress.CountingReader{Reader: f1}
 	c1 := csv.NewReader(cr1)
 	c1.ReuseRecord = true
 
-	cr2 := &flatjsonl.CountingReader{Reader: f2}
+	cr2 := &progress.CountingReader{Reader: f2}
 	c2 := csv.NewReader(cr2)
 	c2.ReuseRecord = true
 
@@ -72,11 +72,21 @@ func main() { //nolint
 
 	l := 0
 
-	pr := flatjsonl.Progress{}
+	pr := progress.Progress{}
+	tot := f1s.Size() + f2s.Size()
 
-	pr.Start(f1s.Size()+f2s.Size(), func() int64 {
-		return cr1.Bytes() + cr2.Bytes()
-	}, "reading files")
+	pr.Start(func(t *progress.Task) {
+		t.Task = "reading files"
+		t.TotalBytes = func() int64 {
+			return tot
+		}
+		t.CurrentBytes = func() int64 {
+			return cr1.Bytes() + cr2.Bytes()
+		}
+		t.CurrentLines = func() int64 {
+			return cr1.Lines() + cr2.Lines()
+		}
+	})
 
 	defer pr.Stop()
 
@@ -92,8 +102,6 @@ func main() { //nolint
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Fatal("file2 reading: ", err)
 		}
-
-		pr.CountLine()
 
 		if r1 == nil && r2 == nil {
 			break
