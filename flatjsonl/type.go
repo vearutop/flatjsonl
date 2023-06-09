@@ -5,6 +5,8 @@ type Type string
 
 // Type enumeration.
 const (
+	TypeObject = Type("object")
+	TypeArray  = Type("array")
 	TypeString = Type("string")
 	TypeInt    = Type("int")
 	TypeFloat  = Type("float")
