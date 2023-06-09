@@ -89,14 +89,6 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		sess.pr = &progress.Progress{}
 	}
 
-	sess.pr.AddMetrics(progress.Metric{
-		Name: "keys approx",
-		Type: progress.Gauge,
-		Value: func() int64 {
-			return atomic.LoadInt64(&rd.Processor.totalKeys)
-		},
-	})
-
 	var (
 		r   io.Reader
 		s   int64
@@ -151,6 +143,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		}
 		t.CurrentBytes = cr.Bytes
 		t.CurrentLines = cr.Lines
+		t.Continue = true
 	})
 
 	sess.r = cr

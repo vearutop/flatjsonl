@@ -176,6 +176,11 @@ func (p *Processor) PrepareKeys() error {
 	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) != 0 {
 		p.iterateIncludeKeys()
 	} else {
+		p.pr.AddMetrics(progress.Metric{
+			Name: "keys approx", Type: progress.Gauge,
+			Value: func() int64 { return atomic.LoadInt64(&p.totalKeys) },
+		})
+
 		// Scan available keys.
 		if err := p.scanAvailableKeys(); err != nil {
 			return err
