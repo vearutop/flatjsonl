@@ -295,7 +295,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 
 	if rd.AddSequence {
 		seqf := float64(seq)
-		w.walker.FnNumber(seq, []byte("._sequence"), []string{"_sequence"}, seqf, []byte(Format(seqf)))
+		w.walker.FnNumber(seq, []byte("._sequence"), 0, []string{"_sequence"}, seqf, []byte(Format(seqf)))
 	}
 
 	line := w.line
@@ -323,7 +323,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 		if rd.singleKeyPath != nil {
 			w.walker.GetKey(seq, rd.singleKeyFlat, rd.singleKeyPath, pv)
 		} else {
-			w.walker.WalkFastJSON(seq, flatPath, path, pv)
+			w.walker.WalkFastJSON(seq, flatPath, 0, path, pv)
 		}
 	}
 
@@ -336,7 +336,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	return nil
 }
 
-func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, path []string, value []byte)) []byte {
+func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, pl int, path []string, value []byte)) []byte {
 	pos := bytes.Index(line, []byte("{"))
 
 	if pos == -1 {
@@ -362,7 +362,7 @@ func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, fl
 
 		for _, m := range sm {
 			for j := 1; j < len(m); j++ {
-				walkFn(seq, []byte("._prefix.["+strconv.Itoa(j-1)+"]"), []string{"_prefix", "[" + strconv.Itoa(j-1) + "]"}, m[j])
+				walkFn(seq, []byte("._prefix.["+strconv.Itoa(j-1)+"]"), 0, []string{"_prefix", "[" + strconv.Itoa(j-1) + "]"}, m[j])
 			}
 		}
 	}

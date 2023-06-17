@@ -42,7 +42,9 @@ type Processor struct {
 	// keys are ordered replaced column names, indexes match values of includeKeys.
 	keys []flKey
 
-	flKeys *xsync.MapOf[uint64, flKey]
+	flKeys                *xsync.MapOf[uint64, flKey]
+	parentCardinality     map[uint64]int
+	parentHighCardinality *xsync.MapOf[uint64, bool]
 
 	mu            sync.Mutex
 	flKeysList    []string
@@ -54,7 +56,7 @@ type Processor struct {
 }
 
 // NewProcessor creates an instance of Processor.
-func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: funlen // Yeah, that's what she said.
+func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor {
 	pr := &progress.Progress{
 		Interval: f.ProgressInterval,
 	}
@@ -90,7 +92,9 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		flKeysList:   make([]string, 0),
 		keyHierarchy: KeyHierarchy{Name: "."},
 
-		flKeys: xsync.NewIntegerMapOf[uint64, flKey](),
+		flKeys:                xsync.NewIntegerMapOf[uint64, flKey](),
+		parentHighCardinality: xsync.NewIntegerMapOf[uint64, bool](),
+		parentCardinality:     map[uint64]int{},
 	}
 
 	p.rd.Processor = p
@@ -464,7 +468,7 @@ type writeIterator struct {
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.ExtractStrings = wi.p.f.ExtractStrings
-	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
+	w.FnString = func(seq int64, flatPath []byte, pl int, path []string, value []byte) {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
@@ -474,20 +478,20 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			String: string(value),
 		}, flatPath)
 	}
-	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
+	w.FnNumber = func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte) {
 		wi.setValue(seq, Value{
 			Type:      TypeFloat,
 			Number:    value,
 			RawNumber: string(raw),
 		}, flatPath)
 	}
-	w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
+	w.FnBool = func(seq int64, flatPath []byte, pl int, path []string, value bool) {
 		wi.setValue(seq, Value{
 			Type: TypeBool,
 			Bool: value,
 		}, flatPath)
 	}
-	w.FnNull = func(seq int64, flatPath []byte, path []string) {
+	w.FnNull = func(seq int64, flatPath []byte, pl int, path []string) {
 		wi.setValue(seq, Value{
 			Type: TypeNull,
 		}, flatPath)

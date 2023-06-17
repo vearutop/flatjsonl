@@ -23,6 +23,7 @@ type flKey struct {
 	transposeDst     string
 	transposeKey     intOrString
 	transposeTrimmed string
+	par              uint64
 }
 
 type intOrString struct {
@@ -53,7 +54,7 @@ func (is intOrString) String() string {
 	return strconv.Itoa(is.i)
 }
 
-func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey {
+func (p *Processor) initKey(pk, par uint64, path []string, t Type, isZero bool) flKey {
 	k, ok := p.flKeys.Load(pk)
 	if ok {
 		return k
@@ -69,6 +70,7 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	k.path = pp
 	k.original = key
 	k.canonical = p.ck(key)
+	k.par = par
 
 	for tk, dst := range p.cfg.Transpose {
 		if strings.HasPrefix(k.original, tk) {
@@ -80,6 +82,14 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	parentCardinality := p.parentCardinality[par]
+	parentCardinality++
+	if parentCardinality > 50 {
+		p.parentHighCardinality.Store(par, true)
+	} else {
+		p.parentCardinality[par] = parentCardinality
+	}
 
 	if _, ok := p.canonicalKeys[k.canonical]; !ok {
 		p.flKeysList = append(p.flKeysList, k.original)
@@ -93,11 +103,15 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	return k
 }
 
-func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) {
+func (p *Processor) scanKey(pk, par uint64, path []string, t Type, isZero bool) {
+	if _, phc := p.parentHighCardinality.Load(par); phc {
+		return
+	}
+
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
-		k = p.initKey(pk, path, t, isZero)
+		k = p.initKey(pk, par, path, t, isZero)
 	}
 
 	updType := false
@@ -177,6 +191,30 @@ func (h hasher) hashBytes(flatPath []byte) uint64 {
 	return h.digest.Sum64()
 }
 
+// hashParentBytes takes flat path to element as a parent path and last segment.
+// It returns hashes for parent path and for full path.
+func (h hasher) hashParentBytes(flatPath []byte, pl int) (pk uint64, par uint64) {
+	h.digest.Reset()
+
+	p1 := flatPath[:pl]
+
+	_, err := h.digest.Write(p1)
+	if err != nil {
+		panic("hashing failed: " + err.Error())
+	}
+
+	par = h.digest.Sum64()
+
+	p2 := flatPath[pl:]
+
+	_, err = h.digest.Write(p2)
+	if err != nil {
+		panic("hashing failed: " + err.Error())
+	}
+
+	return h.digest.Sum64(), par
+}
+
 func (p *Processor) scanAvailableKeys() error {
 	p.Log("scanning keys...")
 
@@ -210,22 +248,27 @@ func (p *Processor) scanAvailableKeys() error {
 
 				w.WantPath = true
 
-				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeString, len(value) == 0)
+				w.FnString = func(seq int64, flatPath []byte, pl int, path []string, value []byte) {
+					pk, par := h.hashParentBytes(flatPath, pl)
+					p.scanKey(pk, par, path, TypeString, len(value) == 0)
 				}
-				w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, _ []byte) {
+				w.FnNumber = func(seq int64, flatPath []byte, pl int, path []string, value float64, _ []byte) {
+					pk, par := h.hashParentBytes(flatPath, pl)
+
 					isInt := float64(int(value)) == value
 					if isInt {
-						p.scanKey(h.hashBytes(flatPath), path, TypeInt, value == 0)
+						p.scanKey(pk, par, path, TypeInt, value == 0)
 					} else {
-						p.scanKey(h.hashBytes(flatPath), path, TypeFloat, value == 0)
+						p.scanKey(pk, par, path, TypeFloat, value == 0)
 					}
 				}
-				w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeBool, !value)
+				w.FnBool = func(seq int64, flatPath []byte, pl int, path []string, value bool) {
+					pk, par := h.hashParentBytes(flatPath, pl)
+					p.scanKey(pk, par, path, TypeBool, !value)
 				}
-				w.FnNull = func(seq int64, flatPath []byte, path []string) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeNull, true)
+				w.FnNull = func(seq int64, flatPath []byte, pl int, path []string) {
+					pk, par := h.hashParentBytes(flatPath, pl)
+					p.scanKey(pk, par, path, TypeNull, true)
 				}
 			}
 
@@ -269,6 +312,11 @@ func (p *Processor) flKeysInit() {
 	}
 
 	p.flKeys.Range(func(key uint64, value flKey) bool {
+		if _, phc := p.parentHighCardinality.Load(value.par); phc {
+			// Skip keys with high cardinality parents.
+			return true
+		}
+
 		v := p.canonicalKeys[value.canonical]
 		value.isZero = value.isZero && v.isZero
 		value.t = v.t.Update(value.t)
