@@ -15,6 +15,7 @@ type SQLiteWriter struct {
 	tableName string
 	tx        *sql.Tx
 	rowsTx    int
+	sizeTx    int
 	replacer  *strings.Replacer
 	p         *Processor
 	maxCols   int
@@ -28,6 +29,11 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 	var err error
 
 	db, err := sql.Open("sqlite", fn)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = db.Exec("pragma journal_mode=off;")
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +70,15 @@ func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
 		c.transposed[dst] = tw
 	}
 
+	switch {
+	case len(keys) < 100:
+		c.sizeTx = 10000
+	case len(keys) < 1000:
+		c.sizeTx = 1000
+	default:
+		c.sizeTx = 100
+	}
+
 	return nil
 }
 
@@ -83,7 +98,7 @@ func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
 		return fmt.Errorf("writing SQLite row: %w", err)
 	}
 
-	if c.rowsTx >= 1000 {
+	if c.rowsTx >= c.sizeTx {
 		if err := c.commitTx(); err != nil {
 			return fmt.Errorf("committing tx: %w", err)
 		}
@@ -97,7 +112,7 @@ func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
 				return fmt.Errorf("transposed rows for %s: %w", dst, err)
 			}
 
-			if c.rowsTx >= 1000 {
+			if c.rowsTx >= c.sizeTx {
 				if err := c.commitTx(); err != nil {
 					return fmt.Errorf("committing tx: %w", err)
 				}

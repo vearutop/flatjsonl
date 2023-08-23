@@ -204,20 +204,20 @@ func (c *PGDumpWriter) insert(seq int64, tn string, values []string) error {
 			}
 
 			break
-		} else {
-			row := make([]string, 0, c.maxCols+1)
-			row = append(row, strconv.Itoa(int(seq)))
-			row = append(row, values[:c.maxCols]...)
-			values = values[c.maxCols:]
-
-			if err := tw.cw.Write(row); err != nil {
-				return err
-			}
-
-			part++
-			tableName = tn + "_part" + strconv.Itoa(part)
-			tw = c.csvCopiers[tableName]
 		}
+
+		row := make([]string, 0, c.maxCols+1)
+		row = append(row, strconv.Itoa(int(seq)))
+		row = append(row, values[:c.maxCols]...)
+		values = values[c.maxCols:]
+
+		if err := tw.cw.Write(row); err != nil {
+			return err
+		}
+
+		part++
+		tableName = tn + "_part" + strconv.Itoa(part)
+		tw = c.csvCopiers[tableName]
 	}
 
 	return nil

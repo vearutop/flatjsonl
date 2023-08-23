@@ -160,6 +160,23 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 
 // Process dispatches data from Reader to Writer.
 func (p *Processor) Process() error {
+	for _, i := range p.inputs {
+		if i.FileName != "" {
+			fi, err := os.Stat(i.FileName)
+			if err != nil {
+				return fmt.Errorf("stat %s: %w", i.FileName, err)
+			}
+
+			if fi.Size() == 0 {
+				return fmt.Errorf("%s: %w", i.FileName, errEmptyFile)
+			}
+
+			p.rd.totalBytes += fi.Size()
+		} else if i.Reader != nil {
+			p.rd.totalBytes += i.Reader.Size()
+		}
+	}
+
 	if err := p.PrepareKeys(); err != nil {
 		return err
 	}
@@ -181,12 +198,14 @@ func (p *Processor) PrepareKeys() error {
 			Value: func() int64 { return atomic.LoadInt64(&p.totalKeys) },
 		})
 
+		p.pr.Reset()
+
 		// Scan available keys.
 		if err := p.scanAvailableKeys(); err != nil {
 			return err
 		}
 
-		p.Log("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+		p.Log(fmt.Sprintf("lines: %d, keys: %d", p.pr.Lines(), len(p.includeKeys)))
 		p.totalLines = int(p.pr.Lines())
 	}
 
@@ -212,7 +231,7 @@ func (p *Processor) WriteOutput() error {
 			return err
 		}
 
-		p.Log("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+		p.Log(fmt.Sprintf("lines: %d, keys: %d", p.pr.Lines(), len(p.includeKeys)))
 	}
 
 	return nil
@@ -313,6 +332,7 @@ func (p *Processor) ck(k string) string {
 
 func (p *Processor) iterateForWriters() error {
 	p.Log("flattening data...")
+	p.pr.Reset()
 
 	p.rd.MaxLines = 0
 	atomic.StoreInt64(&p.rd.Sequence, 0)
@@ -352,7 +372,12 @@ func (p *Processor) iterateForWriters() error {
 	}
 
 	for _, input := range p.inputs {
-		sess, err := p.rd.session(input, "flattening data")
+		task := "flattening data"
+		if len(p.inputs) > 1 && input.FileName != "" {
+			task = "flattening data (" + input.FileName + ")"
+		}
+
+		sess, err := p.rd.session(input, task)
 		if err != nil {
 			if errors.Is(err, errEmptyFile) {
 				continue

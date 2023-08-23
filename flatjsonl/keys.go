@@ -179,7 +179,6 @@ func (h hasher) hashBytes(flatPath []byte) uint64 {
 
 func (p *Processor) scanAvailableKeys() error {
 	p.Log("scanning keys...")
-
 	atomic.StoreInt64(&p.rd.Sequence, 0)
 
 	if p.f.MaxLines > 0 {
@@ -194,7 +193,12 @@ func (p *Processor) scanAvailableKeys() error {
 
 	for _, input := range p.inputs {
 		err := func() error {
-			sess, err := p.rd.session(input, "scanning keys")
+			task := "scanning keys"
+			if len(p.inputs) > 1 && input.FileName != "" {
+				task = "scanning keys (" + input.FileName + ")"
+			}
+
+			sess, err := p.rd.session(input, task)
 			if err != nil {
 				if errors.Is(err, errEmptyFile) {
 					return nil
