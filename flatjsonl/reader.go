@@ -52,6 +52,8 @@ type Reader struct {
 
 	singleKeyFlat []byte
 	singleKeyPath []string
+
+	totalBytes int64
 }
 
 type readSession struct {
@@ -91,7 +93,6 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 
 	var (
 		r   io.Reader
-		s   int64
 		cmp string
 	)
 
@@ -109,17 +110,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 			}
 		}()
 
-		st, err := fj.Stat()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file stats %s: %w", in, err)
-		}
-
 		r = fj
-		s = st.Size()
-
-		if s == 0 {
-			return nil, errEmptyFile
-		}
 
 		switch {
 		case strings.HasSuffix(in.FileName, ".gz"):
@@ -130,34 +121,40 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 	} else {
 		r = in.Reader
 		in.Reader.Reset()
-		s = in.Reader.Size()
+		// s = in.Reader.Size()
 		cmp = in.Reader.Compression()
 	}
 
 	cr := &progress.CountingReader{Reader: r}
-
-	sess.pr.Start(func(t *progress.Task) {
-		t.Task = task
-		t.TotalBytes = func() int64 {
-			return s
-		}
-		t.CurrentBytes = cr.Bytes
-		t.CurrentLines = cr.Lines
-		t.Continue = true
-	})
-
+	lines := cr
 	sess.r = cr
 
 	switch cmp {
 	case "gzip":
-		if sess.r, err = gzip.NewReader(sess.r); err != nil {
+		if r, err = gzip.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
+
+		lines = &progress.CountingReader{Reader: r}
+		sess.r = lines
 	case "zst":
-		if sess.r, err = zstd.NewReader(sess.r); err != nil {
+		if r, err = zstd.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
+
+		lines = &progress.CountingReader{Reader: r}
+		sess.r = lines
 	}
+
+	sess.pr.Start(func(t *progress.Task) {
+		t.Task = task
+		t.TotalBytes = func() int64 {
+			return rd.totalBytes
+		}
+		t.CurrentBytes = cr.Bytes
+		t.CurrentLines = lines.Lines
+		t.Continue = true
+	})
 
 	sess.scanner = bufio.NewScanner(sess.r)
 
@@ -299,8 +296,14 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	}
 
 	line := w.line
-	if len(line) < 2 || line[0] != '{' {
+	if len(line) < 2 || line[0] != '{' { //nolint:nestif
 		if line = rd.prefixedLine(seq, line, w.walker.FnString); line == nil {
+			if sess.lineFinished != nil {
+				if err := sess.lineFinished(seq); err != nil {
+					return fmt.Errorf("failure in line finished callback, line %d: %w", n, err)
+				}
+			}
+
 			return nil
 		}
 	}

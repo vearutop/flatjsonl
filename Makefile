@@ -1,4 +1,4 @@
-#GOLANGCI_LINT_VERSION := "v1.51.1" # Optional configuration to pinpoint golangci-lint version.
+#GOLANGCI_LINT_VERSION := "v1.54.1" # Optional configuration to pinpoint golangci-lint version.
 
 # The head of Makefile determines location of dev-go to include standard targets.
 GO ?= go
@@ -29,7 +29,6 @@ endif
 
 export CGO_ENABLED = 0
 BUILD_LDFLAGS=-s -w
-BUILD_FLAGS=-trimpath -pgo=auto
 
 export UNIT_TEST_COUNT ?= 5
 export RELEASE_TARGETS="darwin/amd64 darwin/arm64 linux/amd64 linux/dbg-amd64 linux/arm64 linux/arm32 windows/amd64"
