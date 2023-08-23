@@ -121,7 +121,6 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 	} else {
 		r = in.Reader
 		in.Reader.Reset()
-		// s = in.Reader.Size()
 		cmp = in.Reader.Compression()
 	}
 
