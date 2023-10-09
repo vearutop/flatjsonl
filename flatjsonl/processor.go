@@ -249,43 +249,8 @@ func (p *Processor) maybeShowKeys() error {
 		}
 	}
 
-	markIncluded := len(p.cfg.IncludeKeys) > 0 || len(p.cfg.IncludeKeysRegex) > 0
-
 	if p.f.ShowKeysInfo {
-		_, _ = fmt.Fprintln(p.Stdout, "keys info:")
-
-		i := 0
-		for _, k := range p.keys {
-			i++
-
-			line := k.replaced + ", TYPE " + string(k.t)
-
-			if k.replaced != k.original {
-				line = k.original + ", REPLACED WITH " + line
-			}
-
-			if markIncluded {
-				if _, included := p.includeKeys[k.original]; included {
-					line += ", INCLUDED"
-				}
-			}
-
-			if k.transposeDst != "" {
-				line += ", TRANSPOSED TO " + k.transposeDst
-			}
-
-			_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", line)
-		}
-
-		if markIncluded {
-			for _, k := range p.flKeysList {
-				if _, included := p.includeKeys[k]; !included {
-					i++
-
-					_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", k+", SKIPPED")
-				}
-			}
-		}
+		p.showKeysInfo()
 	}
 
 	if p.f.ShowKeysHier {
@@ -298,6 +263,45 @@ func (p *Processor) maybeShowKeys() error {
 	}
 
 	return nil
+}
+
+func (p *Processor) showKeysInfo() {
+	_, _ = fmt.Fprintln(p.Stdout, "keys info:")
+
+	markIncluded := len(p.cfg.IncludeKeys) > 0 || len(p.cfg.IncludeKeysRegex) > 0
+
+	i := 0
+	for _, k := range p.keys {
+		i++
+
+		line := k.replaced + ", TYPE " + string(k.t)
+
+		if k.replaced != k.original {
+			line = k.original + ", REPLACED WITH " + line
+		}
+
+		if markIncluded {
+			if _, included := p.includeKeys[k.original]; included {
+				line += ", INCLUDED"
+			}
+		}
+
+		if k.transposeDst != "" {
+			line += ", TRANSPOSED TO " + k.transposeDst
+		}
+
+		_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", line)
+	}
+
+	if markIncluded {
+		for _, k := range p.flKeysList {
+			if _, included := p.includeKeys[k]; !included {
+				i++
+
+				_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", k+", SKIPPED")
+			}
+		}
+	}
 }
 
 func (p *Processor) setupWriters() error {
