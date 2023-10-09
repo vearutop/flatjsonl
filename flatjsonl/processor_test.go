@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"gopkg.in/yaml.v3"
 	"io"
 	"os"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vearutop/flatjsonl/flatjsonl"
+	"gopkg.in/yaml.v3"
 )
 
 func TestNewProcessor(t *testing.T) {
