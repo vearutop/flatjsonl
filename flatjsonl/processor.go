@@ -3,6 +3,7 @@ package flatjsonl
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"regexp"
@@ -21,7 +22,8 @@ import (
 
 // Processor reads JSONL files with Reader and passes flat rows to Writer.
 type Processor struct {
-	Log func(args ...any)
+	Log    func(args ...any)
+	Stdout io.Writer
 
 	cfg    Config
 	f      Flags
@@ -67,6 +69,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		Log: func(args ...any) {
 			_, _ = fmt.Fprintln(os.Stderr, args...)
 		},
+		Stdout: os.Stdout,
 
 		cfg:    cfg,
 		f:      f,
@@ -190,7 +193,7 @@ func (p *Processor) Process() error {
 
 // PrepareKeys runs first pass of reading if necessary to scan the keys.
 func (p *Processor) PrepareKeys() error {
-	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) != 0 {
+	if len(p.includeRegex) == 0 && (len(p.cfg.IncludeKeys) > 0 || len(p.cfg.IncludeKeysRegex) > 0) {
 		p.iterateIncludeKeys()
 	} else {
 		p.pr.AddMetrics(progress.Metric{
@@ -239,28 +242,49 @@ func (p *Processor) WriteOutput() error {
 
 func (p *Processor) maybeShowKeys() error {
 	if p.f.ShowKeysFlat {
-		fmt.Println("keys:")
+		_, _ = fmt.Fprintln(p.Stdout, "keys:")
 
 		for _, k := range p.flKeysList {
-			fmt.Println(`"` + k + `",`)
+			_, _ = fmt.Fprintln(p.Stdout, `"`+k+`",`)
 		}
 	}
 
-	if p.f.ShowKeysInfo {
-		fmt.Println("keys info:")
+	markIncluded := len(p.cfg.IncludeKeys) > 0 || len(p.cfg.IncludeKeysRegex) > 0
 
-		for i, k := range p.keys {
+	if p.f.ShowKeysInfo {
+		_, _ = fmt.Fprintln(p.Stdout, "keys info:")
+
+		i := 0
+		for _, k := range p.keys {
+			i++
+
 			line := k.replaced + ", TYPE " + string(k.t)
 
 			if k.replaced != k.original {
-				line = k.original + " REPLACED WITH " + line
+				line = k.original + ", REPLACED WITH " + line
+			}
+
+			if markIncluded {
+				if _, included := p.includeKeys[k.original]; included {
+					line += ", INCLUDED"
+				}
 			}
 
 			if k.transposeDst != "" {
 				line += ", TRANSPOSED TO " + k.transposeDst
 			}
 
-			fmt.Println(strconv.Itoa(i)+":", line)
+			_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", line)
+		}
+
+		if markIncluded {
+			for _, k := range p.flKeysList {
+				if _, included := p.includeKeys[k]; !included {
+					i++
+
+					_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", k+", SKIPPED")
+				}
+			}
 		}
 	}
 
@@ -270,7 +294,7 @@ func (p *Processor) maybeShowKeys() error {
 			return err
 		}
 
-		fmt.Println(string(b))
+		_, _ = fmt.Fprintln(p.Stdout, string(b))
 	}
 
 	return nil

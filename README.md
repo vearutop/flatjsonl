@@ -181,6 +181,8 @@ includeKeys:
   - ".key2"
   - "const:my-value"
   - ".keyGroup.[0].key3"
+includeKeysRegex:
+  - ".keyGroup.[1].*"
 replaceKeys:
   ".key1": key1
   ".key2": created_at
