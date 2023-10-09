@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vearutop/flatjsonl/flatjsonl"
+	"gopkg.in/yaml.v3"
 )
 
 func TestNewProcessor(t *testing.T) {
@@ -456,4 +457,25 @@ func assertFileEquals(t *testing.T, fn string, contents string) {
 	require.NoError(t, err)
 
 	assert.Equal(t, contents, string(b), fn)
+}
+
+func TestNewProcessor_showKeysInfo(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.ShowKeysInfo = true
+	f.Config = "_testdata/large_cfg.yaml"
+	f.Input = "_testdata/large.json"
+
+	c, err := os.ReadFile(f.Config)
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, yaml.Unmarshal(c, &cfg))
+
+	proc := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{FileName: f.Input})
+	out := bytes.NewBuffer(nil)
+	proc.Stdout = out
+	assert.NoError(t, proc.Process())
+
+	assertFileEquals(t, "_testdata/large_out.txt", out.String())
 }
