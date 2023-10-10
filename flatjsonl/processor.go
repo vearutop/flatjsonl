@@ -193,7 +193,7 @@ func (p *Processor) Process() error {
 
 // PrepareKeys runs first pass of reading if necessary to scan the keys.
 func (p *Processor) PrepareKeys() error {
-	if len(p.includeRegex) == 0 && (len(p.cfg.IncludeKeys) > 0 || len(p.cfg.IncludeKeysRegex) > 0) {
+	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) > 0 {
 		p.iterateIncludeKeys()
 	} else {
 		p.pr.AddMetrics(progress.Metric{

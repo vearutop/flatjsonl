@@ -316,7 +316,7 @@ func (p *Processor) iterateIncludeKeys() {
 			continue
 		}
 
-		if len(p.includeRegex) > 0 && len(p.cfg.IncludeKeys) > 0 {
+		if len(p.includeRegex) > 0 {
 			for _, r := range p.includeRegex {
 				if r.MatchString(k) {
 					p.includeKeys[k] = i
@@ -326,7 +326,7 @@ func (p *Processor) iterateIncludeKeys() {
 					break
 				}
 			}
-		} else {
+		} else if len(p.cfg.IncludeKeys) == 0 {
 			if !p.f.SkipZeroCols {
 				p.includeKeys[k] = i
 				canonicalIncludes[k] = true
