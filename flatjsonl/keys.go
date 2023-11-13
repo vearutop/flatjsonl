@@ -294,9 +294,18 @@ func (p *Processor) flKeysInit() {
 }
 
 func (p *Processor) iterateIncludeKeys() {
+	excludeKeys := make(map[string]bool, len(p.cfg.ExcludeKeys))
+	for _, k := range p.cfg.ExcludeKeys {
+		excludeKeys[p.ck(k)] = true
+	}
+
 	i := 0
 
 	for _, k := range p.cfg.IncludeKeys {
+		if excludeKeys[p.ck(k)] {
+			continue
+		}
+
 		p.includeKeys[k] = i
 		i++
 	}
@@ -311,6 +320,10 @@ func (p *Processor) iterateIncludeKeys() {
 		}
 
 		ck := p.ck(k)
+
+		if excludeKeys[ck] {
+			continue
+		}
 
 		if canonicalIncludes[ck] {
 			continue

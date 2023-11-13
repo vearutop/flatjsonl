@@ -15,29 +15,29 @@ func BenchmarkNewProcessor(b *testing.B) {
 	for name, f := range map[string]flatjsonl.Flags{
 		"test": {
 			AddSequence:     true,
-			Input:           "_testdata/test.log",
+			Input:           "testdata/test.log",
 			CSV:             "<nop>",
 			MatchLinePrefix: `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`,
 			ReplaceKeys:     true,
 			SkipZeroCols:    true,
-			Config:          "_testdata/config.json",
+			Config:          "testdata/config.json",
 		},
 		"test_get_key": {
-			Input:  "_testdata/large.json",
+			Input:  "testdata/large.json",
 			GetKey: ".topics.draft_key",
 			Raw:    "<nop>",
 		},
 		"transpose": {
 			AddSequence: true,
-			Input:       "_testdata/transpose.jsonl",
+			Input:       "testdata/transpose.jsonl",
 			CSV:         "<nop>",
-			Config:      "_testdata/transpose_cfg.json",
+			Config:      "testdata/transpose_cfg.json",
 		},
 		"coalesce": {
 			AddSequence: true,
-			Input:       "_testdata/coalesce.log",
+			Input:       "testdata/coalesce.log",
 			CSV:         "<nop>",
-			Config:      "_testdata/coalesce_cfg.json",
+			Config:      "testdata/coalesce_cfg.json",
 		},
 	} {
 		f.PrepareOutput()
@@ -72,7 +72,7 @@ func BenchmarkNewProcessor(b *testing.B) {
 }
 
 func Test_loopReader(t *testing.T) {
-	lr, err := flatjsonl.LoopReaderFromFile("_testdata/test.log", 10000)
+	lr, err := flatjsonl.LoopReaderFromFile("testdata/test.log", 10000)
 	require.NoError(t, err)
 
 	b, err := io.ReadAll(lr)
@@ -82,19 +82,19 @@ func Test_loopReader(t *testing.T) {
 }
 
 func Test_loopReader_scan(t *testing.T) {
-	lr, err := flatjsonl.LoopReaderFromFile("_testdata/test.log", 10000)
+	lr, err := flatjsonl.LoopReaderFromFile("testdata/test.log", 10000)
 	require.NoError(t, err)
 
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/test.log"
+	f.Input = "testdata/test.log"
 	f.CSV = "<nop>"
 	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
 	f.ReplaceKeys = true
 	f.SkipZeroCols = true
 	f.PrepareOutput()
 
-	cj, err := os.ReadFile("_testdata/config.json")
+	cj, err := os.ReadFile("testdata/config.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config

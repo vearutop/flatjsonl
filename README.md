@@ -183,6 +183,8 @@ includeKeys:
   - ".keyGroup.[0].key3"
 includeKeysRegex:
   - ".keyGroup.[1].*"
+excludeKeys:
+  - ".keyGroup.[1].notNeeded"
 replaceKeys:
   ".key1": key1
   ".key2": created_at
@@ -235,7 +237,7 @@ If multiple keys are replaced into similar key, coalesce function is used for re
 In cases of dynamic arrays or objects, you may want to transpose the values as rows of separate tables instead of
 columns of main table.
 
-This is possible with `transpose` configuration file field ([example](./flatjsonl/_testdata/transpose_cfg.json)), 
+This is possible with `transpose` configuration file field ([example](./flatjsonl/testdata/transpose_cfg.json)), 
 it accepts a map of key prefixes to transposed table name. During processing, values found in the prefixed keys would
 be moved as multiple rows in transposed table.
 
