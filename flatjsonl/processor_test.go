@@ -20,8 +20,8 @@ func TestNewProcessor(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.ExtractStrings = true
 	f.AddSequence = true
-	f.Input = "_testdata/test.log"
-	f.Output = "_testdata/test.csv,_testdata/test.sqlite"
+	f.Input = "testdata/test.log"
+	f.Output = "testdata/test.csv,testdata/test.sqlite"
 	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
 	f.MaxLines = 3
 	f.SQLTable = "temp_" + strconv.Itoa(int(time.Now().Unix()))
@@ -33,11 +33,11 @@ func TestNewProcessor(t *testing.T) {
 	f.Concurrency = 1
 	f.PrepareOutput()
 
-	if err := os.Remove("_testdata/test.sqlite"); err != nil {
+	if err := os.Remove("testdata/test.sqlite"); err != nil {
 		require.Contains(t, err.Error(), "no such file or directory")
 	}
 
-	cj, err := os.ReadFile("_testdata/config.json")
+	cj, err := os.ReadFile("testdata/config.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config
@@ -48,7 +48,7 @@ func TestNewProcessor(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	b, err := os.ReadFile("_testdata/test.csv")
+	b, err := os.ReadFile("testdata/test.csv")
 	require.NoError(t, err)
 
 	assert.Equal(t, `sequence,host,timestamp,name,wins_0_0,wins_0_1,wins_1_0,wins_1_1,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255),nested_literal,foo,bar
@@ -58,12 +58,48 @@ func TestNewProcessor(t *testing.T) {
 `, string(b))
 }
 
+func TestNewProcessor_exclude(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.ExtractStrings = true
+	f.AddSequence = true
+	f.Input = "testdata/test.log"
+	f.Output = "testdata/test-exclude.csv"
+	f.ReplaceKeys = true
+	f.SkipZeroCols = true
+	f.ShowKeysFlat = true
+	f.ShowKeysHier = true
+	f.ShowKeysInfo = true
+	f.Concurrency = 1
+	f.PrepareOutput()
+
+	cj, err := os.ReadFile("testdata/config-exclude.json")
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, json.Unmarshal(cj, &cfg))
+
+	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+
+	assert.NoError(t, proc.Process())
+
+	b, err := os.ReadFile("testdata/test-exclude.csv")
+	require.NoError(t, err)
+
+	assert.Equal(t, `sequence,name,wins_0_0,wins_1_0,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255),nested_literal,foo,bar
+1,Gilbert,straight,one pair,1,abc,,,
+2,"""'Alexa'""",two pair,two pair,,,,,
+3,May,,,,,"{""foo"":1, ""bar"": 2}",1,2
+4,Deloise,three of a kind,,,,,,
+`, string(b))
+}
+
 func TestNewProcessor_concurrency(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.ExtractStrings = true
 	f.AddSequence = true
-	f.Input = "_testdata/test.log"
-	f.Output = "_testdata/test.csv,_testdata/test.sqlite"
+	f.Input = "testdata/test.log"
+	f.Output = "testdata/test.csv,testdata/test.sqlite"
 	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
 	f.MaxLines = 3
 	f.SQLTable = "temp_" + strconv.Itoa(int(time.Now().Unix()))
@@ -74,11 +110,11 @@ func TestNewProcessor_concurrency(t *testing.T) {
 	f.ShowKeysInfo = true
 	f.PrepareOutput()
 
-	if err := os.Remove("_testdata/test.sqlite"); err != nil {
+	if err := os.Remove("testdata/test.sqlite"); err != nil {
 		require.Contains(t, err.Error(), "no such file or directory")
 	}
 
-	cj, err := os.ReadFile("_testdata/config.json")
+	cj, err := os.ReadFile("testdata/config.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config
@@ -89,7 +125,7 @@ func TestNewProcessor_concurrency(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	b, err := os.ReadFile("_testdata/test.csv")
+	b, err := os.ReadFile("testdata/test.csv")
 	require.NoError(t, err)
 
 	assert.Len(t, string(b), len(`sequence,host,timestamp,name,wins_0_0,wins_0_1,wins_1_0,wins_1_1,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255),nested_literal,foo,bar
@@ -102,8 +138,8 @@ func TestNewProcessor_concurrency(t *testing.T) {
 func TestNewProcessor_prefixNoJSON(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/prefix_no_json.log"
-	f.Output = "_testdata/prefix_no_json.csv"
+	f.Input = "testdata/prefix_no_json.log"
+	f.Output = "testdata/prefix_no_json.csv"
 	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+) (\w+): ([\w\d]+), ([\w\d]+) ([\w\d]+)`
 	f.PrepareOutput()
 
@@ -111,7 +147,7 @@ func TestNewProcessor_prefixNoJSON(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	b, err := os.ReadFile("_testdata/prefix_no_json.csv")
+	b, err := os.ReadFile("testdata/prefix_no_json.csv")
 	require.NoError(t, err)
 
 	assert.Equal(t, `._sequence,._prefix.[0],._prefix.[1],._prefix.[2],._prefix.[3],._prefix.[4],._prefix.[5]
@@ -125,8 +161,8 @@ func TestNewProcessor_prefixNoJSON(t *testing.T) {
 func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/coalesce.log"
-	f.Output = "_testdata/coalesce.csv"
+	f.Input = "testdata/coalesce.log"
+	f.Output = "testdata/coalesce.csv"
 	f.PrepareOutput()
 
 	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{
@@ -139,7 +175,7 @@ func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	b, err := os.ReadFile("_testdata/coalesce.csv")
+	b, err := os.ReadFile("testdata/coalesce.csv")
 	require.NoError(t, err)
 
 	assert.Equal(t, `._sequence,shared,.foo
@@ -153,8 +189,8 @@ func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
 func TestNewProcessor_concatMultipleCols(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/coalesce.log"
-	f.Output = "_testdata/coalesce.csv"
+	f.Input = "testdata/coalesce.log"
+	f.Output = "testdata/coalesce.csv"
 	f.PrepareOutput()
 
 	delim := "::"
@@ -170,7 +206,7 @@ func TestNewProcessor_concatMultipleCols(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	b, err := os.ReadFile("_testdata/coalesce.csv")
+	b, err := os.ReadFile("testdata/coalesce.csv")
 	require.NoError(t, err)
 
 	assert.Equal(t, `._sequence,shared,.foo
@@ -184,8 +220,8 @@ func TestNewProcessor_concatMultipleCols(t *testing.T) {
 func TestNewProcessor_constVal(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/coalesce.log"
-	f.Output = "_testdata/constVal.csv"
+	f.Input = "testdata/coalesce.log"
+	f.Output = "testdata/constVal.csv"
 	f.PrepareOutput()
 
 	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{
@@ -206,7 +242,7 @@ func TestNewProcessor_constVal(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	b, err := os.ReadFile("_testdata/constVal.csv")
+	b, err := os.ReadFile("testdata/constVal.csv")
 	require.NoError(t, err)
 
 	assert.Equal(t, `shared,bar_name,.foo
@@ -221,8 +257,8 @@ func TestNewProcessor_rawWriter(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.ExtractStrings = true
 	f.AddSequence = true
-	f.Input = "_testdata/test.log"
-	f.Output = "_testdata/test.raw.gz"
+	f.Input = "testdata/test.log"
+	f.Output = "testdata/test.raw.gz"
 	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
 	f.MaxLines = 3
 	f.ReplaceKeys = true
@@ -234,7 +270,7 @@ func TestNewProcessor_rawWriter(t *testing.T) {
 	f.RawDelim = ":::"
 	f.PrepareOutput()
 
-	cj, err := os.ReadFile("_testdata/config.json")
+	cj, err := os.ReadFile("testdata/config.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config
@@ -245,7 +281,7 @@ func TestNewProcessor_rawWriter(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	b, err := os.ReadFile("_testdata/test.raw.gz")
+	b, err := os.ReadFile("testdata/test.raw.gz")
 	require.NoError(t, err)
 
 	r, err := gzip.NewReader(bytes.NewReader(b))
@@ -263,8 +299,8 @@ func TestNewProcessor_rawWriter(t *testing.T) {
 func TestNewProcessor_sqlite(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/test.log"
-	f.Output = "_testdata/test.sqlite"
+	f.Input = "testdata/test.log"
+	f.Output = "testdata/test.sqlite"
 	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
 	f.MaxLines = 3
 	f.SQLTable = "temp_" + strconv.Itoa(int(time.Now().Unix()))
@@ -275,11 +311,11 @@ func TestNewProcessor_sqlite(t *testing.T) {
 	f.ShowKeysInfo = true
 	f.PrepareOutput()
 
-	if err := os.Remove("_testdata/test.sqlite"); err != nil {
+	if err := os.Remove("testdata/test.sqlite"); err != nil {
 		require.Contains(t, err.Error(), "no such file or directory")
 	}
 
-	cj, err := os.ReadFile("_testdata/config.json")
+	cj, err := os.ReadFile("testdata/config.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config
@@ -294,8 +330,8 @@ func TestNewProcessor_sqlite(t *testing.T) {
 func TestNewProcessor_transpose(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/transpose.jsonl"
-	f.Output = "_testdata/transpose.csv,_testdata/transpose.raw"
+	f.Input = "testdata/transpose.jsonl"
+	f.Output = "testdata/transpose.csv,testdata/transpose.raw"
 	f.SQLTable = "whatever"
 	f.ShowKeysFlat = true
 	f.ShowKeysHier = true
@@ -305,7 +341,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 	f.ReplaceKeys = true
 	f.PrepareOutput()
 
-	cj, err := os.ReadFile("_testdata/transpose_cfg.json")
+	cj, err := os.ReadFile("testdata/transpose_cfg.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config
@@ -316,43 +352,43 @@ func TestNewProcessor_transpose(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	assertFileEquals(t, "_testdata/transpose.csv",
+	assertFileEquals(t, "testdata/transpose.csv",
 		`sequence,name
 1,a
 2,b
 3,c
 `)
-	assertFileEquals(t, "_testdata/transpose.raw",
+	assertFileEquals(t, "testdata/transpose.raw",
 		`1,a
 2,b
 3,c
 `)
 
-	assertFileEquals(t, "_testdata/transpose_deep_arr.csv",
+	assertFileEquals(t, "testdata/transpose_deep_arr.csv",
 		`sequence,index,abaz_a,abaz_b,afoo_a,afoo_b,abar_a,abar_b
 1,0,5,6,15,12,,
 3,0,,,,,1,2
 `)
-	assertFileEquals(t, "_testdata/transpose_deep_arr.raw",
+	assertFileEquals(t, "testdata/transpose_deep_arr.raw",
 		`1,0,5,6,15,12,,
 3,0,,,,,1,2
 `)
 
-	assertFileEquals(t, "_testdata/transpose_flat_map.csv",
+	assertFileEquals(t, "testdata/transpose_flat_map.csv",
 		`sequence,index,value
 1,ccc,123
 1,ddd,456
 2,rrr,aaa
 2,fff,334
 `)
-	assertFileEquals(t, "_testdata/transpose_flat_map.raw",
+	assertFileEquals(t, "testdata/transpose_flat_map.raw",
 		`1,ccc,123
 1,ddd,456
 2,rrr,aaa
 2,fff,334
 `)
 
-	assertFileEquals(t, "_testdata/transpose_tags.csv",
+	assertFileEquals(t, "testdata/transpose_tags.csv",
 		`sequence,index,value
 1,0,t1
 1,1,t2
@@ -364,7 +400,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 3,1,t4
 3,2,t5
 `)
-	assertFileEquals(t, "_testdata/transpose_tags.raw",
+	assertFileEquals(t, "testdata/transpose_tags.raw",
 		`1,0,t1
 1,1,t2
 1,2,t3
@@ -376,14 +412,14 @@ func TestNewProcessor_transpose(t *testing.T) {
 3,2,t5
 `)
 
-	assertFileEquals(t, "_testdata/transpose_tokens.csv",
+	assertFileEquals(t, "testdata/transpose_tokens.csv",
 		`sequence,index,a,b
 1,foo,1,2
 2,bar,3,4
 3,foo,15,12
 3,baz,5,6
 `)
-	assertFileEquals(t, "_testdata/transpose_tokens.raw",
+	assertFileEquals(t, "testdata/transpose_tokens.raw",
 		`1,foo,1,2
 2,bar,3,4
 3,foo,15,12
@@ -394,8 +430,8 @@ func TestNewProcessor_transpose(t *testing.T) {
 func TestNewProcessor_transpose_sqlite(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/transpose.jsonl"
-	f.Output = "_testdata/transpose.sqlite"
+	f.Input = "testdata/transpose.jsonl"
+	f.Output = "testdata/transpose.sqlite"
 	f.SQLTable = "whatever"
 	f.ShowKeysFlat = true
 	f.ShowKeysHier = true
@@ -403,11 +439,11 @@ func TestNewProcessor_transpose_sqlite(t *testing.T) {
 	f.Concurrency = 1
 	f.PrepareOutput()
 
-	if err := os.Remove("_testdata/transpose.sqlite"); err != nil {
+	if err := os.Remove("testdata/transpose.sqlite"); err != nil {
 		require.Contains(t, err.Error(), "no such file or directory")
 	}
 
-	cj, err := os.ReadFile("_testdata/transpose_cfg.json")
+	cj, err := os.ReadFile("testdata/transpose_cfg.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config
@@ -422,15 +458,15 @@ func TestNewProcessor_transpose_sqlite(t *testing.T) {
 func TestNewProcessor_transpose_pg_dump(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "_testdata/transpose.jsonl"
-	f.PGDump = "_testdata/transpose.pg.sql"
+	f.Input = "testdata/transpose.jsonl"
+	f.PGDump = "testdata/transpose.pg.sql"
 	f.SQLMaxCols = 500
 	f.SQLTable = "whatever"
 	f.Concurrency = 1
 	f.ReplaceKeys = true
 	f.PrepareOutput()
 
-	cj, err := os.ReadFile("_testdata/transpose_cfg.json")
+	cj, err := os.ReadFile("testdata/transpose_cfg.json")
 	require.NoError(t, err)
 
 	var cfg flatjsonl.Config
@@ -445,9 +481,9 @@ func TestNewProcessor_transpose_pg_dump(t *testing.T) {
 
 	assert.NoError(t, proc.Process())
 
-	ex, err := os.ReadFile("_testdata/transpose.pg.sql.expected")
+	ex, err := os.ReadFile("testdata/transpose.pg.sql.expected")
 	require.NoError(t, err)
-	assertFileEquals(t, "_testdata/transpose.pg.sql", string(ex))
+	assertFileEquals(t, "testdata/transpose.pg.sql", string(ex))
 }
 
 func assertFileEquals(t *testing.T, fn string, contents string) {
@@ -462,8 +498,8 @@ func assertFileEquals(t *testing.T, fn string, contents string) {
 func TestNewProcessor_showKeysInfo(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.ShowKeysInfo = true
-	f.Config = "_testdata/large_cfg.yaml"
-	f.Input = "_testdata/large.json"
+	f.Config = "testdata/large_cfg.yaml"
+	f.Input = "testdata/large.json"
 
 	c, err := os.ReadFile(f.Config)
 	require.NoError(t, err)
@@ -477,5 +513,5 @@ func TestNewProcessor_showKeysInfo(t *testing.T) {
 	proc.Stdout = out
 	assert.NoError(t, proc.Process())
 
-	assertFileEquals(t, "_testdata/large_out.txt", out.String())
+	assertFileEquals(t, "testdata/large_out.txt", out.String())
 }
