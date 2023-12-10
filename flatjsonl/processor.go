@@ -16,7 +16,7 @@ import (
 	_ "time/tzdata" // Loading timezones.
 
 	"github.com/bool64/progress"
-	xsync "github.com/puzpuzpuz/xsync/v2"
+	xsync "github.com/puzpuzpuz/xsync/v3"
 	"github.com/swaggest/assertjson"
 )
 
@@ -93,7 +93,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 		flKeysList:   make([]string, 0),
 		keyHierarchy: KeyHierarchy{Name: "."},
 
-		flKeys: xsync.NewIntegerMapOf[uint64, flKey](),
+		flKeys: xsync.NewMapOf[uint64, flKey](),
 	}
 
 	p.rd.Processor = p
@@ -438,7 +438,7 @@ type lineBuf struct {
 
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := writeIterator{}
-	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
+	wi.pending = xsync.NewMapOf[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
 
 	if len(p.includeKeys) == 1 {
