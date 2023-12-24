@@ -124,7 +124,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		cmp = in.Reader.Compression()
 	}
 
-	cr := &progress.CountingReader{Reader: r}
+	cr := progress.NewCountingReader(r)
 	lines := cr
 	sess.r = cr
 
@@ -134,14 +134,18 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
 
-		lines = &progress.CountingReader{Reader: r}
+		cr.SetLines(nil)
+
+		lines = progress.NewCountingReader(r)
 		sess.r = lines
 	case "zst":
 		if r, err = zstd.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
 
-		lines = &progress.CountingReader{Reader: r}
+		cr.SetLines(nil)
+
+		lines = progress.NewCountingReader(r)
 		sess.r = lines
 	}
 
