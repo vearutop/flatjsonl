@@ -141,7 +141,7 @@ func (c *SQLiteWriter) insert(seq int64, tn string, values []Value) error {
 			}
 
 			part++
-			tableName = tn + "_part" + strconv.Itoa(part)
+			tableName = tn + partSuffix + strconv.Itoa(part)
 			res = `INSERT INTO "` + tableName + `" VALUES (` + strconv.Itoa(int(seq)) + `,`
 		}
 
@@ -214,7 +214,7 @@ _seq_id integer,
 			}
 
 			part++
-			tableName = tn + "_part" + strconv.Itoa(part)
+			tableName = tn + partSuffix + strconv.Itoa(part)
 			createTable = `CREATE TABLE "` + tableName + `" (
 `
 

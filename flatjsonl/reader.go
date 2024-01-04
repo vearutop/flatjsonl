@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/bool64/ctxd"
 	"github.com/bool64/progress"
@@ -228,6 +229,15 @@ func (rd *Reader) Read(sess *readSession) error {
 	var n int64
 
 	for sess.scanner.Scan() {
+		for {
+			if atomic.LoadInt64(&rd.Processor.throttle) != 0 {
+				atomic.StoreInt64(&rd.Processor.throttle, 0)
+				time.Sleep(110 * time.Millisecond)
+			} else {
+				break
+			}
+		}
+
 		if err := sess.scanner.Err(); err != nil {
 			return fmt.Errorf("scan failed: %w", err)
 		}

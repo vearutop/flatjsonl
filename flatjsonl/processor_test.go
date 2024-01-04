@@ -46,7 +46,7 @@ func TestNewProcessor(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	b, err := os.ReadFile("testdata/test.csv")
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestNewProcessor_exclude(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	b, err := os.ReadFile("testdata/test-exclude.csv")
 	require.NoError(t, err)
@@ -123,7 +123,7 @@ func TestNewProcessor_concurrency(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	b, err := os.ReadFile("testdata/test.csv")
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestNewProcessor_prefixNoJSON(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{}, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	b, err := os.ReadFile("testdata/prefix_no_json.csv")
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
 		},
 	}, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	b, err := os.ReadFile("testdata/coalesce.csv")
 	require.NoError(t, err)
@@ -204,7 +204,7 @@ func TestNewProcessor_concatMultipleCols(t *testing.T) {
 		},
 	}, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	b, err := os.ReadFile("testdata/coalesce.csv")
 	require.NoError(t, err)
@@ -240,7 +240,7 @@ func TestNewProcessor_constVal(t *testing.T) {
 		},
 	}, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	b, err := os.ReadFile("testdata/constVal.csv")
 	require.NoError(t, err)
@@ -279,7 +279,7 @@ func TestNewProcessor_rawWriter(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	b, err := os.ReadFile("testdata/test.raw.gz")
 	require.NoError(t, err)
@@ -324,7 +324,7 @@ func TestNewProcessor_sqlite(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 }
 
 func TestNewProcessor_transpose(t *testing.T) {
@@ -350,7 +350,7 @@ func TestNewProcessor_transpose(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	assertFileEquals(t, "testdata/transpose.csv",
 		`sequence,name
@@ -452,7 +452,7 @@ func TestNewProcessor_transpose_sqlite(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 }
 
 func TestNewProcessor_transpose_pg_dump(t *testing.T) {
@@ -479,7 +479,7 @@ func TestNewProcessor_transpose_pg_dump(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	ex, err := os.ReadFile("testdata/transpose.pg.sql.expected")
 	require.NoError(t, err)
@@ -511,7 +511,7 @@ func TestNewProcessor_showKeysInfo(t *testing.T) {
 	proc := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{FileName: f.Input})
 	out := bytes.NewBuffer(nil)
 	proc.Stdout = out
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 
 	assertFileEquals(t, "testdata/large_out.txt", out.String())
 }

@@ -46,6 +46,7 @@ type Flags struct {
 	ShowKeysInfo bool
 
 	Concurrency int
+	MemLimit    int
 }
 
 // Register registers command-line flags.
@@ -84,6 +85,7 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.BufSize, "buf-size", 1e7, "Buffer size (max length of file line) in bytes.")
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
+	flag.IntVar(&f.MemLimit, "mem-limit", 1000, "Heap in use soft limit, in MB.")
 }
 
 // Parse parses and prepares command-line flags.
