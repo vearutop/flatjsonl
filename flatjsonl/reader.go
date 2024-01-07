@@ -333,7 +333,8 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	pv, err := p.ParseBytes(line)
 	if err != nil {
 		if rd.OnError != nil {
-			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
+			rd.Progress.AddMetrics()
+			rd.OnError(fmt.Errorf("malformed JSON at line %d: %w", seq, err))
 		}
 	} else {
 		if rd.singleKeyPath != nil {

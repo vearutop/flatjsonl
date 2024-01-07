@@ -3,6 +3,7 @@ package flatjsonl
 import (
 	"errors"
 	"fmt"
+	"github.com/bool64/logz"
 	"io"
 	"log"
 	"os"
@@ -108,6 +109,19 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 			p.Log(progress.DefaultStatus(status))
 		}
 	case 2:
+		cfg := logz.Config{
+			FilterMessage:  true,
+			MaxCardinality: 5,
+			MaxSamples:     1,
+		}
+
+		o := logz.Observer{}
+		o.Config = cfg
+
+		p.rd.OnError = func(err error) {
+			o.ObserveMessage(err.Error(), nil)
+		}
+
 		pr.Print = func(status progress.Status) {
 			s := progress.DefaultStatus(status)
 			m := progress.MetricsStatus(status)
@@ -115,6 +129,16 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 			if m != "" {
 				s += "\n" + m
 			}
+
+			errs := ""
+
+			for _, e := range o.GetEntriesWithSamples() {
+				if len(e.Samples) > 0 {
+					errs += fmt.Sprintf("\n%d: %s", e.Count, e.Samples[0].Msg)
+				}
+			}
+
+			s += errs
 
 			p.Log(s)
 		}
