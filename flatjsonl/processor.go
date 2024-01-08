@@ -53,6 +53,8 @@ type Processor struct {
 
 	totalLines int
 	totalKeys  int64
+
+	throttle int64
 }
 
 // NewProcessor creates an instance of Processor.
@@ -157,6 +159,8 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 
 		p.replaceRegex[r] = rep
 	}
+
+	go p.watchMemUsage()
 
 	return p
 }
@@ -604,37 +608,26 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	}
 }
 
-var throttle int64
+func (p *Processor) watchMemUsage() {
+	if p.f.MemLimit == 0 {
+		return
+	}
 
-func init() {
-	go func() {
-		for {
-			m := runtime.MemStats{}
-			runtime.ReadMemStats(&m)
+	for {
+		m := runtime.MemStats{}
+		runtime.ReadMemStats(&m)
 
-			// 1 GB soft limit to start delays.
-			if m.HeapInuse > 1e9 {
-				atomic.StoreInt64(&throttle, 1)
-
-				return
-			}
-
-			time.Sleep(time.Second / 10)
+		// Default 1 GB soft limit to start delays.
+		if m.HeapInuse > uint64(1024*1024*p.f.MemLimit) {
+			atomic.StoreInt64(&p.throttle, 1)
 		}
-	}()
+
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (wi *writeIterator) lineStarted(seq int64) error {
-	inp := atomic.AddInt64(&wi.inProgress, 1)
-	if inp > int64(5*wi.p.f.Concurrency) {
-		if atomic.LoadInt64(&throttle) == 1 {
-			time.Sleep(10 * time.Millisecond)
-		}
-	} else if inp > int64(20*wi.p.f.Concurrency) {
-		if atomic.LoadInt64(&throttle) == 1 {
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
+	atomic.AddInt64(&wi.inProgress, 1)
 
 	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
 	wi.pending.Store(seq, l)

@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vearutop/flatjsonl/flatjsonl"
 )
@@ -60,13 +59,13 @@ func BenchmarkNewProcessor(b *testing.B) {
 		b.Run(name+"_scanKeys", func(b *testing.B) {
 			b.ReportAllocs()
 			lr.BytesLimit = b.N
-			assert.NoError(b, proc.PrepareKeys())
+			require.NoError(b, proc.PrepareKeys())
 		})
 
 		b.Run(name+"_writeOutput", func(b *testing.B) {
 			b.ReportAllocs()
 			lr.BytesLimit = b.N
-			assert.NoError(b, proc.WriteOutput())
+			require.NoError(b, proc.WriteOutput())
 		})
 	}
 }
@@ -103,5 +102,5 @@ func Test_loopReader_scan(t *testing.T) {
 
 	proc := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{Reader: lr})
 
-	assert.NoError(t, proc.Process())
+	require.NoError(t, proc.Process())
 }
