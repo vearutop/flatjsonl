@@ -333,7 +333,8 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	pv, err := p.ParseBytes(line)
 	if err != nil {
 		if rd.OnError != nil {
-			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
+			atomic.AddInt64(&rd.Processor.errors, 1)
+			rd.OnError(fmt.Errorf("malformed JSON at line %d: %w", seq, err))
 		}
 	} else {
 		if rd.singleKeyPath != nil {
@@ -359,6 +360,8 @@ func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, fl
 		// If prefix matching is enabled, it may be ok to not have any JSON in line.
 		// All data would be parsed only from prefix (which may also describe whole line).
 		if rd.MatchPrefix == nil {
+			atomic.AddInt64(&rd.Processor.errors, 1)
+
 			if rd.OnError != nil {
 				rd.OnError(fmt.Errorf("could not find JSON in line %s", string(line)))
 			}
