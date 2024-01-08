@@ -6,8 +6,6 @@ github.com/bool64/ctxd v1.2.1 h1:hARFteq0zdn4bwfmxLhak3fXFuvtJVKDH2X29VV/2ls=
 github.com/bool64/ctxd v1.2.1/go.mod h1:ZG6QkeGVLTiUl2mxPpyHmFhDzFZCyocr9hluBV3LYuc=
 github.com/bool64/dev v0.2.33 h1:ETAcSa8H9w4talcCdSQCCnLX7PMHmuxdLcDl6TpSDj4=
 github.com/bool64/dev v0.2.33/go.mod h1:iJbh1y/HkunEPhgebWRNcs8wfGq7sjvJ6W5iabL8ACg=
-github.com/bool64/logz v1.2.0 h1:xZJTzvc7a9fZMkkcXJ+IS+i8c3G/BfeWmvdWVeJHEjw=
-github.com/bool64/logz v1.2.0/go.mod h1:+5oJBewzCDSHk8cs2lFCrwmjgoqdsbWh3m4vSNWlpHo=
 github.com/bool64/progress v0.3.3 h1:EwW8VEg81wgHy1qV37NY1jr+M0/wp9uwlpOjdPA8pgM=
 github.com/bool64/progress v0.3.3/go.mod h1:qV0hv2YPUxWDSxwW8aOWtlGcVjMECcHkPwu+vuXlxv8=
 github.com/bool64/shared v0.1.5 h1:fp3eUhBsrSjNCQPcSdQqZxxh9bBwrYiZ+zOKFkM0/2E=
@@ -84,10 +82,6 @@ github.com/swaggest/usecase v1.2.0 h1:cHVFqxIbHfyTXp02JmWXk+ZADaSa87UZP+b3qL5Nz9
 github.com/swaggest/usecase v1.2.0/go.mod h1:oc5+QoAxG3Et5Gl9lRXgEOm00l4VN9gdVQSMIa5EeLY=
 github.com/valyala/fastjson v1.6.4 h1:uAUNq9Z6ymTgGhcm0UynUAB6tlbakBrz6CQFax3BXVQ=
 github.com/valyala/fastjson v1.6.4/go.mod h1:CLCAqky6SMuOcxStkYQvblddUtoRxhYMGLrsQns1aXY=
-github.com/vearutop/dynhist-go v1.0.0 h1:SLYGcQMzmIoWnuqtF9lV8ULUBC735A56M5nL2CNth4c=
-github.com/vearutop/dynhist-go v1.0.0/go.mod h1:7Cgyu5Ww8FwdB+Y+zawRz9cQT5oXAxw294L9lQ+JI/k=
-github.com/vearutop/lograte v1.0.5 h1:H3XAhqjggYt0oyJ8AqzxHClKpJW0odmu3mYYMeLcvkQ=
-github.com/vearutop/lograte v1.0.5/go.mod h1:hN7Zo1dpCKPVEEkxPM3zKtZHpkxtOip0cSITUZKZAxg=
 github.com/yosuke-furukawa/json5 v0.1.2-0.20201207051438-cf7bb3f354ff h1:7YqG491bE4vstXRz1lD38rbSgbXnirvROz1lZiOnPO8=
 github.com/yosuke-furukawa/json5 v0.1.2-0.20201207051438-cf7bb3f354ff/go.mod h1:sw49aWDqNdRJ6DYUtIQiaA3xyj2IL9tjeNYmX2ixwcU=
 github.com/yudai/gojsondiff v1.0.0 h1:27cbfqXLVEJ1o8I6v3y9lg8Ydm53EKqHXAOMxEGlCOA=
@@ -116,7 +110,6 @@ gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 h1:uRGJdciOHaEIrze2W8Q3AKkepLTh2hOroT7a+7czfdQ=
 gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7/go.mod h1:dt/ZhP58zS4L8KSrWDmTeBkI65Dw0HsyUHuEVlX15mw=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
-gopkg.in/yaml.v2 v2.2.5/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 gopkg.in/yaml.v2 v2.4.0 h1:D8xgwECY7CYvx+Y2n4sBz93Jn9JRvxdiyyo8CTfuKaY=
 gopkg.in/yaml.v2 v2.4.0/go.mod h1:RDklbk79AGWmwhnvt/jBztapEOGDOx6ZbXqjP6csGnQ=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=

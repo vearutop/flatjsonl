@@ -5,7 +5,6 @@ go 1.21
 require (
 	github.com/bool64/ctxd v1.2.1
 	github.com/bool64/dev v0.2.33
-	github.com/bool64/logz v1.2.0
 	github.com/bool64/progress v0.3.3
 	github.com/bool64/sqluct v0.2.1
 	github.com/cespare/xxhash/v2 v2.2.0
@@ -35,8 +34,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sergi/go-diff v1.3.1 // indirect
-	github.com/vearutop/dynhist-go v1.0.0 // indirect
-	github.com/vearutop/lograte v1.0.5 // indirect
 	github.com/yosuke-furukawa/json5 v0.1.2-0.20201207051438-cf7bb3f354ff // indirect
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect

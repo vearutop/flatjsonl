@@ -3,7 +3,6 @@ package flatjsonl
 import (
 	"errors"
 	"fmt"
-	"github.com/bool64/logz"
 	"io"
 	"log"
 	"os"
@@ -54,6 +53,7 @@ type Processor struct {
 
 	totalLines int
 	totalKeys  int64
+	errors     int64
 
 	throttle int64
 }
@@ -109,17 +109,8 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 			p.Log(progress.DefaultStatus(status))
 		}
 	case 2:
-		cfg := logz.Config{
-			FilterMessage:  true,
-			MaxCardinality: 5,
-			MaxSamples:     1,
-		}
-
-		o := logz.Observer{}
-		o.Config = cfg
-
 		p.rd.OnError = func(err error) {
-			o.ObserveMessage(err.Error(), nil)
+			p.Log("error: " + err.Error())
 		}
 
 		pr.Print = func(status progress.Status) {
@@ -129,16 +120,6 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 			if m != "" {
 				s += "\n" + m
 			}
-
-			errs := ""
-
-			for _, e := range o.GetEntriesWithSamples() {
-				if len(e.Samples) > 0 {
-					errs += fmt.Sprintf("\n%d: %s", e.Count, e.Samples[0].Msg)
-				}
-			}
-
-			s += errs
 
 			p.Log(s)
 		}
@@ -224,12 +205,19 @@ func (p *Processor) PrepareKeys() error {
 	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) > 0 {
 		p.iterateIncludeKeys()
 	} else {
+		p.pr.Reset()
+
 		p.pr.AddMetrics(progress.Metric{
 			Name: "keys approx", Type: progress.Gauge,
 			Value: func() int64 { return atomic.LoadInt64(&p.totalKeys) },
 		})
 
-		p.pr.Reset()
+		p.pr.AddMetrics(progress.Metric{
+			Name: "errors", Type: progress.Gauge,
+			Value: func() int64 { return atomic.LoadInt64(&p.errors) },
+		})
+
+		atomic.StoreInt64(&p.errors, 0)
 
 		// Scan available keys.
 		if err := p.scanAvailableKeys(); err != nil {
@@ -390,8 +378,14 @@ func (p *Processor) iterateForWriters() error {
 	p.Log("flattening data...")
 	p.pr.Reset()
 
+	p.pr.AddMetrics(progress.Metric{
+		Name: "errors", Type: progress.Gauge,
+		Value: func() int64 { return atomic.LoadInt64(&p.errors) },
+	})
+
 	p.rd.MaxLines = 0
 	atomic.StoreInt64(&p.rd.Sequence, 0)
+	atomic.StoreInt64(&p.errors, 0)
 
 	if p.f.MaxLines > 0 {
 		p.rd.MaxLines = int64(p.f.MaxLines)
