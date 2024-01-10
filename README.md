@@ -139,6 +139,8 @@ Usage of flatjsonl:
         Max number of lines to process.
   -max-lines-keys int
         Max number of lines to process when scanning keys.
+  -mem-limit int
+        Heap in use soft limit, in MB. (default 1000)
   -offset-lines int
         Skip a number of first lines.
   -output string
@@ -193,6 +195,9 @@ parseTime:
 outputTimeFormat: '2006-01-02 15:04:05'
 outputTZ: UTC
 concatDelimiter: "::"
+extractValuesRegex:
+  ".foo.link": "URL"
+  ".*.nested": "JSON"
 ```
 
 Parse time is a map of original key to time pattern. See https://pkg.go.dev/time#pkg-constants for pattern rules.
@@ -240,6 +245,12 @@ columns of main table.
 This is possible with `transpose` configuration file field ([example](./flatjsonl/testdata/transpose_cfg.json)), 
 it accepts a map of key prefixes to transposed table name. During processing, values found in the prefixed keys would
 be moved as multiple rows in transposed table.
+
+### Extracting data from strings
+
+With `extractValuesRegex` config parameter, you can set a map of `regexp` matching key name to value format. 
+Currently `URL` and `JSON` are supported as formats. The string values in the matching keys would be decoded 
+and exposed as JSON.
 
 ## Examples
 

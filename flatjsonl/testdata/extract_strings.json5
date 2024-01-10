@@ -1,0 +1,16 @@
+{
+  "includeKeysRegex": [
+    ".foo.link.URL.*.*.*",
+    ".foo.link.URL.*.*",
+    ".foo.link.URL.*",
+    ".foo.nested.JSON.quux",
+  ],
+  "replaceKeysRegex": {
+    ".foo.link.URL.*.*.*": "request_${1}_${2}_${3}|to_snake_case",
+    ".foo.nested.JSON.*": "nested_${1}"
+  },
+  "extractValuesRegex": {
+    ".*.link": "URL",
+    ".*.nested": "JSON"
+  }
+}

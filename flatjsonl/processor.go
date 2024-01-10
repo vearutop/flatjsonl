@@ -18,6 +18,8 @@ import (
 	"github.com/bool64/progress"
 	xsync "github.com/puzpuzpuz/xsync/v3"
 	"github.com/swaggest/assertjson"
+	"github.com/swaggest/assertjson/json5"
+	"gopkg.in/yaml.v3"
 )
 
 // Processor reads JSONL files with Reader and passes flat rows to Writer.
@@ -36,6 +38,7 @@ type Processor struct {
 	includeKeys  map[string]int
 	includeRegex []*regexp.Regexp
 	replaceRegex map[*regexp.Regexp]string
+	extractRegex map[*regexp.Regexp]Extractor
 	constVals    map[int]string
 
 	replaceKeys  map[string]string
@@ -58,8 +61,30 @@ type Processor struct {
 	throttle int64
 }
 
+// New creates Processor from config.
+func New(f Flags) (*Processor, error) {
+	var cfg Config
+
+	if f.Config != "" {
+		b, err := os.ReadFile(f.Config)
+		if err != nil {
+			return nil, fmt.Errorf("read config file: %w", err)
+		}
+
+		yerr := yaml.Unmarshal(b, &cfg)
+		if yerr != nil {
+			err = json5.Unmarshal(b, &cfg)
+			if err != nil {
+				return nil, fmt.Errorf("decode config file: json5: %w, yaml: %s", err, yerr) //nolint
+			}
+		}
+	}
+
+	return NewProcessor(f, cfg, f.Inputs()...)
+}
+
 // NewProcessor creates an instance of Processor.
-func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: funlen // Yeah, that's what she said.
+func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //nolint: funlen // Yeah, that's what she said.
 	pr := &progress.Progress{
 		Interval: f.ProgressInterval,
 	}
@@ -130,44 +155,38 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor { //nolint: f
 	}
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
-	starRepl := strings.NewReplacer(
-		".", "\\.",
-		"[", "\\[",
-		"]", "\\]",
-		"{", "\\{",
-		"}", "\\}",
-		"*", "([^\\d][^.]+)",
-	)
+	p.extractRegex = map[*regexp.Regexp]Extractor{}
 
 	for _, reg := range p.cfg.IncludeKeysRegex {
-		if strings.Contains(reg, "*") {
-			reg = "^" + starRepl.Replace(reg) + "$"
-		}
-
-		r, err := regexp.Compile(reg)
+		r, err := regex(reg)
 		if err != nil {
-			p.Log(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
+			return nil, fmt.Errorf("include keys: %w", err)
 		}
 
 		p.includeRegex = append(p.includeRegex, r)
 	}
 
 	for reg, rep := range p.cfg.ReplaceKeysRegex {
-		if strings.Contains(reg, "*") {
-			reg = "^" + starRepl.Replace(reg) + "$"
-		}
-
-		r, err := regexp.Compile(reg)
+		r, err := regex(reg)
 		if err != nil {
-			p.Log(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
+			return nil, fmt.Errorf("include keys: %w", err)
 		}
 
 		p.replaceRegex[r] = rep
 	}
 
+	for reg, x := range p.cfg.ExtractValuesRegex {
+		r, err := regex(reg)
+		if err != nil {
+			return nil, fmt.Errorf("include keys: %w", err)
+		}
+
+		p.extractRegex[r] = x.Extractor()
+	}
+
 	go p.watchMemUsage()
 
-	return p
+	return p, nil
 }
 
 // Process dispatches data from Reader to Writer.
@@ -539,40 +558,52 @@ type writeIterator struct {
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.ExtractStrings = wi.p.f.ExtractStrings
-	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
+	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) Extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
 
-		wi.setValue(seq, Value{
+		l, _ := wi.pending.Load(seq)
+		pk := l.h.hashBytes(flatPath)
+		k, _ := wi.p.flKeys.Load(pk)
+
+		wi.setValue(Value{
 			Type:   TypeString,
 			String: string(value),
-		}, flatPath)
+		}, pk, l)
+
+		return k.extractor
 	}
 	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
-		wi.setValue(seq, Value{
+		l, _ := wi.pending.Load(seq)
+		pk := l.h.hashBytes(flatPath)
+
+		wi.setValue(Value{
 			Type:      TypeFloat,
 			Number:    value,
 			RawNumber: string(raw),
-		}, flatPath)
+		}, pk, l)
 	}
 	w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
-		wi.setValue(seq, Value{
+		l, _ := wi.pending.Load(seq)
+		pk := l.h.hashBytes(flatPath)
+
+		wi.setValue(Value{
 			Type: TypeBool,
 			Bool: value,
-		}, flatPath)
+		}, pk, l)
 	}
 	w.FnNull = func(seq int64, flatPath []byte, path []string) {
-		wi.setValue(seq, Value{
+		l, _ := wi.pending.Load(seq)
+		pk := l.h.hashBytes(flatPath)
+
+		wi.setValue(Value{
 			Type: TypeNull,
-		}, flatPath)
+		}, pk, l)
 	}
 }
 
-func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
-	l, _ := wi.pending.Load(seq)
-	pk := l.h.hashBytes(flatPath)
-
+func (wi *writeIterator) setValue(v Value, pk uint64, l *lineBuf) {
 	if wi.singleKeyHash != 0 && pk != wi.singleKeyHash {
 		return
 	}

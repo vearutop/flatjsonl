@@ -23,6 +23,7 @@ type flKey struct {
 	transposeDst     string
 	transposeKey     intOrString
 	transposeTrimmed string
+	extractor        Extractor
 }
 
 type intOrString struct {
@@ -78,6 +79,14 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 		}
 	}
 
+	for r, x := range p.extractRegex {
+		if r.MatchString(key) {
+			k.extractor = x
+
+			break
+		}
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -93,7 +102,7 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	return k
 }
 
-func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) {
+func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) Extractor {
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
@@ -118,6 +127,8 @@ func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) {
 
 		p.flKeys.Store(pk, k)
 	}
+
+	return k.extractor
 }
 
 func scanTransposedKey(dst string, tk string, k *flKey) {
@@ -214,8 +225,8 @@ func (p *Processor) scanAvailableKeys() error {
 
 				w.WantPath = true
 
-				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeString, len(value) == 0)
+				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) Extractor {
+					return p.scanKey(h.hashBytes(flatPath), path, TypeString, len(value) == 0)
 				}
 				w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, _ []byte) {
 					isInt := float64(int(value)) == value
