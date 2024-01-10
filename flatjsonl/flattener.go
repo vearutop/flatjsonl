@@ -1,6 +1,7 @@
 package flatjsonl
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,7 +19,7 @@ var pl fastjson.ParserPool
 // FastWalker walks JSON with fastjson.
 type FastWalker struct {
 	FnNumber func(seq int64, flatPath []byte, path []string, value float64, raw []byte)
-	FnString func(seq int64, flatPath []byte, path []string, value []byte)
+	FnString func(seq int64, flatPath []byte, path []string, value []byte) Extractor
 	FnBool   func(seq int64, flatPath []byte, path []string, value bool)
 	FnNull   func(seq int64, flatPath []byte, path []string)
 
@@ -112,10 +113,34 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 		panic(fmt.Sprintf("BUG: failed to use JSON string: %v", err))
 	}
 
-	fv.FnString(seq, flatPath, path, s)
+	x := fv.FnString(seq, flatPath, path, s)
 
-	// Check if string has nested JSON.
-	if fv.ExtractStrings && len(s) > 2 && (s[0] == '{' || s[0] == '[') {
+	if x != nil { //nolint:nestif
+		xs, name, err := x(s)
+		if err == nil {
+			p := pl.Get()
+			defer pl.Put(p)
+
+			if v, err := p.ParseBytes(xs); err == nil {
+				flatPath = append(flatPath, []byte("."+name)...)
+
+				if fv.WantPath {
+					fv.WalkFastJSON(seq, flatPath, append(path, string(name)), v)
+				} else {
+					fv.WalkFastJSON(seq, flatPath, nil, v)
+				}
+
+				return
+			}
+		}
+	}
+
+	if !fv.ExtractStrings || len(s) <= 2 {
+		return
+	}
+
+	// Check if string has nested JSON or URL.
+	if s[0] == '{' || s[0] == '[' {
 		p := pl.Get()
 		defer pl.Put(p)
 
@@ -130,6 +155,27 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 			}
 
 			return
+		}
+	}
+
+	if bytes.Contains(s, []byte("://")) { //nolint:nestif
+		us, _, err := DecodeURL(s)
+		if err == nil {
+			p := pl.Get()
+			defer pl.Put(p)
+
+			v, err := p.ParseBytes(us)
+			if err == nil {
+				flatPath = append(flatPath, []byte(".URL")...)
+
+				if fv.WantPath {
+					fv.WalkFastJSON(seq, flatPath, append(path, "URL"), v)
+				} else {
+					fv.WalkFastJSON(seq, flatPath, nil, v)
+				}
+
+				return
+			}
 		}
 	}
 }

@@ -53,7 +53,9 @@ func BenchmarkNewProcessor(b *testing.B) {
 			require.NoError(b, json.Unmarshal(cj, &cfg))
 		}
 
-		proc := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{Reader: lr})
+		proc, err := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{Reader: lr})
+		require.NoError(b, err)
+
 		proc.Log = func(args ...any) {}
 
 		b.Run(name+"_scanKeys", func(b *testing.B) {
@@ -100,7 +102,8 @@ func Test_loopReader_scan(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{Reader: lr})
+	proc, err := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{Reader: lr})
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 }

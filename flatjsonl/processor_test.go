@@ -44,7 +44,8 @@ func TestNewProcessor(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -79,7 +80,8 @@ func TestNewProcessor_exclude(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -121,7 +123,8 @@ func TestNewProcessor_concurrency(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -143,7 +146,8 @@ func TestNewProcessor_prefixNoJSON(t *testing.T) {
 	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+) (\w+): ([\w\d]+), ([\w\d]+) ([\w\d]+)`
 	f.PrepareOutput()
 
-	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{}, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, flatjsonl.Config{}, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -165,13 +169,14 @@ func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
 	f.Output = "testdata/coalesce.csv"
 	f.PrepareOutput()
 
-	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{
+	proc, err := flatjsonl.NewProcessor(f, flatjsonl.Config{
 		ReplaceKeys: map[string]string{
 			".a": "shared",
 			".b": "shared",
 			".c": "shared",
 		},
 	}, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -195,7 +200,7 @@ func TestNewProcessor_concatMultipleCols(t *testing.T) {
 
 	delim := "::"
 
-	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{
+	proc, err := flatjsonl.NewProcessor(f, flatjsonl.Config{
 		ConcatDelimiter: &delim,
 		ReplaceKeys: map[string]string{
 			".a": "shared",
@@ -203,6 +208,7 @@ func TestNewProcessor_concatMultipleCols(t *testing.T) {
 			".c": "shared",
 		},
 	}, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -224,7 +230,7 @@ func TestNewProcessor_constVal(t *testing.T) {
 	f.Output = "testdata/constVal.csv"
 	f.PrepareOutput()
 
-	proc := flatjsonl.NewProcessor(f, flatjsonl.Config{
+	proc, err := flatjsonl.NewProcessor(f, flatjsonl.Config{
 		IncludeKeys: []string{
 			".a",
 			".b",
@@ -239,6 +245,7 @@ func TestNewProcessor_constVal(t *testing.T) {
 			"const:bar": "bar_name",
 		},
 	}, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -277,7 +284,8 @@ func TestNewProcessor_rawWriter(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -322,7 +330,8 @@ func TestNewProcessor_sqlite(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 }
@@ -348,7 +357,8 @@ func TestNewProcessor_transpose(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -450,7 +460,8 @@ func TestNewProcessor_transpose_sqlite(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(cj, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 }
@@ -477,7 +488,8 @@ func TestNewProcessor_transpose_pg_dump(t *testing.T) {
 		".abaz.a": "abaz_a",
 	}
 
-	proc := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
 
@@ -508,10 +520,119 @@ func TestNewProcessor_showKeysInfo(t *testing.T) {
 
 	require.NoError(t, yaml.Unmarshal(c, &cfg))
 
-	proc := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{FileName: f.Input})
+	proc, err := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{FileName: f.Input})
+	require.NoError(t, err)
+
 	out := bytes.NewBuffer(nil)
 	proc.Stdout = out
 	require.NoError(t, proc.Process())
 
 	assertFileEquals(t, "testdata/large_out.txt", out.String())
+}
+
+func TestNewProcessor_extract(t *testing.T) {
+	type Foo struct {
+		Link   string `json:"link"`
+		Nested string `json:"nested"`
+	}
+
+	type Bar struct {
+		Foo Foo `json:"foo"`
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	for i := 0; i < 5; i++ {
+		b := Bar{}
+		b.Foo.Link = "https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=" + strconv.Itoa(i) + "#piu"
+		b.Foo.Nested = `{"quux":` + strconv.Itoa(i+123) + `}`
+		j, err := json.Marshal(b)
+		require.NoError(t, err)
+		buf.Write(j)
+		buf.WriteString("\n")
+	}
+
+	if os.Getenv("REFRESH_FIXTURE") == "1" {
+		require.NoError(t, os.WriteFile("testdata/extract_strings.jsonl", buf.Bytes(), 0o600))
+	}
+
+	f := flatjsonl.Flags{}
+	f.Config = "testdata/extract_strings.json5"
+	f.Input = "testdata/extract_strings.jsonl"
+	f.CSV = "testdata/extract_strings_cfg.csv"
+	f.ShowKeysInfo = true
+
+	proc, err := flatjsonl.New(f)
+	require.NoError(t, err)
+
+	out := bytes.NewBuffer(nil)
+	proc.Stdout = out
+	require.NoError(t, proc.Process())
+
+	assertFileEquals(t, f.CSV, `.foo.link.URL.scheme,.foo.link.URL.user,.foo.link.URL.pass,.foo.link.URL.host,.foo.link.URL.port,.foo.link.URL.path.[0],.foo.link.URL.path.[1],request_query_baz_0,request_query_baz_1,request_query_i_0,request_query_quux_0,.foo.link.URL.fragment,nested_quux
+https,user,pass,example.com,1234,foo,bar,1,2,0,abc,piu,123
+https,user,pass,example.com,1234,foo,bar,1,2,1,abc,piu,124
+https,user,pass,example.com,1234,foo,bar,1,2,2,abc,piu,125
+https,user,pass,example.com,1234,foo,bar,1,2,3,abc,piu,126
+https,user,pass,example.com,1234,foo,bar,1,2,4,abc,piu,127
+`)
+
+	assert.Equal(t, `keys info:
+1: .foo.link.URL.scheme, TYPE string, INCLUDED
+2: .foo.link.URL.user, TYPE string, INCLUDED
+3: .foo.link.URL.pass, TYPE string, INCLUDED
+4: .foo.link.URL.host, TYPE string, INCLUDED
+5: .foo.link.URL.port, TYPE string, INCLUDED
+6: .foo.link.URL.path.[0], TYPE string, INCLUDED
+7: .foo.link.URL.path.[1], TYPE string, INCLUDED
+8: .foo.link.URL.query.baz.[0], REPLACED WITH request_query_baz_0, TYPE string, INCLUDED
+9: .foo.link.URL.query.baz.[1], REPLACED WITH request_query_baz_1, TYPE string, INCLUDED
+10: .foo.link.URL.query.i.[0], REPLACED WITH request_query_i_0, TYPE string, INCLUDED
+11: .foo.link.URL.query.quux.[0], REPLACED WITH request_query_quux_0, TYPE string, INCLUDED
+12: .foo.link.URL.fragment, TYPE string, INCLUDED
+13: .foo.nested.JSON.quux, REPLACED WITH nested_quux, TYPE int, INCLUDED
+14: .foo.link, SKIPPED
+15: .foo.nested, SKIPPED
+`, out.String())
+}
+
+func TestNewProcessor_extractStrings(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.Input = "testdata/extract_strings.jsonl"
+	f.CSV = "testdata/extract_strings.csv"
+	f.ExtractStrings = true
+	f.ShowKeysInfo = true
+
+	proc, err := flatjsonl.New(f)
+	require.NoError(t, err)
+
+	out := bytes.NewBuffer(nil)
+	proc.Stdout = out
+	require.NoError(t, proc.Process())
+
+	assertFileEquals(t, f.CSV, `.foo.link,.foo.link.URL.scheme,.foo.link.URL.user,.foo.link.URL.pass,.foo.link.URL.host,.foo.link.URL.port,.foo.link.URL.path.[0],.foo.link.URL.path.[1],.foo.link.URL.query.baz.[0],.foo.link.URL.query.baz.[1],.foo.link.URL.query.i.[0],.foo.link.URL.query.quux.[0],.foo.link.URL.fragment,.foo.nested,.foo.nested.JSON.quux
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=0#piu,https,user,pass,example.com,1234,foo,bar,1,2,0,abc,piu,"{""quux"":123}",123
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=1#piu,https,user,pass,example.com,1234,foo,bar,1,2,1,abc,piu,"{""quux"":124}",124
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=2#piu,https,user,pass,example.com,1234,foo,bar,1,2,2,abc,piu,"{""quux"":125}",125
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=3#piu,https,user,pass,example.com,1234,foo,bar,1,2,3,abc,piu,"{""quux"":126}",126
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=4#piu,https,user,pass,example.com,1234,foo,bar,1,2,4,abc,piu,"{""quux"":127}",127
+`)
+
+	assert.Equal(t, `keys info:
+1: .foo.link, TYPE string
+2: .foo.link.URL.scheme, TYPE string
+3: .foo.link.URL.user, TYPE string
+4: .foo.link.URL.pass, TYPE string
+5: .foo.link.URL.host, TYPE string
+6: .foo.link.URL.port, TYPE string
+7: .foo.link.URL.path.[0], TYPE string
+8: .foo.link.URL.path.[1], TYPE string
+9: .foo.link.URL.query.baz.[0], TYPE string
+10: .foo.link.URL.query.baz.[1], TYPE string
+11: .foo.link.URL.query.i.[0], TYPE string
+12: .foo.link.URL.query.quux.[0], TYPE string
+13: .foo.link.URL.fragment, TYPE string
+14: .foo.nested, TYPE string
+15: .foo.nested.JSON.quux, TYPE int
+`, out.String())
 }
