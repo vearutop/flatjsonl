@@ -90,6 +90,11 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	existing, ok := p.flKeys.Load(pk)
+	if ok {
+		return existing
+	}
+
 	if _, ok := p.canonicalKeys[k.canonical]; !ok {
 		p.flKeysList = append(p.flKeysList, k.original)
 		p.keyHierarchy.Add(path)
@@ -317,8 +322,7 @@ func (p *Processor) iterateIncludeKeys() {
 			continue
 		}
 
-		p.includeKeys[k] = i
-		i++
+		p.addIncludeKey(k, &i)
 	}
 
 	p.flKeysInit()
@@ -343,27 +347,32 @@ func (p *Processor) iterateIncludeKeys() {
 		if len(p.includeRegex) > 0 {
 			for _, r := range p.includeRegex {
 				if r.MatchString(k) {
-					p.includeKeys[k] = i
 					canonicalIncludes[k] = true
-					i++
+
+					p.addIncludeKey(k, &i)
 
 					break
 				}
 			}
 		} else if len(p.cfg.IncludeKeys) == 0 {
 			if !p.f.SkipZeroCols {
-				p.includeKeys[k] = i
 				canonicalIncludes[k] = true
-
-				i++
+				p.addIncludeKey(k, &i)
 			} else if !p.canonicalKeys[ck].isZero {
-				p.includeKeys[k] = i
 				canonicalIncludes[k] = true
-
-				i++
+				p.addIncludeKey(k, &i)
 			}
 		}
 	}
+}
+
+func (p *Processor) addIncludeKey(k string, i *int) {
+	if _, found := p.includeKeys[k]; found {
+		return
+	}
+
+	p.includeKeys[k] = *i
+	*i++
 }
 
 func (p *Processor) prepareKeys() {
@@ -491,7 +500,7 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 
 	for {
 		if len(snk) == 0 {
-			panic("BUG: empty snk for " + origKey)
+			panic("BUG: empty snk for '" + origKey + "'")
 		}
 
 		if stored, ok := p.replaceByKey[snk]; (!ok || origKey == stored) && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
