@@ -18,6 +18,12 @@ var pl fastjson.ParserPool
 
 // FastWalker walks JSON with fastjson.
 type FastWalker struct {
+	// These callbacks are invoked during JSON traversal.
+	// Common arguments:
+	// * seq is a sequence number of parent line,
+	// * flatPath is a dot-separated path to the current element,
+	// * parserPool is a length of parent prefix in flatPath,
+	// * path holds a list of segments, it is nil if WantPath is false.
 	FnNumber func(seq int64, flatPath []byte, path []string, value float64, raw []byte)
 	FnString func(seq int64, flatPath []byte, path []string, value []byte) Extractor
 	FnBool   func(seq int64, flatPath []byte, path []string, value bool)

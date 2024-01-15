@@ -90,6 +90,11 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	existing, ok := p.flKeys.Load(pk)
+	if ok {
+		return existing
+	}
+
 	if _, ok := p.canonicalKeys[k.canonical]; !ok {
 		p.flKeysList = append(p.flKeysList, k.original)
 		p.keyHierarchy.Add(path)
@@ -491,7 +496,7 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 
 	for {
 		if len(snk) == 0 {
-			panic("BUG: empty snk for " + origKey)
+			panic("BUG: empty snk for '" + origKey + "'")
 		}
 
 		if stored, ok := p.replaceByKey[snk]; (!ok || origKey == stored) && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
