@@ -38,7 +38,7 @@ type Processor struct {
 	includeKeys  map[string]int
 	includeRegex []*regexp.Regexp
 	replaceRegex map[*regexp.Regexp]string
-	extractRegex map[*regexp.Regexp]Extractor
+	extractRegex map[*regexp.Regexp]extractor
 	constVals    map[int]string
 
 	replaceKeys  map[string]string
@@ -150,12 +150,16 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		}
 	}
 
+	if cfg.MatchLinePrefix != "" && f.MatchLinePrefix == "" {
+		f.MatchLinePrefix = cfg.MatchLinePrefix
+	}
+
 	if f.MatchLinePrefix != "" {
 		p.rd.MatchPrefix = regexp.MustCompile(f.MatchLinePrefix)
 	}
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
-	p.extractRegex = map[*regexp.Regexp]Extractor{}
+	p.extractRegex = map[*regexp.Regexp]extractor{}
 
 	for _, reg := range p.cfg.IncludeKeysRegex {
 		r, err := regex(reg)
@@ -323,6 +327,10 @@ func (p *Processor) showKeysInfo() {
 
 		if k.transposeDst != "" {
 			line += ", TRANSPOSED TO " + k.transposeDst
+		}
+
+		if k.extractor != nil {
+			line += ", EXTRACTED " + string(k.extractor.name())
 		}
 
 		_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", line)
@@ -558,7 +566,7 @@ type writeIterator struct {
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.ExtractStrings = wi.p.f.ExtractStrings
-	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) Extractor {
+	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}

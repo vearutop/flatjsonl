@@ -569,12 +569,12 @@ func TestNewProcessor_extract(t *testing.T) {
 	proc.Stdout = out
 	require.NoError(t, proc.Process())
 
-	assertFileEquals(t, f.CSV, `.foo.link.URL.scheme,.foo.link.URL.user,.foo.link.URL.pass,.foo.link.URL.host,.foo.link.URL.port,.foo.link.URL.path.[0],.foo.link.URL.path.[1],request_query_baz_0,request_query_baz_1,request_query_i_0,request_query_quux_0,.foo.link.URL.fragment,nested_quux
-https,user,pass,example.com,1234,foo,bar,1,2,0,abc,piu,123
-https,user,pass,example.com,1234,foo,bar,1,2,1,abc,piu,124
-https,user,pass,example.com,1234,foo,bar,1,2,2,abc,piu,125
-https,user,pass,example.com,1234,foo,bar,1,2,3,abc,piu,126
-https,user,pass,example.com,1234,foo,bar,1,2,4,abc,piu,127
+	assertFileEquals(t, f.CSV, `.foo.link.URL.scheme,.foo.link.URL.user,.foo.link.URL.pass,.foo.link.URL.host,.foo.link.URL.port,request_query_baz_0,request_query_baz_1,request_query_i_0,request_query_quux_0,.foo.link.URL.path.[0],.foo.link.URL.path.[1],.foo.link.URL.fragment,nested_quux
+https,user,pass,example.com,1234,1,2,0,abc,foo,bar,piu,123
+https,user,pass,example.com,1234,1,2,1,abc,foo,bar,piu,124
+https,user,pass,example.com,1234,1,2,2,abc,foo,bar,piu,125
+https,user,pass,example.com,1234,1,2,3,abc,foo,bar,piu,126
+https,user,pass,example.com,1234,1,2,4,abc,foo,bar,piu,127
 `)
 
 	assert.Equal(t, `keys info:
@@ -583,17 +583,17 @@ https,user,pass,example.com,1234,foo,bar,1,2,4,abc,piu,127
 3: .foo.link.URL.pass, TYPE string, INCLUDED
 4: .foo.link.URL.host, TYPE string, INCLUDED
 5: .foo.link.URL.port, TYPE string, INCLUDED
-6: .foo.link.URL.path.[0], TYPE string, INCLUDED
-7: .foo.link.URL.path.[1], TYPE string, INCLUDED
-8: .foo.link.URL.query.baz.[0], REPLACED WITH request_query_baz_0, TYPE string, INCLUDED
-9: .foo.link.URL.query.baz.[1], REPLACED WITH request_query_baz_1, TYPE string, INCLUDED
-10: .foo.link.URL.query.i.[0], REPLACED WITH request_query_i_0, TYPE string, INCLUDED
-11: .foo.link.URL.query.quux.[0], REPLACED WITH request_query_quux_0, TYPE string, INCLUDED
+6: .foo.link.URL.query.baz.[0], REPLACED WITH request_query_baz_0, TYPE string, INCLUDED
+7: .foo.link.URL.query.baz.[1], REPLACED WITH request_query_baz_1, TYPE string, INCLUDED
+8: .foo.link.URL.query.i.[0], REPLACED WITH request_query_i_0, TYPE string, INCLUDED
+9: .foo.link.URL.query.quux.[0], REPLACED WITH request_query_quux_0, TYPE string, INCLUDED
+10: .foo.link.URL.path.[0], TYPE string, INCLUDED
+11: .foo.link.URL.path.[1], TYPE string, INCLUDED
 12: .foo.link.URL.fragment, TYPE string, INCLUDED
 13: .foo.nested.JSON.quux, REPLACED WITH nested_quux, TYPE int, INCLUDED
 14: .foo.link, SKIPPED
 15: .foo.nested, SKIPPED
-`, out.String())
+`, out.String(), out.String())
 }
 
 func TestNewProcessor_extractStrings(t *testing.T) {
@@ -610,12 +610,12 @@ func TestNewProcessor_extractStrings(t *testing.T) {
 	proc.Stdout = out
 	require.NoError(t, proc.Process())
 
-	assertFileEquals(t, f.CSV, `.foo.link,.foo.link.URL.scheme,.foo.link.URL.user,.foo.link.URL.pass,.foo.link.URL.host,.foo.link.URL.port,.foo.link.URL.path.[0],.foo.link.URL.path.[1],.foo.link.URL.query.baz.[0],.foo.link.URL.query.baz.[1],.foo.link.URL.query.i.[0],.foo.link.URL.query.quux.[0],.foo.link.URL.fragment,.foo.nested,.foo.nested.JSON.quux
-https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=0#piu,https,user,pass,example.com,1234,foo,bar,1,2,0,abc,piu,"{""quux"":123}",123
-https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=1#piu,https,user,pass,example.com,1234,foo,bar,1,2,1,abc,piu,"{""quux"":124}",124
-https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=2#piu,https,user,pass,example.com,1234,foo,bar,1,2,2,abc,piu,"{""quux"":125}",125
-https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=3#piu,https,user,pass,example.com,1234,foo,bar,1,2,3,abc,piu,"{""quux"":126}",126
-https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=4#piu,https,user,pass,example.com,1234,foo,bar,1,2,4,abc,piu,"{""quux"":127}",127
+	assertFileEquals(t, f.CSV, `.foo.link,.foo.link.URL.scheme,.foo.link.URL.user,.foo.link.URL.pass,.foo.link.URL.host,.foo.link.URL.port,.foo.link.URL.query.baz.[0],.foo.link.URL.query.baz.[1],.foo.link.URL.query.i.[0],.foo.link.URL.query.quux.[0],.foo.link.URL.path.[0],.foo.link.URL.path.[1],.foo.link.URL.fragment,.foo.nested,.foo.nested.JSON.quux
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=0#piu,https,user,pass,example.com,1234,1,2,0,abc,foo,bar,piu,"{""quux"":123}",123
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=1#piu,https,user,pass,example.com,1234,1,2,1,abc,foo,bar,piu,"{""quux"":124}",124
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=2#piu,https,user,pass,example.com,1234,1,2,2,abc,foo,bar,piu,"{""quux"":125}",125
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=3#piu,https,user,pass,example.com,1234,1,2,3,abc,foo,bar,piu,"{""quux"":126}",126
+https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=4#piu,https,user,pass,example.com,1234,1,2,4,abc,foo,bar,piu,"{""quux"":127}",127
 `)
 
 	assert.Equal(t, `keys info:
@@ -625,14 +625,14 @@ https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=4#piu,https,u
 4: .foo.link.URL.pass, TYPE string
 5: .foo.link.URL.host, TYPE string
 6: .foo.link.URL.port, TYPE string
-7: .foo.link.URL.path.[0], TYPE string
-8: .foo.link.URL.path.[1], TYPE string
-9: .foo.link.URL.query.baz.[0], TYPE string
-10: .foo.link.URL.query.baz.[1], TYPE string
-11: .foo.link.URL.query.i.[0], TYPE string
-12: .foo.link.URL.query.quux.[0], TYPE string
+7: .foo.link.URL.query.baz.[0], TYPE string
+8: .foo.link.URL.query.baz.[1], TYPE string
+9: .foo.link.URL.query.i.[0], TYPE string
+10: .foo.link.URL.query.quux.[0], TYPE string
+11: .foo.link.URL.path.[0], TYPE string
+12: .foo.link.URL.path.[1], TYPE string
 13: .foo.link.URL.fragment, TYPE string
 14: .foo.nested, TYPE string
 15: .foo.nested.JSON.quux, TYPE int
-`, out.String())
+`, out.String(), out.String())
 }

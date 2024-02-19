@@ -25,7 +25,7 @@ type FastWalker struct {
 	// * parserPool is a length of parent prefix in flatPath,
 	// * path holds a list of segments, it is nil if WantPath is false.
 	FnNumber func(seq int64, flatPath []byte, path []string, value float64, raw []byte)
-	FnString func(seq int64, flatPath []byte, path []string, value []byte) Extractor
+	FnString func(seq int64, flatPath []byte, path []string, value []byte) extractor
 	FnBool   func(seq int64, flatPath []byte, path []string, value bool)
 	FnNull   func(seq int64, flatPath []byte, path []string)
 
@@ -122,7 +122,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 	x := fv.FnString(seq, flatPath, path, s)
 
 	if x != nil { //nolint:nestif
-		xs, name, err := x(s)
+		xs, name, err := x.extract(s)
 		if err == nil {
 			p := pl.Get()
 			defer pl.Put(p)
@@ -165,7 +165,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 	}
 
 	if bytes.Contains(s, []byte("://")) { //nolint:nestif
-		us, _, err := DecodeURL(s)
+		us, _, err := (urlExtractor{}).extract(s)
 		if err == nil {
 			p := pl.Get()
 			defer pl.Put(p)

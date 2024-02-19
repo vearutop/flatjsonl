@@ -334,7 +334,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	if err != nil {
 		if rd.OnError != nil {
 			atomic.AddInt64(&rd.Processor.errors, 1)
-			rd.OnError(fmt.Errorf("malformed JSON at line %d: %w", seq, err))
+			rd.OnError(fmt.Errorf("malformed JSON at line %d: %w: %s", seq, err, string(line)))
 		}
 	} else {
 		if rd.singleKeyPath != nil {
@@ -353,7 +353,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	return nil
 }
 
-func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, path []string, value []byte) Extractor) []byte {
+func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, path []string, value []byte) extractor) []byte {
 	pos := bytes.Index(line, []byte("{"))
 
 	if pos == -1 {

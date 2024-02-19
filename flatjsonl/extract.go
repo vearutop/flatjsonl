@@ -1,35 +1,47 @@
 package flatjsonl
 
-// Extract is the name of extractable format.
-type Extract string
+// extract is the name of extractable format.
+type extract string
 
 // Types of extractable content.
 const (
-	ExtractURL  = Extract("URL")
-	ExtractJSON = Extract("JSON")
+	extractURL  = extract("URL")
+	extractJSON = extract("JSON")
 )
 
 // Enum describes the type.
-func (Extract) Enum() []any {
+func (extract) Enum() []any {
 	return []any{
-		ExtractURL,
-		ExtractJSON,
+		extractURL,
+		extractJSON,
 	}
 }
 
 // Extractor is a factory.
-func (e Extract) Extractor() Extractor {
+func (e extract) Extractor() extractor {
 	switch e {
-	case ExtractURL:
-		return DecodeURL
-	case ExtractJSON:
-		return func(s []byte) ([]byte, Extract, error) {
-			return s, ExtractJSON, nil
-		}
+	case extractURL:
+		return urlExtractor{}
+	case extractJSON:
+		return jsonExtractor{}
 	}
 
 	return nil
 }
 
-// Extractor defines extractor function.
-type Extractor func(s []byte) (json []byte, name Extract, err error)
+// extractor defines extractor function.
+type extractor interface {
+	name() extract
+	extract(s []byte) (json []byte, name extract, err error)
+}
+
+type jsonExtractor struct{}
+
+func (jsonExtractor) extract(s []byte) (json []byte, name extract, err error) {
+	return s, extractJSON, nil
+}
+
+// Name returns format name.
+func (jsonExtractor) name() extract {
+	return extractJSON
+}

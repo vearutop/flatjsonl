@@ -23,7 +23,7 @@ type flKey struct {
 	transposeDst     string
 	transposeKey     intOrString
 	transposeTrimmed string
-	extractor        Extractor
+	extractor        extractor
 }
 
 type intOrString struct {
@@ -107,7 +107,7 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	return k
 }
 
-func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) Extractor {
+func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) extractor {
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
@@ -230,7 +230,7 @@ func (p *Processor) scanAvailableKeys() error {
 
 				w.WantPath = true
 
-				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) Extractor {
+				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) extractor {
 					return p.scanKey(h.hashBytes(flatPath), path, TypeString, len(value) == 0)
 				}
 				w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, _ []byte) {
@@ -270,21 +270,32 @@ func (p *Processor) flKeysInit() {
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
 
-		for k := range p.includeKeys {
-			if strings.HasPrefix(k, "const:") {
+		for key := range p.includeKeys {
+			if strings.HasPrefix(key, "const:") {
 				continue
 			}
 
-			path := strings.Split(strings.TrimPrefix(k, "."), ".")
-			flatPath := []byte(k)
+			path := strings.Split(strings.TrimPrefix(key, "."), ".")
+			flatPath := []byte(key)
 			pk := h.hashBytes(flatPath)
-			p.flKeys.Store(pk, flKey{
+
+			k := flKey{
 				path:      path,
 				isZero:    false,
 				t:         TypeString,
-				original:  k,
-				canonical: p.ck(k),
-			})
+				original:  key,
+				canonical: p.ck(key),
+			}
+
+			for r, x := range p.extractRegex {
+				if r.MatchString(key) {
+					k.extractor = x
+
+					break
+				}
+			}
+
+			p.flKeys.Store(pk, k)
 		}
 	}
 
