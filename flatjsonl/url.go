@@ -2,7 +2,6 @@ package flatjsonl
 
 import (
 	"encoding/json"
-	"errors"
 	"net/url"
 	"strings"
 )
@@ -18,8 +17,6 @@ type URL struct {
 	Query    url.Values `json:"query,omitempty"`
 	Fragment string     `json:"fragment,omitempty"`
 }
-
-var errInvalidURL = errors.New("invalid URL")
 
 func decodeURL(s string) (URL, error) {
 	u, err := url.Parse(s)
