@@ -40,12 +40,12 @@ func decodeURL(s string) (URL, error) {
 type urlExtractor struct{}
 
 // Name returns format name.
-func (urlExtractor) Name() Extract {
-	return ExtractURL
+func (urlExtractor) name() extract {
+	return extractURL
 }
 
-// Extract implements an Extractor.
-func (urlExtractor) Extract(s []byte) ([]byte, Extract, error) {
+// extract implements an extractor.
+func (urlExtractor) extract(s []byte) ([]byte, extract, error) {
 	uv, err := decodeURL(string(s))
 	if err != nil {
 		return nil, "", err
@@ -53,5 +53,5 @@ func (urlExtractor) Extract(s []byte) ([]byte, Extract, error) {
 
 	j, err := json.Marshal(uv)
 
-	return j, ExtractURL, err
+	return j, extractURL, err
 }

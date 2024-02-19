@@ -13,5 +13,5 @@ type Config struct {
 	OutputTimezone     string             `json:"outputTZ" yaml:"outputTZ" example:"UTC"`
 	ConcatDelimiter    *string            `json:"concatDelimiter" yaml:"concatDelimiter" example:"," description:"In case multiple keys are replaced into one, their values would be concatenated."`
 	Transpose          map[string]string  `json:"transpose" yaml:"transpose" description:"Map of key prefixes to transposed table names."`
-	ExtractValuesRegex map[string]Extract `json:"extractValuesRegex" yaml:"extractValuesRegex" description:"Map of key regex to extraction format, values can be 'URL', 'JSON'."`
+	ExtractValuesRegex map[string]extract `json:"extractValuesRegex" yaml:"extractValuesRegex" description:"Map of key regex to extraction format, values can be 'URL', 'JSON'."`
 }
