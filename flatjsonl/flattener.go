@@ -122,7 +122,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 	x := fv.FnString(seq, flatPath, path, s)
 
 	if x != nil { //nolint:nestif
-		xs, name, err := x(s)
+		xs, name, err := x.Extract(s)
 		if err == nil {
 			p := pl.Get()
 			defer pl.Put(p)
@@ -165,7 +165,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 	}
 
 	if bytes.Contains(s, []byte("://")) { //nolint:nestif
-		us, _, err := DecodeURL(s)
+		us, _, err := (urlExtractor{}).Extract(s)
 		if err == nil {
 			p := pl.Get()
 			defer pl.Put(p)

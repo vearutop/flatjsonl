@@ -142,7 +142,7 @@ func (f *Flags) PrepareOutput() {
 
 		if strings.HasSuffix(outputLow, ".sqlite") {
 			if f.SQLite != "" {
-				println("CSV output is already enabled, skipping", output)
+				println("SQLite output is already enabled, skipping", output)
 
 				continue
 			}

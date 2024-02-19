@@ -270,21 +270,32 @@ func (p *Processor) flKeysInit() {
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
 
-		for k := range p.includeKeys {
-			if strings.HasPrefix(k, "const:") {
+		for key := range p.includeKeys {
+			if strings.HasPrefix(key, "const:") {
 				continue
 			}
 
-			path := strings.Split(strings.TrimPrefix(k, "."), ".")
-			flatPath := []byte(k)
+			path := strings.Split(strings.TrimPrefix(key, "."), ".")
+			flatPath := []byte(key)
 			pk := h.hashBytes(flatPath)
-			p.flKeys.Store(pk, flKey{
+
+			k := flKey{
 				path:      path,
 				isZero:    false,
 				t:         TypeString,
-				original:  k,
-				canonical: p.ck(k),
-			})
+				original:  key,
+				canonical: p.ck(key),
+			}
+
+			for r, x := range p.extractRegex {
+				if r.MatchString(key) {
+					k.extractor = x
+
+					break
+				}
+			}
+
+			p.flKeys.Store(pk, k)
 		}
 	}
 

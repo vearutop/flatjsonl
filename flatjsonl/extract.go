@@ -21,15 +21,27 @@ func (Extract) Enum() []any {
 func (e Extract) Extractor() Extractor {
 	switch e {
 	case ExtractURL:
-		return DecodeURL
+		return urlExtractor{}
 	case ExtractJSON:
-		return func(s []byte) ([]byte, Extract, error) {
-			return s, ExtractJSON, nil
-		}
+		return jsonExtractor{}
 	}
 
 	return nil
 }
 
 // Extractor defines extractor function.
-type Extractor func(s []byte) (json []byte, name Extract, err error)
+type Extractor interface {
+	Name() Extract
+	Extract(s []byte) (json []byte, name Extract, err error)
+}
+
+type jsonExtractor struct{}
+
+func (jsonExtractor) Extract(s []byte) (json []byte, name Extract, err error) {
+	return s, ExtractJSON, nil
+}
+
+// Name returns format name.
+func (jsonExtractor) Name() Extract {
+	return ExtractJSON
+}

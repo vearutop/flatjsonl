@@ -13,8 +13,8 @@ type URL struct {
 	Pass     string     `json:"pass,omitempty"`
 	Host     string     `json:"host,omitempty"`
 	Port     string     `json:"port,omitempty"`
-	Path     []string   `json:"path,omitempty"`
 	Query    url.Values `json:"query,omitempty"`
+	Path     []string   `json:"path,omitempty"`
 	Fragment string     `json:"fragment,omitempty"`
 }
 
@@ -37,8 +37,15 @@ func decodeURL(s string) (URL, error) {
 	return uv, nil
 }
 
-// DecodeURL is an Extractor.
-func DecodeURL(s []byte) ([]byte, Extract, error) {
+type urlExtractor struct{}
+
+// Name returns format name.
+func (urlExtractor) Name() Extract {
+	return ExtractURL
+}
+
+// Extract implements an Extractor.
+func (urlExtractor) Extract(s []byte) ([]byte, Extract, error) {
 	uv, err := decodeURL(string(s))
 	if err != nil {
 		return nil, "", err

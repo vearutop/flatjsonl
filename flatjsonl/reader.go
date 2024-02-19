@@ -334,7 +334,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	if err != nil {
 		if rd.OnError != nil {
 			atomic.AddInt64(&rd.Processor.errors, 1)
-			rd.OnError(fmt.Errorf("malformed JSON at line %d: %w", seq, err))
+			rd.OnError(fmt.Errorf("malformed JSON at line %d: %w: %s", seq, err, string(line)))
 		}
 	} else {
 		if rd.singleKeyPath != nil {

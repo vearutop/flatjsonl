@@ -150,6 +150,10 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		}
 	}
 
+	if cfg.MatchLinePrefix != "" && f.MatchLinePrefix == "" {
+		f.MatchLinePrefix = cfg.MatchLinePrefix
+	}
+
 	if f.MatchLinePrefix != "" {
 		p.rd.MatchPrefix = regexp.MustCompile(f.MatchLinePrefix)
 	}
@@ -323,6 +327,10 @@ func (p *Processor) showKeysInfo() {
 
 		if k.transposeDst != "" {
 			line += ", TRANSPOSED TO " + k.transposeDst
+		}
+
+		if k.extractor != nil {
+			line += ", EXTRACTED " + string(k.extractor.Name())
 		}
 
 		_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", line)

@@ -2,6 +2,7 @@ package flatjsonl
 
 // Config describes processing options.
 type Config struct {
+	MatchLinePrefix    string             `json:"matchLinePrefix" yaml:"matchLinePrefix"`
 	IncludeKeys        []string           `json:"includeKeys" yaml:"includeKeys"`
 	IncludeKeysRegex   []string           `json:"includeKeysRegex" yaml:"includeKeysRegex"`
 	ExcludeKeys        []string           `json:"excludeKeys" yaml:"excludeKeys" description:"List of keys remove from columns."`
