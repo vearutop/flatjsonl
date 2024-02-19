@@ -2,14 +2,13 @@ package flatjsonl
 
 import (
 	"encoding/json"
-	"errors"
 	"net/url"
 	"strings"
 )
 
 // URL is a JSON representation of URL.
 type URL struct {
-	Scheme   string     `json:"scheme"`
+	Scheme   string     `json:"scheme,omitempty"`
 	User     string     `json:"user,omitempty"`
 	Pass     string     `json:"pass,omitempty"`
 	Host     string     `json:"host,omitempty"`
@@ -19,13 +18,7 @@ type URL struct {
 	Fragment string     `json:"fragment,omitempty"`
 }
 
-var errInvalidURL = errors.New("invalid URL")
-
 func decodeURL(s string) (URL, error) {
-	if !strings.Contains(s, "://") {
-		return URL{}, errInvalidURL
-	}
-
 	u, err := url.Parse(s)
 	if err != nil {
 		return URL{}, err
