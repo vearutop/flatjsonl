@@ -56,7 +56,7 @@ func BenchmarkNewProcessor(b *testing.B) {
 		proc, err := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{Reader: lr})
 		require.NoError(b, err)
 
-		proc.Log = func(args ...any) {}
+		proc.Log = func(_ ...any) {}
 
 		b.Run(name+"_scanKeys", func(b *testing.B) {
 			b.ReportAllocs()

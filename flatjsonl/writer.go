@@ -386,6 +386,7 @@ func newFileWriter(fn string) (*fileWriter, error) {
 			c.f = gzip.NewWriter(c.compressed)
 		case strings.HasSuffix(fn, ".zst"):
 			c.compressed = progress.NewCountingWriter(c.f)
+
 			c.f, err = zstd.NewWriter(c.compressed, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
 			if err != nil {
 				return nil, err
