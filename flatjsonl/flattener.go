@@ -105,6 +105,7 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, path []stri
 	o.Visit(func(key []byte, v *fastjson.Value) {
 		flatPath := append(flatPath, '.')
 		flatPath = append(flatPath, key...)
+
 		if fv.WantPath {
 			fv.WalkFastJSON(seq, flatPath, append(path, string(key)), v)
 		} else {

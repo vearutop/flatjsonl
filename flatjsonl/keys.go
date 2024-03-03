@@ -230,10 +230,10 @@ func (p *Processor) scanAvailableKeys() error {
 
 				w.WantPath = true
 
-				w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) extractor {
+				w.FnString = func(_ int64, flatPath []byte, path []string, value []byte) extractor {
 					return p.scanKey(h.hashBytes(flatPath), path, TypeString, len(value) == 0)
 				}
-				w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, _ []byte) {
+				w.FnNumber = func(_ int64, flatPath []byte, path []string, value float64, _ []byte) {
 					isInt := float64(int(value)) == value
 					if isInt {
 						p.scanKey(h.hashBytes(flatPath), path, TypeInt, value == 0)
@@ -241,10 +241,10 @@ func (p *Processor) scanAvailableKeys() error {
 						p.scanKey(h.hashBytes(flatPath), path, TypeFloat, value == 0)
 					}
 				}
-				w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
+				w.FnBool = func(_ int64, flatPath []byte, path []string, value bool) {
 					p.scanKey(h.hashBytes(flatPath), path, TypeBool, !value)
 				}
-				w.FnNull = func(seq int64, flatPath []byte, path []string) {
+				w.FnNull = func(_ int64, flatPath []byte, path []string) {
 					p.scanKey(h.hashBytes(flatPath), path, TypeNull, true)
 				}
 			}
@@ -299,7 +299,7 @@ func (p *Processor) flKeysInit() {
 		}
 	}
 
-	p.flKeys.Range(func(key uint64, value flKey) bool {
+	p.flKeys.Range(func(_ uint64, value flKey) bool {
 		v := p.canonicalKeys[value.canonical]
 		value.isZero = value.isZero && v.isZero
 		value.t = v.t.Update(value.t)
@@ -368,9 +368,11 @@ func (p *Processor) iterateIncludeKeys() {
 		} else if len(p.cfg.IncludeKeys) == 0 {
 			if !p.f.SkipZeroCols {
 				canonicalIncludes[k] = true
+
 				p.addIncludeKey(k, &i)
 			} else if !p.canonicalKeys[ck].isZero {
 				canonicalIncludes[k] = true
+
 				p.addIncludeKey(k, &i)
 			}
 		}
@@ -520,6 +522,7 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 
 			break
 		}
+
 		i--
 
 		if i == 0 {

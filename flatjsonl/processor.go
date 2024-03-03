@@ -128,7 +128,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 
 	switch f.Verbosity {
 	case 0:
-		pr.Print = func(status progress.Status) {}
+		pr.Print = func(_ progress.Status) {}
 	case 1:
 		pr.Print = func(status progress.Status) {
 			p.Log(progress.DefaultStatus(status))
@@ -380,7 +380,7 @@ func (p *Processor) setupWriters() error {
 	if p.f.Raw != "" {
 		rw, err := NewRawWriter(p.f.Raw, p.f.RawDelim)
 		if err != nil {
-			return fmt.Errorf("failed")
+			return fmt.Errorf("failed to setup raw writer: %w", err)
 		}
 
 		rw.b = &baseWriter{}
@@ -430,6 +430,7 @@ func (p *Processor) iterateForWriters() error {
 	p.flKeys.Range(func(key uint64, value flKey) bool {
 		if i, ok := includeKeys[value.canonical]; ok {
 			pkIndex[key] = i
+
 			if value.transposeDst != "" {
 				pkDst[key] = value.transposeDst
 			}
@@ -566,7 +567,7 @@ type writeIterator struct {
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.ExtractStrings = wi.p.f.ExtractStrings
-	w.FnString = func(seq int64, flatPath []byte, path []string, value []byte) extractor {
+	w.FnString = func(seq int64, flatPath []byte, _ []string, value []byte) extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
@@ -582,7 +583,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		return k.extractor
 	}
-	w.FnNumber = func(seq int64, flatPath []byte, path []string, value float64, raw []byte) {
+	w.FnNumber = func(seq int64, flatPath []byte, _ []string, value float64, raw []byte) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
@@ -592,7 +593,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			RawNumber: string(raw),
 		}, pk, l)
 	}
-	w.FnBool = func(seq int64, flatPath []byte, path []string, value bool) {
+	w.FnBool = func(seq int64, flatPath []byte, _ []string, value bool) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
@@ -601,7 +602,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			Bool: value,
 		}, pk, l)
 	}
-	w.FnNull = func(seq int64, flatPath []byte, path []string) {
+	w.FnNull = func(seq int64, flatPath []byte, _ []string) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
@@ -753,10 +754,10 @@ func (wi *writeIterator) waitPending() error {
 
 	for {
 		cnt := 0
-		min := int64(-1)
-		max := int64(-1)
+		minKey := int64(-1)
+		maxKey := int64(-1)
 
-		wi.finished.Range(func(key any, value any) bool {
+		wi.finished.Range(func(key any, _ any) bool {
 			cnt++
 
 			k, ok := key.(int64)
@@ -764,12 +765,12 @@ func (wi *writeIterator) waitPending() error {
 				panic(fmt.Sprintf("BUG: int64 expected, %T received", key))
 			}
 
-			if min == -1 || k < min {
-				min = k
+			if minKey == -1 || k < minKey {
+				minKey = k
 			}
 
-			if max == -1 || k > max {
-				max = k
+			if maxKey == -1 || k > maxKey {
+				maxKey = k
 			}
 
 			return true
@@ -790,7 +791,7 @@ func (wi *writeIterator) waitPending() error {
 
 		if i > 10 {
 			return fmt.Errorf("could not wait for lines %v (%d - %d), expected seq %d, in progress %d",
-				cnt, min, max, atomic.LoadInt64(&wi.seqExpected), wi.pending.Size())
+				cnt, minKey, maxKey, atomic.LoadInt64(&wi.seqExpected), wi.pending.Size())
 		}
 	}
 }
