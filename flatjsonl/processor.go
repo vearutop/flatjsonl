@@ -133,7 +133,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		pr.Print = func(status progress.Status) {
 			p.Log(progress.DefaultStatus(status))
 		}
-	case 2:
+	default:
 		p.rd.OnError = func(err error) {
 			p.Log("error: " + err.Error())
 		}
@@ -487,7 +487,7 @@ type lineBuf struct {
 }
 
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
-	wi := writeIterator{}
+	wi := &writeIterator{}
 	wi.pending = xsync.NewMapOf[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
 
@@ -535,7 +535,43 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 		},
 	)
 
-	return &wi
+	if p.f.Verbosity >= 3 {
+		p.pr.AddMetrics(
+			progress.Metric{
+				Name:  "expected row",
+				Type:  progress.Gauge,
+				Value: func() int64 { return atomic.LoadInt64(&wi.seqExpected) },
+			},
+		)
+
+		p.pr.AddMetrics(
+			progress.Metric{
+				Name: "heap objects",
+				Type: progress.Gauge,
+				Value: func() int64 {
+					m := runtime.MemStats{}
+					runtime.ReadMemStats(&m)
+
+					return int64(m.HeapObjects)
+				},
+			},
+		)
+
+		p.pr.AddMetrics(
+			progress.Metric{
+				Name: "heap frees",
+				Type: progress.Gauge,
+				Value: func() int64 {
+					m := runtime.MemStats{}
+					runtime.ReadMemStats(&m)
+
+					return int64(m.Frees)
+				},
+			},
+		)
+	}
+
+	return wi
 }
 
 type writeIterator struct {

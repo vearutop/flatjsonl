@@ -232,6 +232,7 @@ func (rd *Reader) Read(sess *readSession) error {
 		for {
 			if atomic.LoadInt64(&rd.Processor.throttle) != 0 {
 				atomic.StoreInt64(&rd.Processor.throttle, 0)
+				runtime.GC()
 				time.Sleep(110 * time.Millisecond)
 			} else {
 				break
