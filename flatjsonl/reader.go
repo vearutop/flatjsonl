@@ -5,6 +5,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/bool64/ctxd"
+	"github.com/bool64/progress"
+	"github.com/klauspost/compress/zstd"
+	gzip "github.com/klauspost/pgzip"
+	"github.com/valyala/fastjson"
 	"io"
 	"os"
 	"regexp"
@@ -14,12 +19,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/bool64/ctxd"
-	"github.com/bool64/progress"
-	"github.com/klauspost/compress/zstd"
-	gzip "github.com/klauspost/pgzip"
-	"github.com/valyala/fastjson"
 )
 
 const errEmptyFile = ctxd.SentinelError("empty file")
@@ -232,6 +231,7 @@ func (rd *Reader) Read(sess *readSession) error {
 		for {
 			if atomic.LoadInt64(&rd.Processor.throttle) != 0 {
 				atomic.StoreInt64(&rd.Processor.throttle, 0)
+				runtime.GC()
 				time.Sleep(110 * time.Millisecond)
 			} else {
 				break

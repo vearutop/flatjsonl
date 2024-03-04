@@ -101,12 +101,12 @@ func (c *RawWriter) writeRow(row []string) error {
 			}
 		}
 
-		if _, err := c.w.Write([]byte(v)); err != nil {
+		if _, err := c.w.WriteString(v); err != nil {
 			return fmt.Errorf("column write failed: %w", err)
 		}
 	}
 
-	if _, err := c.w.Write([]byte("\n")); err != nil {
+	if _, err := c.w.WriteString("\n"); err != nil {
 		return fmt.Errorf("write failed: %w", err)
 	}
 
