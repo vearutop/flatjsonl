@@ -5,11 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/bool64/ctxd"
-	"github.com/bool64/progress"
-	"github.com/klauspost/compress/zstd"
-	gzip "github.com/klauspost/pgzip"
-	"github.com/valyala/fastjson"
 	"io"
 	"os"
 	"regexp"
@@ -19,6 +14,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/bool64/ctxd"
+	"github.com/bool64/progress"
+	"github.com/klauspost/compress/zstd"
+	gzip "github.com/klauspost/pgzip"
+	"github.com/valyala/fastjson"
 )
 
 const errEmptyFile = ctxd.SentinelError("empty file")
