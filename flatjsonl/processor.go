@@ -1,6 +1,7 @@
 package flatjsonl
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -66,16 +67,23 @@ func New(f Flags) (*Processor, error) {
 	var cfg Config
 
 	if f.Config != "" {
-		b, err := os.ReadFile(f.Config)
-		if err != nil {
-			return nil, fmt.Errorf("read config file: %w", err)
-		}
-
-		yerr := yaml.Unmarshal(b, &cfg)
-		if yerr != nil {
-			err = json5.Unmarshal(b, &cfg)
+		if f.Config[0] == '{' {
+			err := json.Unmarshal([]byte(f.Config), &cfg)
 			if err != nil {
-				return nil, fmt.Errorf("decode config file: json5: %w, yaml: %s", err, yerr) //nolint
+				return nil, fmt.Errorf("decode config flag: %w", err) //nolint
+			}
+		} else {
+			b, err := os.ReadFile(f.Config)
+			if err != nil {
+				return nil, fmt.Errorf("read config file: %w", err)
+			}
+
+			yerr := yaml.Unmarshal(b, &cfg)
+			if yerr != nil {
+				err = json5.Unmarshal(b, &cfg)
+				if err != nil {
+					return nil, fmt.Errorf("decode config file: json5: %w, yaml: %s", err, yerr) //nolint
+				}
 			}
 		}
 	}

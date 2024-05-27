@@ -114,7 +114,7 @@ Usage of flatjsonl:
   -concurrency int
         Number of concurrent routines in reader. (default 24)
   -config string
-        Configuration JSON or YAML file.
+        Path to configuration file in JSON or YAML format, or JSON value as string.
   -csv string
         Output to CSV file (gzip encoded if ends with .gz).
   -dbg-cpu-prof string

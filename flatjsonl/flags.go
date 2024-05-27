@@ -69,7 +69,7 @@ func (f *Flags) Register() {
 	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as key.")
 	flag.BoolVar(&f.ExtractStrings, "extract-strings", false, "Check string values for JSON content and extract when available.")
 	flag.StringVar(&f.GetKey, "get-key", "", "Add a single key to list of included keys.")
-	flag.StringVar(&f.Config, "config", "", "Configuration JSON or YAML file.")
+	flag.StringVar(&f.Config, "config", "", "Path to configuration file in JSON or YAML format, or JSON value as string.")
 	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
 	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")
 	flag.BoolVar(&f.ShowKeysInfo, "show-keys-info", false, "Show keys, their replaces and types.")
