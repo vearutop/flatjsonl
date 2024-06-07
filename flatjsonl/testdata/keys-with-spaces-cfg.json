@@ -1,0 +1,5 @@
+{
+  "replaceKeysRegex": {
+    ".foo.*.*": "foo_${1}_${2}"
+  }
+}

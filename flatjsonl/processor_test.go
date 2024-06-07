@@ -636,3 +636,34 @@ https://user:pass@example.com:1234/foo/bar/?baz=1&baz=2&quux=abc&i=4#piu,https,u
 15: .foo.nested.JSON.quux, TYPE int
 `, out.String(), out.String())
 }
+
+func TestProcessor_Process(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.ShowKeysInfo = true
+	f.Config = "testdata/keys-with-spaces-cfg.json"
+	f.Input = "testdata/keys-with-spaces.jsonl"
+	f.CSV = "testdata/keys-with-spaces.csv"
+	f.Concurrency = 1
+
+	c, err := os.ReadFile(f.Config)
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, yaml.Unmarshal(c, &cfg))
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{FileName: f.Input})
+	require.NoError(t, err)
+
+	out := bytes.NewBuffer(nil)
+	proc.Stdout = out
+	require.NoError(t, proc.Process())
+
+	assertFileEquals(t, f.CSV, `foo_bar_baz,.quux,foo_ba_r_baz
+123,true,
+456,,
+789,,
+,,789
+012,,
+`)
+}

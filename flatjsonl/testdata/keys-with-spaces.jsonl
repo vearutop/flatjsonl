@@ -1,0 +1,5 @@
+{"foo": {"\n\tbar\t\n": {"baz":123}}, "quux": true}
+{"foo": {"\n\tbar   \n": {"baz":456}}}
+{"foo": {"\n\tbar": {"baz":789}}}
+{"foo": {"\n\tba  r": {"baz":789}}}
+{"foo": {"bar\t\n": {"baz":012}}}
