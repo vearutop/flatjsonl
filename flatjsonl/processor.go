@@ -1,6 +1,7 @@
 package flatjsonl
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -65,22 +66,36 @@ type Processor struct {
 func New(f Flags) (*Processor, error) {
 	var cfg Config
 
-	if f.Config != "" {
-		b, err := os.ReadFile(f.Config)
-		if err != nil {
-			return nil, fmt.Errorf("read config file: %w", err)
-		}
-
-		yerr := yaml.Unmarshal(b, &cfg)
-		if yerr != nil {
-			err = json5.Unmarshal(b, &cfg)
-			if err != nil {
-				return nil, fmt.Errorf("decode config file: json5: %w, yaml: %s", err, yerr) //nolint
-			}
-		}
+	if err := loadConfig(f.Config, &cfg); err != nil {
+		return nil, err
 	}
 
 	return NewProcessor(f, cfg, f.Inputs()...)
+}
+
+func loadConfig(value string, cfg *Config) error {
+	if value == "" {
+		return nil
+	}
+
+	if err := json.Unmarshal([]byte(value), cfg); err == nil {
+		return nil
+	}
+
+	b, err := os.ReadFile(value)
+	if err != nil {
+		return fmt.Errorf("read config file: %w", err)
+	}
+
+	yerr := yaml.Unmarshal(b, cfg)
+	if yerr != nil {
+		err = json5.Unmarshal(b, cfg)
+		if err != nil {
+			return fmt.Errorf("decode config file: json5: %w, yaml: %s", err, yerr) //nolint
+		}
+	}
+
+	return nil
 }
 
 // NewProcessor creates an instance of Processor.
