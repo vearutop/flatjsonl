@@ -16,6 +16,8 @@ var starRepl = strings.NewReplacer(
 	"*", "([^.]+)",
 )
 
+var trimSpaces = regexp.MustCompile(`\s+`)
+
 func regex(reg string) (*regexp.Regexp, error) {
 	if reg == "" {
 		return nil, errors.New("empty regexp")

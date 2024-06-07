@@ -492,7 +492,21 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 	}()
 
 	for reg, rep := range p.replaceRegex {
-		kr := reg.ReplaceAllString(origKey, rep)
+		kr := origKey
+
+		matches := reg.FindStringSubmatch(origKey)
+		if matches != nil {
+			kr = rep
+
+			for i, m := range matches {
+				if i == 0 {
+					continue
+				}
+
+				kr = strings.ReplaceAll(kr, "${"+strconv.Itoa(i)+"}", trimSpaces.ReplaceAllString(strings.TrimSpace(m), "_"))
+			}
+		}
+
 		if kr != origKey {
 			if strings.HasSuffix(kr, "|to_snake_case") {
 				kr = toSnakeCase(strings.TrimSuffix(kr, "|to_snake_case"))
