@@ -334,9 +334,11 @@ func (p *Processor) iterateIncludeKeys() {
 		}
 
 		exclude := false
+
 		for _, r := range p.excludeRegex {
 			if r.MatchString(k) {
 				exclude = true
+
 				break
 			}
 		}
@@ -364,12 +366,15 @@ func (p *Processor) iterateIncludeKeys() {
 		}
 
 		exclude := false
+
 		for _, r := range p.excludeRegex {
 			if r.MatchString(k) {
 				exclude = true
+
 				break
 			}
 		}
+
 		if exclude {
 			continue
 		}

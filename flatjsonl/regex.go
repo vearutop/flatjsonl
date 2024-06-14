@@ -16,6 +16,7 @@ var starRepl = strings.NewReplacer(
 	"*", "([^.]+)",
 )
 
+// PrepareRegex converts * syntax to regex.
 func PrepareRegex(reg string) string {
 	if !strings.HasSuffix(reg, "$") && !strings.HasPrefix(reg, "^") && reg[0] == '.' {
 		reg = "^" + starRepl.Replace(reg) + "$"
