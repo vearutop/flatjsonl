@@ -96,6 +96,43 @@ func TestNewProcessor_exclude(t *testing.T) {
 `, string(b))
 }
 
+func TestNewProcessor_excludeRegex(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.ExtractStrings = true
+	f.AddSequence = true
+	f.Input = "testdata/test.log"
+	f.Output = "testdata/test-exclude.csv"
+	f.ReplaceKeys = true
+	f.SkipZeroCols = true
+	f.ShowKeysFlat = true
+	f.ShowKeysHier = true
+	f.ShowKeysInfo = true
+	f.Concurrency = 1
+	f.PrepareOutput()
+
+	cj, err := os.ReadFile("testdata/config-exclude-regex.json")
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, json.Unmarshal(cj, &cfg))
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Process())
+
+	b, err := os.ReadFile("testdata/test-exclude.csv")
+	require.NoError(t, err)
+
+	assert.Equal(t, `sequence,name,wins_0_0,wins_1_0,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255),nested_literal,foo,bar
+1,Gilbert,straight,one pair,1,abc,,,
+2,"""'Alexa'""",two pair,two pair,,,,,
+3,May,,,,,"{""foo"":1, ""bar"": 2}",1,2
+4,Deloise,three of a kind,,,,,,
+`, string(b))
+}
+
 func TestNewProcessor_concurrency(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.ExtractStrings = true

@@ -16,6 +16,15 @@ var starRepl = strings.NewReplacer(
 	"*", "([^.]+)",
 )
 
+// PrepareRegex converts * syntax to regex.
+func PrepareRegex(reg string) string {
+	if !strings.HasSuffix(reg, "$") && !strings.HasPrefix(reg, "^") && reg[0] == '.' {
+		reg = "^" + starRepl.Replace(reg) + "$"
+	}
+
+	return reg
+}
+
 var trimSpaces = regexp.MustCompile(`\s+`)
 
 func regex(reg string) (*regexp.Regexp, error) {
@@ -23,9 +32,7 @@ func regex(reg string) (*regexp.Regexp, error) {
 		return nil, errors.New("empty regexp")
 	}
 
-	if !strings.HasSuffix(reg, "$") && !strings.HasPrefix(reg, "^") && reg[0] == '.' {
-		reg = "^" + starRepl.Replace(reg) + "$"
-	}
+	reg = PrepareRegex(reg)
 
 	r, err := regexp.Compile(reg)
 	if err != nil {
