@@ -6,6 +6,7 @@ type Config struct {
 	IncludeKeys        []string           `json:"includeKeys" yaml:"includeKeys"`
 	IncludeKeysRegex   []string           `json:"includeKeysRegex" yaml:"includeKeysRegex"`
 	ExcludeKeys        []string           `json:"excludeKeys" yaml:"excludeKeys" description:"List of keys remove from columns."`
+	ExcludeKeysRegex   []string           `json:"excludeKeysRegex" yaml:"excludeKeysRegex" description:"List of key regex to remove keys from columns."`
 	ReplaceKeys        map[string]string  `json:"replaceKeys" yaml:"replaceKeys"`
 	ReplaceKeysRegex   map[string]string  `json:"replaceKeysRegex" yaml:"replaceKeysRegex"`
 	ParseTime          map[string]string  `json:"parseTime" yaml:"parseTime" description:"Map of key to time format, RAW format means no processing of original value."`

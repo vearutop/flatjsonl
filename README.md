@@ -187,6 +187,8 @@ includeKeysRegex:
   - ".keyGroup.[1].*"
 excludeKeys:
   - ".keyGroup.[1].notNeeded"
+excludeKeysRegex:
+  - ".keyGroup.*.notNeeded"
 replaceKeys:
   ".key1": key1
   ".key2": created_at

@@ -38,6 +38,7 @@ type Processor struct {
 
 	includeKeys  map[string]int
 	includeRegex []*regexp.Regexp
+	excludeRegex []*regexp.Regexp
 	replaceRegex map[*regexp.Regexp]string
 	extractRegex map[*regexp.Regexp]extractor
 	constVals    map[int]string
@@ -175,6 +176,15 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
 	p.extractRegex = map[*regexp.Regexp]extractor{}
+
+	for _, reg := range p.cfg.ExcludeKeysRegex {
+		r, err := regex(reg)
+		if err != nil {
+			return nil, fmt.Errorf("exclude keys: %w", err)
+		}
+
+		p.excludeRegex = append(p.excludeRegex, r)
+	}
 
 	for _, reg := range p.cfg.IncludeKeysRegex {
 		r, err := regex(reg)
