@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/bool64/ctxd v1.2.1
 	github.com/bool64/dev v0.2.36
-	github.com/bool64/progress v0.3.5
+	github.com/bool64/progress v0.3.7
 	github.com/bool64/sqluct v0.2.3
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/klauspost/compress v1.17.10
