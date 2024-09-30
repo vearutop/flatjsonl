@@ -59,6 +59,7 @@ type Processor struct {
 	totalLines int
 	totalKeys  int64
 	errors     int64
+	inProgress int64
 
 	throttle int64
 }
@@ -258,6 +259,11 @@ func (p *Processor) PrepareKeys() error {
 		p.pr.AddMetrics(progress.Metric{
 			Name: "keys approx", Type: progress.Gauge,
 			Value: func() int64 { return atomic.LoadInt64(&p.totalKeys) },
+		})
+
+		p.pr.AddMetrics(progress.Metric{
+			Name: "rows in progress", Type: progress.Gauge,
+			Value: func() int64 { return atomic.LoadInt64(&p.inProgress) },
 		})
 
 		p.pr.AddMetrics(progress.Metric{

@@ -24,39 +24,26 @@ linters-settings:
 linters:
   enable-all: true
   disable:
-    - gochecknoinits
-    - gocritic
-    - exhaustive
-    - funlen
-    - gosec
-    - goerr113
     - lll
-    - maligned
     - gochecknoglobals
     - gomnd
     - wrapcheck
     - paralleltest
     - forbidigo
-    - exhaustivestruct
-    - interfacer # deprecated
     - forcetypeassert
-    - scopelint # deprecated
-    - ifshort # too many false positives
-    - golint # deprecated
     - varnamelen
     - tagliatelle
     - errname
     - ireturn
     - exhaustruct
     - nonamedreturns
-    - nosnakecase
-    - structcheck
-    - varcheck
-    - deadcode
     - testableexamples
     - dupword
     - depguard
     - tagalign
+    - execinquery
+    - mnd
+    - testifylint
 
 issues:
   exclude-use-default: false
@@ -64,6 +51,7 @@ issues:
     - linters:
         - testpackage
         - gomnd
+        - mnd
         - goconst
         - goerr113
         - noctx
@@ -78,4 +66,7 @@ issues:
         - errcheck # Error checking omitted for brevity.
         - gosec
       path: "example_"
+    - linters:
+        - revive
+      text: "unused-parameter: parameter"
 
