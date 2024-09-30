@@ -59,6 +59,7 @@ type Processor struct {
 	totalLines int
 	totalKeys  int64
 	errors     int64
+	inProgress int64
 
 	throttle int64
 }
@@ -261,6 +262,11 @@ func (p *Processor) PrepareKeys() error {
 		})
 
 		p.pr.AddMetrics(progress.Metric{
+			Name: "rows in progress", Type: progress.Gauge,
+			Value: func() int64 { return atomic.LoadInt64(&p.inProgress) },
+		})
+
+		p.pr.AddMetrics(progress.Metric{
 			Name: "errors", Type: progress.Gauge,
 			Value: func() int64 { return atomic.LoadInt64(&p.errors) },
 		})
@@ -306,10 +312,14 @@ func (p *Processor) WriteOutput() error {
 
 func (p *Processor) maybeShowKeys() error {
 	if p.f.ShowKeysFlat {
-		_, _ = fmt.Fprintln(p.Stdout, "keys:")
+		if _, err := fmt.Fprintln(p.Stdout, "keys:"); err != nil {
+			println(err.Error())
+		}
 
 		for _, k := range p.flKeysList {
-			_, _ = fmt.Fprintln(p.Stdout, `"`+k+`",`)
+			if _, err := fmt.Fprintln(p.Stdout, `"`+k+`",`); err != nil {
+				println(err.Error())
+			}
 		}
 	}
 

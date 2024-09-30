@@ -14,7 +14,7 @@ import (
 	"github.com/bool64/progress"
 )
 
-func main() { //nolint
+func main() {
 	flag.Parse()
 
 	if flag.NArg() < 2 {

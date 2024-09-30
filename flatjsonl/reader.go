@@ -172,6 +172,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 type syncWorker struct {
 	i        int
 	p        *fastjson.Parser
+	used     int
 	path     []string
 	flatPath []byte
 	walker   *FastWalker
@@ -194,6 +195,7 @@ func (rd *Reader) Read(sess *readSession) error {
 		semaphore <- &syncWorker{
 			i:        i,
 			p:        &fastjson.Parser{},
+			used:     0,
 			path:     make([]string, 0, 20),
 			flatPath: make([]byte, 0, 5000),
 			line:     make([]byte, 0, 100),
@@ -254,9 +256,18 @@ func (rd *Reader) Read(sess *readSession) error {
 
 		worker := <-semaphore
 		worker.line = append(worker.line[:0], line...)
+		worker.used++
+
+		if worker.used >= 100 {
+			worker.used = 0
+			worker.p = &fastjson.Parser{}
+		}
+
+		atomic.AddInt64(&rd.Processor.inProgress, 1)
 
 		go func() {
 			defer func() {
+				atomic.AddInt64(&rd.Processor.inProgress, -1)
 				semaphore <- worker
 			}()
 
