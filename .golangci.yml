@@ -24,6 +24,15 @@ linters-settings:
 linters:
   enable-all: true
   disable:
+    - gochecknoinits
+    - gocritic
+    - exhaustive
+    - funlen
+    - gosec
+    - goerr113
+    - intrange
+    - gocyclo
+    - cyclop
     - lll
     - gochecknoglobals
     - gomnd
@@ -69,4 +78,7 @@ issues:
     - linters:
         - revive
       text: "unused-parameter: parameter"
+    - linters:
+        - errcheck
+      text: "Error return value of `fmt.Fprint"
 

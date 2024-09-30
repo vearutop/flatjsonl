@@ -312,10 +312,14 @@ func (p *Processor) WriteOutput() error {
 
 func (p *Processor) maybeShowKeys() error {
 	if p.f.ShowKeysFlat {
-		_, _ = fmt.Fprintln(p.Stdout, "keys:")
+		if _, err := fmt.Fprintln(p.Stdout, "keys:"); err != nil {
+			println(err.Error())
+		}
 
 		for _, k := range p.flKeysList {
-			_, _ = fmt.Fprintln(p.Stdout, `"`+k+`",`)
+			if _, err := fmt.Fprintln(p.Stdout, `"`+k+`",`); err != nil {
+				println(err.Error())
+			}
 		}
 	}
 
