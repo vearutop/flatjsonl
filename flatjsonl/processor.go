@@ -101,9 +101,10 @@ func loadConfig(value string, cfg *Config) error {
 }
 
 // NewProcessor creates an instance of Processor.
-func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //nolint: funlen // Yeah, that's what she said.
+func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //nolint:funlen
 	pr := &progress.Progress{
-		Interval: f.ProgressInterval,
+		Interval:         f.ProgressInterval,
+		IncrementalSpeed: true,
 	}
 
 	if f.GetKey != "" {
