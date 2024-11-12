@@ -210,7 +210,7 @@ func (rd *Reader) Read(sess *readSession) error {
 		doLineErr error
 	)
 
-	if len(rd.Processor.includeKeys) == 1 {
+	if len(rd.Processor.includeKeys) == 1 && !rd.Processor.f.ExtractStrings {
 		for _, i := range rd.Processor.includeKeys {
 			kk := rd.Processor.keys[i]
 			path := make([]string, 0, len(kk.path))
