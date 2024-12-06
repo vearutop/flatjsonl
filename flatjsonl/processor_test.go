@@ -704,3 +704,27 @@ func TestProcessor_Process(t *testing.T) {
 012,,
 `)
 }
+
+func TestNewProcessor_includeAsJSON(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "testdata/test.log"
+	f.Output = "testdata/test1.csv"
+	f.Config = `{"includeKeys":[".wins"]}`
+	f.Concurrency = 1
+	f.PrepareOutput()
+
+	proc, err := flatjsonl.New(f)
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Process())
+
+	b, err := os.ReadFile("testdata/test.csv")
+	require.NoError(t, err)
+
+	assert.Equal(t, `sequence,host,timestamp,name,wins_0_0,wins_0_1,wins_1_0,wins_1_1,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255),nested_literal,foo,bar
+1,host-13,2022-06-24 14:13:36,Gilbert,straight,7♣,one pair,10♥,1,abc,,,
+2,host-14,2022-06-24 14:13:37,"""'Alexa'""",two pair,4♠,two pair,9♠,,,,,
+3,host-13,2022-06-24 14:13:38,May,,,,,,,"{""foo"":1, ""bar"": 2}",1,2
+`, string(b))
+}
