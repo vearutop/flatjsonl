@@ -1,0 +1,8 @@
+{
+  "keepJSON": [
+    ".tags",
+    ".tokens",
+    ".deepArr",
+    ".flatMap"
+  ]
+}
