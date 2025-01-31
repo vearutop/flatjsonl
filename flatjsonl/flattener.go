@@ -31,8 +31,19 @@ type FastWalker struct {
 
 	WantPath       bool
 	ExtractStrings bool
+	KeepJSON       map[string]bool
 
 	buf []byte
+}
+
+func (fv *FastWalker) configure(p *Processor) {
+	fv.ExtractStrings = p.f.ExtractStrings
+	if len(p.cfg.KeepJSON) > 0 {
+		fv.KeepJSON = make(map[string]bool)
+		for _, v := range p.cfg.KeepJSON {
+			fv.KeepJSON[v] = true
+		}
+	}
 }
 
 // GetKey walks into a single key.
@@ -82,6 +93,15 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, path []strin
 		panic(fmt.Sprintf("BUG: failed to use JSON array: %v", err))
 	}
 
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
+		fv.buf = fv.buf[:0]
+		fv.buf = v.MarshalTo(fv.buf)
+
+		fv.FnString(seq, flatPath, path, fv.buf)
+
+		return
+	}
+
 	for i, v := range a {
 		k := "[" + strconv.Itoa(i) + "]"
 
@@ -100,6 +120,15 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, path []stri
 	o, err := v.Object()
 	if err != nil {
 		panic(fmt.Sprintf("BUG: failed to use JSON object: %v", err))
+	}
+
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
+		fv.buf = fv.buf[:0]
+		fv.buf = v.MarshalTo(fv.buf)
+
+		fv.FnString(seq, flatPath, path, fv.buf)
+
+		return
 	}
 
 	o.Visit(func(key []byte, v *fastjson.Value) {

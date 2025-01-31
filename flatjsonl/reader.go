@@ -190,7 +190,7 @@ func (rd *Reader) Read(sess *readSession) error {
 	for i := 0; i < cap(semaphore); i++ {
 		w := &FastWalker{}
 		sess.setupWalker(w)
-		w.ExtractStrings = rd.ExtractStrings
+		w.configure(rd.Processor)
 
 		semaphore <- &syncWorker{
 			i:        i,
