@@ -10,6 +10,7 @@ const (
 	TypeFloat  = Type("float")
 	TypeBool   = Type("bool")
 	TypeNull   = Type("null")
+	TypeJSON   = Type("json")
 	TypeAbsent = Type("")
 )
 

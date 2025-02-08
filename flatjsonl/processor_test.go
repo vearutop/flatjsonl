@@ -737,3 +737,71 @@ func TestNewProcessor_transpose_keep_json(t *testing.T) {
 3,c,"[""t1"",""t4"",""t5""]","[{""abar"":{""a"":1,""b"":2}}]","{""baz"":{""a"":5,""b"":6},""foo"":{""a"":15,""b"":12}}",
 `)
 }
+
+//func TestMakeHighCardinality(t *testing.T) {
+//	type item struct {
+//		ID     int `json:"id"`
+//		Deeper struct {
+//			Params map[string]int `json:"params"`
+//		}
+//		Numbers []int `json:"numbers"`
+//	}
+//
+//	f, err := os.Create("testdata/high_cardinality.jsonl")
+//	require.NoError(t, err)
+//
+//	enc := json.NewEncoder(f)
+//	for i := 0; i < 1000; i++ {
+//		it := item{}
+//		it.ID = i
+//		it.Deeper.Params = map[string]int{}
+//		for i := 0; i < rand.N(100); i++ {
+//			it.Numbers = append(it.Numbers, i)
+//			it.Deeper.Params[strconv.Itoa(i)] = i
+//		}
+//
+//		require.NoError(t, enc.Encode(it))
+//	}
+//
+//	require.NoError(t, f.Close())
+//}
+
+func TestNewProcessor_highCardinality(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "testdata/high_cardinality.jsonl"
+	f.SQLite = "testdata/high_cardinality.sqlite"
+	f.SQLTable = "stats"
+	f.CSV = "testdata/high_cardinality.csv"
+	f.ShowKeysFlat = true
+	f.ShowKeysInfo = true
+	f.Concurrency = 1
+	f.ChildrenLimit = 30
+	f.PrepareOutput()
+
+	var cfg flatjsonl.Config
+
+	if err := os.Remove("testdata/high_cardinality.sqlite"); err != nil {
+		require.Contains(t, err.Error(), "no such file or directory")
+	}
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+
+	out := bytes.NewBuffer(nil)
+	proc.Stdout = out
+
+	require.NoError(t, proc.Process())
+
+	assert.Equal(t, `keys:
+"._sequence",
+".id",
+".Deeper.params",
+".numbers",
+keys info:
+1: ._sequence, TYPE int
+2: .id, TYPE int
+3: .Deeper.params, TYPE json
+4: .numbers, TYPE json
+`, out.String(), out.String())
+}

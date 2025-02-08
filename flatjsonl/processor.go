@@ -46,7 +46,7 @@ type Processor struct {
 	replaceKeys  map[string]string
 	replaceByKey map[string]string
 
-	// keys are ordered replaced column names, indexes match values of includeKeys.
+	// keys are ordered by replaced column names, indexes match values of includeKeys.
 	keys []flKey
 
 	flKeys                *xsync.MapOf[uint64, flKey]

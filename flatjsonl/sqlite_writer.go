@@ -38,6 +38,10 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 		return nil, err
 	}
 
+	if p.f.SQLMaxCols == 0 {
+		p.f.SQLMaxCols = 500
+	}
+
 	c := &SQLiteWriter{
 		db:        db,
 		tableName: tableName,
