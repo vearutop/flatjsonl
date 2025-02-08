@@ -23,6 +23,7 @@ type flKey struct {
 	transposeDst     string
 	transposeKey     intOrString
 	transposeTrimmed string
+	extractor        extractor
 	par              uint64
 }
 
@@ -80,8 +81,21 @@ func (p *Processor) initKey(pk, par uint64, path []string, t Type, isZero bool) 
 		}
 	}
 
+	for r, x := range p.extractRegex {
+		if r.MatchString(key) {
+			k.extractor = x
+
+			break
+		}
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	existing, ok := p.flKeys.Load(pk)
+	if ok {
+		return existing
+	}
 
 	parentCardinality := p.parentCardinality[par]
 	parentCardinality++
@@ -103,11 +117,10 @@ func (p *Processor) initKey(pk, par uint64, path []string, t Type, isZero bool) 
 	return k
 }
 
-func (p *Processor) scanKey(pk, par uint64, path []string, t Type, isZero bool) {
+func (p *Processor) scanKey(pk, par uint64, path []string, t Type, isZero bool) extractor {
 	if _, phc := p.parentHighCardinality.Load(par); phc {
-		return
+		return nil // TODO: check if the actual extractor should be used.
 	}
-
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
@@ -132,6 +145,8 @@ func (p *Processor) scanKey(pk, par uint64, path []string, t Type, isZero bool) 
 
 		p.flKeys.Store(pk, k)
 	}
+
+	return k.extractor
 }
 
 func scanTransposedKey(dst string, tk string, k *flKey) {
@@ -217,7 +232,6 @@ func (h hasher) hashParentBytes(flatPath []byte, pl int) (pk uint64, par uint64)
 
 func (p *Processor) scanAvailableKeys() error {
 	p.Log("scanning keys...")
-
 	atomic.StoreInt64(&p.rd.Sequence, 0)
 
 	if p.f.MaxLines > 0 {
@@ -232,7 +246,12 @@ func (p *Processor) scanAvailableKeys() error {
 
 	for _, input := range p.inputs {
 		err := func() error {
-			sess, err := p.rd.session(input, "scanning keys")
+			task := "scanning keys"
+			if len(p.inputs) > 1 && input.FileName != "" {
+				task = "scanning keys (" + input.FileName + ")"
+			}
+
+			sess, err := p.rd.session(input, task)
 			if err != nil {
 				if errors.Is(err, errEmptyFile) {
 					return nil
@@ -248,13 +267,12 @@ func (p *Processor) scanAvailableKeys() error {
 
 				w.WantPath = true
 
-				w.FnString = func(seq int64, flatPath []byte, pl int, path []string, value []byte) {
+				w.FnString = func(_ int64, flatPath []byte, pl int, path []string, value []byte) extractor {
 					pk, par := h.hashParentBytes(flatPath, pl)
-					p.scanKey(pk, par, path, TypeString, len(value) == 0)
+					return p.scanKey(pk, par, path, TypeString, len(value) == 0)
 				}
-				w.FnNumber = func(seq int64, flatPath []byte, pl int, path []string, value float64, _ []byte) {
+				w.FnNumber = func(_ int64, flatPath []byte, pl int, path []string, value float64, _ []byte) {
 					pk, par := h.hashParentBytes(flatPath, pl)
-
 					isInt := float64(int(value)) == value
 					if isInt {
 						p.scanKey(pk, par, path, TypeInt, value == 0)
@@ -262,11 +280,11 @@ func (p *Processor) scanAvailableKeys() error {
 						p.scanKey(pk, par, path, TypeFloat, value == 0)
 					}
 				}
-				w.FnBool = func(seq int64, flatPath []byte, pl int, path []string, value bool) {
+				w.FnBool = func(_ int64, flatPath []byte, pl int, path []string, value bool) {
 					pk, par := h.hashParentBytes(flatPath, pl)
 					p.scanKey(pk, par, path, TypeBool, !value)
 				}
-				w.FnNull = func(seq int64, flatPath []byte, pl int, path []string) {
+				w.FnNull = func(_ int64, flatPath []byte, pl int, path []string) {
 					pk, par := h.hashParentBytes(flatPath, pl)
 					p.scanKey(pk, par, path, TypeNull, true)
 				}
@@ -293,30 +311,40 @@ func (p *Processor) flKeysInit() {
 	if p.flKeys.Size() == 0 && len(p.includeKeys) > 0 {
 		h := newHasher()
 
-		for k := range p.includeKeys {
-			if strings.HasPrefix(k, "const:") {
+		for key := range p.includeKeys {
+			if strings.HasPrefix(key, "const:") {
 				continue
 			}
 
-			path := strings.Split(strings.TrimPrefix(k, "."), ".")
-			flatPath := []byte(k)
+			path := strings.Split(strings.TrimPrefix(key, "."), ".")
+			flatPath := []byte(key)
 			pk := h.hashBytes(flatPath)
-			p.flKeys.Store(pk, flKey{
+
+			k := flKey{
 				path:      path,
 				isZero:    false,
 				t:         TypeString,
-				original:  k,
-				canonical: p.ck(k),
-			})
+				original:  key,
+				canonical: p.ck(key),
+			}
+
+			for r, x := range p.extractRegex {
+				if r.MatchString(key) {
+					k.extractor = x
+
+					break
+				}
+			}
+
+			p.flKeys.Store(pk, k)
 		}
 	}
 
-	p.flKeys.Range(func(key uint64, value flKey) bool {
+	p.flKeys.Range(func(_ uint64, value flKey) bool {
 		if _, phc := p.parentHighCardinality.Load(value.par); phc {
 			// Skip keys with high cardinality parents.
 			return true
 		}
-
 		v := p.canonicalKeys[value.canonical]
 		value.isZero = value.isZero && v.isZero
 		value.t = v.t.Update(value.t)
@@ -338,11 +366,33 @@ func (p *Processor) flKeysInit() {
 }
 
 func (p *Processor) iterateIncludeKeys() {
+	excludeKeys := make(map[string]bool, len(p.cfg.ExcludeKeys))
+	for _, k := range p.cfg.ExcludeKeys {
+		excludeKeys[p.ck(k)] = true
+	}
+
 	i := 0
 
 	for _, k := range p.cfg.IncludeKeys {
-		p.includeKeys[k] = i
-		i++
+		if excludeKeys[p.ck(k)] {
+			continue
+		}
+
+		exclude := false
+
+		for _, r := range p.excludeRegex {
+			if r.MatchString(k) {
+				exclude = true
+
+				break
+			}
+		}
+
+		if exclude {
+			continue
+		}
+
+		p.addIncludeKey(k, &i)
 	}
 
 	p.flKeysInit()
@@ -356,34 +406,59 @@ func (p *Processor) iterateIncludeKeys() {
 
 		ck := p.ck(k)
 
+		if excludeKeys[ck] {
+			continue
+		}
+
+		exclude := false
+
+		for _, r := range p.excludeRegex {
+			if r.MatchString(k) {
+				exclude = true
+
+				break
+			}
+		}
+
+		if exclude {
+			continue
+		}
+
 		if canonicalIncludes[ck] {
 			continue
 		}
 
-		if len(p.includeRegex) > 0 && len(p.cfg.IncludeKeys) > 0 {
+		if len(p.includeRegex) > 0 {
 			for _, r := range p.includeRegex {
 				if r.MatchString(k) {
-					p.includeKeys[k] = i
 					canonicalIncludes[k] = true
-					i++
+
+					p.addIncludeKey(k, &i)
 
 					break
 				}
 			}
-		} else {
+		} else if len(p.cfg.IncludeKeys) == 0 {
 			if !p.f.SkipZeroCols {
-				p.includeKeys[k] = i
 				canonicalIncludes[k] = true
 
-				i++
+				p.addIncludeKey(k, &i)
 			} else if !p.canonicalKeys[ck].isZero {
-				p.includeKeys[k] = i
 				canonicalIncludes[k] = true
 
-				i++
+				p.addIncludeKey(k, &i)
 			}
 		}
 	}
+}
+
+func (p *Processor) addIncludeKey(k string, i *int) {
+	if _, found := p.includeKeys[k]; found {
+		return
+	}
+
+	p.includeKeys[k] = *i
+	*i++
 }
 
 func (p *Processor) prepareKeys() {
@@ -490,7 +565,21 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 	}()
 
 	for reg, rep := range p.replaceRegex {
-		kr := reg.ReplaceAllString(origKey, rep)
+		kr := origKey
+
+		matches := reg.FindStringSubmatch(origKey)
+		if matches != nil {
+			kr = rep
+
+			for i, m := range matches {
+				if i == 0 {
+					continue
+				}
+
+				kr = strings.ReplaceAll(kr, "${"+strconv.Itoa(i)+"}", trimSpaces.ReplaceAllString(strings.TrimSpace(m), "_"))
+			}
+		}
+
 		if kr != origKey {
 			if strings.HasSuffix(kr, "|to_snake_case") {
 				kr = toSnakeCase(strings.TrimSuffix(kr, "|to_snake_case"))
@@ -511,7 +600,7 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 
 	for {
 		if len(snk) == 0 {
-			panic("BUG: empty snk for " + origKey)
+			panic("BUG: empty snk for '" + origKey + "'")
 		}
 
 		if stored, ok := p.replaceByKey[snk]; (!ok || origKey == stored) && (snk[0] == '_' || unicode.IsLetter(rune(snk[0]))) {
@@ -520,6 +609,7 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 
 			break
 		}
+
 		i--
 
 		if i == 0 {

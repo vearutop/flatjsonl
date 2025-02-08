@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/bool64/ctxd"
 	"github.com/bool64/progress"
@@ -52,6 +53,8 @@ type Reader struct {
 
 	singleKeyFlat []byte
 	singleKeyPath []string
+
+	totalBytes int64
 }
 
 type readSession struct {
@@ -91,7 +94,6 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 
 	var (
 		r   io.Reader
-		s   int64
 		cmp string
 	)
 
@@ -109,17 +111,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 			}
 		}()
 
-		st, err := fj.Stat()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read file stats %s: %w", in, err)
-		}
-
 		r = fj
-		s = st.Size()
-
-		if s == 0 {
-			return nil, errEmptyFile
-		}
 
 		switch {
 		case strings.HasSuffix(in.FileName, ".gz"):
@@ -130,34 +122,43 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 	} else {
 		r = in.Reader
 		in.Reader.Reset()
-		s = in.Reader.Size()
 		cmp = in.Reader.Compression()
 	}
 
-	cr := &progress.CountingReader{Reader: r}
-
-	sess.pr.Start(func(t *progress.Task) {
-		t.Task = task
-		t.TotalBytes = func() int64 {
-			return s
-		}
-		t.CurrentBytes = cr.Bytes
-		t.CurrentLines = cr.Lines
-		t.Continue = true
-	})
-
+	cr := progress.NewCountingReader(r)
+	lines := cr
 	sess.r = cr
 
 	switch cmp {
 	case "gzip":
-		if sess.r, err = gzip.NewReader(sess.r); err != nil {
+		if r, err = gzip.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
+
+		cr.SetLines(nil)
+
+		lines = progress.NewCountingReader(r)
+		sess.r = lines
 	case "zst":
-		if sess.r, err = zstd.NewReader(sess.r); err != nil {
+		if r, err = zstd.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
+
+		cr.SetLines(nil)
+
+		lines = progress.NewCountingReader(r)
+		sess.r = lines
 	}
+
+	sess.pr.Start(func(t *progress.Task) {
+		t.Task = task
+		t.TotalBytes = func() int64 {
+			return rd.totalBytes
+		}
+		t.CurrentBytes = cr.Bytes
+		t.CurrentLines = lines.Lines
+		t.Continue = true
+	})
 
 	sess.scanner = bufio.NewScanner(sess.r)
 
@@ -171,6 +172,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 type syncWorker struct {
 	i        int
 	p        *fastjson.Parser
+	used     int
 	path     []string
 	flatPath []byte
 	walker   *FastWalker
@@ -188,11 +190,12 @@ func (rd *Reader) Read(sess *readSession) error {
 	for i := 0; i < cap(semaphore); i++ {
 		w := &FastWalker{}
 		sess.setupWalker(w)
-		w.ExtractStrings = rd.ExtractStrings
+		w.configure(rd.Processor)
 
 		semaphore <- &syncWorker{
 			i:        i,
 			p:        &fastjson.Parser{},
+			used:     0,
 			path:     make([]string, 0, 20),
 			flatPath: make([]byte, 0, 5000),
 			line:     make([]byte, 0, 100),
@@ -207,7 +210,7 @@ func (rd *Reader) Read(sess *readSession) error {
 		doLineErr error
 	)
 
-	if len(rd.Processor.includeKeys) == 1 {
+	if len(rd.Processor.includeKeys) == 1 && !rd.Processor.f.ExtractStrings {
 		for _, i := range rd.Processor.includeKeys {
 			kk := rd.Processor.keys[i]
 			path := make([]string, 0, len(kk.path))
@@ -228,6 +231,16 @@ func (rd *Reader) Read(sess *readSession) error {
 	var n int64
 
 	for sess.scanner.Scan() {
+		for {
+			if atomic.LoadInt64(&rd.Processor.throttle) != 0 {
+				atomic.StoreInt64(&rd.Processor.throttle, 0)
+				runtime.GC()
+				time.Sleep(110 * time.Millisecond)
+			} else {
+				break
+			}
+		}
+
 		if err := sess.scanner.Err(); err != nil {
 			return fmt.Errorf("scan failed: %w", err)
 		}
@@ -243,9 +256,18 @@ func (rd *Reader) Read(sess *readSession) error {
 
 		worker := <-semaphore
 		worker.line = append(worker.line[:0], line...)
+		worker.used++
+
+		if worker.used >= 100 {
+			worker.used = 0
+			worker.p = &fastjson.Parser{}
+		}
+
+		atomic.AddInt64(&rd.Processor.inProgress, 1)
 
 		go func() {
 			defer func() {
+				atomic.AddInt64(&rd.Processor.inProgress, -1)
 				semaphore <- worker
 			}()
 
@@ -299,8 +321,14 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	}
 
 	line := w.line
-	if len(line) < 2 || line[0] != '{' {
+	if len(line) < 2 || line[0] != '{' { //nolint:nestif
 		if line = rd.prefixedLine(seq, line, w.walker.FnString); line == nil {
+			if sess.lineFinished != nil {
+				if err := sess.lineFinished(seq); err != nil {
+					return fmt.Errorf("failure in line finished callback, line %d: %w", n, err)
+				}
+			}
+
 			return nil
 		}
 	}
@@ -317,7 +345,8 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	pv, err := p.ParseBytes(line)
 	if err != nil {
 		if rd.OnError != nil {
-			rd.OnError(fmt.Errorf("skipping malformed JSON line %s: %w", string(line), err))
+			atomic.AddInt64(&rd.Processor.errors, 1)
+			rd.OnError(fmt.Errorf("malformed JSON at line %d: %w: %s", seq, err, string(line)))
 		}
 	} else {
 		if rd.singleKeyPath != nil {
@@ -336,13 +365,15 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	return nil
 }
 
-func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, pl int, path []string, value []byte)) []byte {
+func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, pl int, path []string, value []byte) extractor) []byte {
 	pos := bytes.Index(line, []byte("{"))
 
 	if pos == -1 {
 		// If prefix matching is enabled, it may be ok to not have any JSON in line.
 		// All data would be parsed only from prefix (which may also describe whole line).
 		if rd.MatchPrefix == nil {
+			atomic.AddInt64(&rd.Processor.errors, 1)
+
 			if rd.OnError != nil {
 				rd.OnError(fmt.Errorf("could not find JSON in line %s", string(line)))
 			}

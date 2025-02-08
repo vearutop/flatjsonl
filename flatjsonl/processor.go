@@ -1,8 +1,10 @@
 package flatjsonl
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"regexp"
@@ -15,13 +17,16 @@ import (
 	_ "time/tzdata" // Loading timezones.
 
 	"github.com/bool64/progress"
-	xsync "github.com/puzpuzpuz/xsync/v2"
+	xsync "github.com/puzpuzpuz/xsync/v3"
 	"github.com/swaggest/assertjson"
+	"github.com/swaggest/assertjson/json5"
+	"gopkg.in/yaml.v3"
 )
 
 // Processor reads JSONL files with Reader and passes flat rows to Writer.
 type Processor struct {
-	Log func(args ...any)
+	Log    func(args ...any)
+	Stdout io.Writer
 
 	cfg    Config
 	f      Flags
@@ -33,7 +38,9 @@ type Processor struct {
 
 	includeKeys  map[string]int
 	includeRegex []*regexp.Regexp
+	excludeRegex []*regexp.Regexp
 	replaceRegex map[*regexp.Regexp]string
+	extractRegex map[*regexp.Regexp]extractor
 	constVals    map[int]string
 
 	replaceKeys  map[string]string
@@ -53,12 +60,53 @@ type Processor struct {
 
 	totalLines int
 	totalKeys  int64
+	errors     int64
+	inProgress int64
+
+	throttle int64
+}
+
+// New creates Processor from config.
+func New(f Flags) (*Processor, error) {
+	var cfg Config
+
+	if err := loadConfig(f.Config, &cfg); err != nil {
+		return nil, err
+	}
+
+	return NewProcessor(f, cfg, f.Inputs()...)
+}
+
+func loadConfig(value string, cfg *Config) error {
+	if value == "" {
+		return nil
+	}
+
+	if err := json.Unmarshal([]byte(value), cfg); err == nil {
+		return nil
+	}
+
+	b, err := os.ReadFile(value)
+	if err != nil {
+		return fmt.Errorf("read config file: %w", err)
+	}
+
+	yerr := yaml.Unmarshal(b, cfg)
+	if yerr != nil {
+		err = json5.Unmarshal(b, cfg)
+		if err != nil {
+			return fmt.Errorf("decode config file: json5: %w, yaml: %s", err, yerr) //nolint
+		}
+	}
+
+	return nil
 }
 
 // NewProcessor creates an instance of Processor.
-func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor {
+func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //nolint:funlen
 	pr := &progress.Progress{
-		Interval: f.ProgressInterval,
+		Interval:         f.ProgressInterval,
+		IncrementalSpeed: true,
 	}
 
 	if f.GetKey != "" {
@@ -69,6 +117,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor {
 		Log: func(args ...any) {
 			_, _ = fmt.Fprintln(os.Stderr, args...)
 		},
+		Stdout: os.Stdout,
 
 		cfg:    cfg,
 		f:      f,
@@ -92,8 +141,8 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor {
 		flKeysList:   make([]string, 0),
 		keyHierarchy: KeyHierarchy{Name: "."},
 
-		flKeys:                xsync.NewIntegerMapOf[uint64, flKey](),
-		parentHighCardinality: xsync.NewIntegerMapOf[uint64, bool](),
+		flKeys:                xsync.NewMapOf[uint64, flKey](),
+		parentHighCardinality: xsync.NewMapOf[uint64, bool](),
 		parentCardinality:     map[uint64]int{},
 	}
 
@@ -101,12 +150,16 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor {
 
 	switch f.Verbosity {
 	case 0:
-		pr.Print = func(status progress.Status) {}
+		pr.Print = func(_ progress.Status) {}
 	case 1:
 		pr.Print = func(status progress.Status) {
 			p.Log(progress.DefaultStatus(status))
 		}
-	case 2:
+	default:
+		p.rd.OnError = func(err error) {
+			p.Log("error: " + err.Error())
+		}
+
 		pr.Print = func(status progress.Status) {
 			s := progress.DefaultStatus(status)
 			m := progress.MetricsStatus(status)
@@ -119,51 +172,77 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) *Processor {
 		}
 	}
 
+	if cfg.MatchLinePrefix != "" && f.MatchLinePrefix == "" {
+		f.MatchLinePrefix = cfg.MatchLinePrefix
+	}
+
 	if f.MatchLinePrefix != "" {
 		p.rd.MatchPrefix = regexp.MustCompile(f.MatchLinePrefix)
 	}
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
-	starRepl := strings.NewReplacer(
-		".", "\\.",
-		"[", "\\[",
-		"]", "\\]",
-		"{", "\\{",
-		"}", "\\}",
-		"*", "([^\\d][^.]+)",
-	)
+	p.extractRegex = map[*regexp.Regexp]extractor{}
 
-	for _, reg := range p.cfg.IncludeKeysRegex {
-		if strings.Contains(reg, "*") {
-			reg = "^" + starRepl.Replace(reg) + "$"
+	for _, reg := range p.cfg.ExcludeKeysRegex {
+		r, err := regex(reg)
+		if err != nil {
+			return nil, fmt.Errorf("exclude keys: %w", err)
 		}
 
-		r, err := regexp.Compile(reg)
+		p.excludeRegex = append(p.excludeRegex, r)
+	}
+
+	for _, reg := range p.cfg.IncludeKeysRegex {
+		r, err := regex(reg)
 		if err != nil {
-			p.Log(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
+			return nil, fmt.Errorf("include keys: %w", err)
 		}
 
 		p.includeRegex = append(p.includeRegex, r)
 	}
 
 	for reg, rep := range p.cfg.ReplaceKeysRegex {
-		if strings.Contains(reg, "*") {
-			reg = "^" + starRepl.Replace(reg) + "$"
-		}
-
-		r, err := regexp.Compile(reg)
+		r, err := regex(reg)
 		if err != nil {
-			p.Log(fmt.Sprintf("failed to parse regular expression %s: %s", reg, err.Error()))
+			return nil, fmt.Errorf("include keys: %w", err)
 		}
 
 		p.replaceRegex[r] = rep
 	}
 
-	return p
+	for reg, x := range p.cfg.ExtractValuesRegex {
+		r, err := regex(reg)
+		if err != nil {
+			return nil, fmt.Errorf("include keys: %w", err)
+		}
+
+		p.extractRegex[r] = x.Extractor()
+	}
+
+	go p.watchMemUsage()
+
+	return p, nil
 }
 
 // Process dispatches data from Reader to Writer.
 func (p *Processor) Process() error {
+	for _, i := range p.inputs {
+		if i.FileName != "" {
+			fi, err := os.Stat(i.FileName)
+			if err != nil {
+				return fmt.Errorf("stat %s: %w", i.FileName, err)
+			}
+
+			if fi.Size() == 0 {
+				return fmt.Errorf("%s: %w", i.FileName, errEmptyFile)
+			}
+
+			p.rd.totalBytes += fi.Size()
+		} else if i.Reader != nil {
+			p.rd.totalBytes += i.Reader.Size()
+		}
+	}
+
 	if err := p.PrepareKeys(); err != nil {
 		return err
 	}
@@ -177,20 +256,34 @@ func (p *Processor) Process() error {
 
 // PrepareKeys runs first pass of reading if necessary to scan the keys.
 func (p *Processor) PrepareKeys() error {
-	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) != 0 {
+	if len(p.includeRegex) == 0 && len(p.cfg.IncludeKeys) > 0 {
 		p.iterateIncludeKeys()
 	} else {
+		p.pr.Reset()
+
 		p.pr.AddMetrics(progress.Metric{
 			Name: "keys approx", Type: progress.Gauge,
 			Value: func() int64 { return atomic.LoadInt64(&p.totalKeys) },
 		})
+
+		p.pr.AddMetrics(progress.Metric{
+			Name: "rows in progress", Type: progress.Gauge,
+			Value: func() int64 { return atomic.LoadInt64(&p.inProgress) },
+		})
+
+		p.pr.AddMetrics(progress.Metric{
+			Name: "errors", Type: progress.Gauge,
+			Value: func() int64 { return atomic.LoadInt64(&p.errors) },
+		})
+
+		atomic.StoreInt64(&p.errors, 0)
 
 		// Scan available keys.
 		if err := p.scanAvailableKeys(); err != nil {
 			return err
 		}
 
-		p.Log("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+		p.Log(fmt.Sprintf("lines: %d, keys: %d", p.pr.Lines(), len(p.includeKeys)))
 		p.totalLines = int(p.pr.Lines())
 	}
 
@@ -216,7 +309,7 @@ func (p *Processor) WriteOutput() error {
 			return err
 		}
 
-		p.Log("lines:", p.pr.Lines(), ", keys:", len(p.includeKeys))
+		p.Log(fmt.Sprintf("lines: %d, keys: %d", p.pr.Lines(), len(p.includeKeys)))
 	}
 
 	return nil
@@ -224,29 +317,19 @@ func (p *Processor) WriteOutput() error {
 
 func (p *Processor) maybeShowKeys() error {
 	if p.f.ShowKeysFlat {
-		fmt.Println("keys:")
+		if _, err := fmt.Fprintln(p.Stdout, "keys:"); err != nil {
+			println(err.Error())
+		}
 
 		for _, k := range p.flKeysList {
-			fmt.Println(`"` + k + `",`)
+			if _, err := fmt.Fprintln(p.Stdout, `"`+k+`",`); err != nil {
+				println(err.Error())
+			}
 		}
 	}
 
 	if p.f.ShowKeysInfo {
-		fmt.Println("keys info:")
-
-		for i, k := range p.keys {
-			line := k.replaced + ", TYPE " + string(k.t)
-
-			if k.replaced != k.original {
-				line = k.original + " REPLACED WITH " + line
-			}
-
-			if k.transposeDst != "" {
-				line += ", TRANSPOSED TO " + k.transposeDst
-			}
-
-			fmt.Println(strconv.Itoa(i)+":", line)
-		}
+		p.showKeysInfo()
 	}
 
 	if p.f.ShowKeysHier {
@@ -255,10 +338,53 @@ func (p *Processor) maybeShowKeys() error {
 			return err
 		}
 
-		fmt.Println(string(b))
+		_, _ = fmt.Fprintln(p.Stdout, string(b))
 	}
 
 	return nil
+}
+
+func (p *Processor) showKeysInfo() {
+	_, _ = fmt.Fprintln(p.Stdout, "keys info:")
+
+	markIncluded := len(p.cfg.IncludeKeys) > 0 || len(p.cfg.IncludeKeysRegex) > 0
+
+	i := 0
+	for _, k := range p.keys {
+		i++
+
+		line := k.replaced + ", TYPE " + string(k.t)
+
+		if k.replaced != k.original {
+			line = k.original + ", REPLACED WITH " + line
+		}
+
+		if markIncluded {
+			if _, included := p.includeKeys[k.original]; included {
+				line += ", INCLUDED"
+			}
+		}
+
+		if k.transposeDst != "" {
+			line += ", TRANSPOSED TO " + k.transposeDst
+		}
+
+		if k.extractor != nil {
+			line += ", EXTRACTED " + string(k.extractor.name())
+		}
+
+		_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", line)
+	}
+
+	if markIncluded {
+		for _, k := range p.flKeysList {
+			if _, included := p.includeKeys[k]; !included {
+				i++
+
+				_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", k+", SKIPPED")
+			}
+		}
+	}
 }
 
 func (p *Processor) setupWriters() error {
@@ -294,7 +420,7 @@ func (p *Processor) setupWriters() error {
 	if p.f.Raw != "" {
 		rw, err := NewRawWriter(p.f.Raw, p.f.RawDelim)
 		if err != nil {
-			return fmt.Errorf("failed")
+			return fmt.Errorf("failed to setup raw writer: %w", err)
 		}
 
 		rw.b = &baseWriter{}
@@ -317,9 +443,16 @@ func (p *Processor) ck(k string) string {
 
 func (p *Processor) iterateForWriters() error {
 	p.Log("flattening data...")
+	p.pr.Reset()
+
+	p.pr.AddMetrics(progress.Metric{
+		Name: "errors", Type: progress.Gauge,
+		Value: func() int64 { return atomic.LoadInt64(&p.errors) },
+	})
 
 	p.rd.MaxLines = 0
 	atomic.StoreInt64(&p.rd.Sequence, 0)
+	atomic.StoreInt64(&p.errors, 0)
 
 	if p.f.MaxLines > 0 {
 		p.rd.MaxLines = int64(p.f.MaxLines)
@@ -337,6 +470,7 @@ func (p *Processor) iterateForWriters() error {
 	p.flKeys.Range(func(key uint64, value flKey) bool {
 		if i, ok := includeKeys[value.canonical]; ok {
 			pkIndex[key] = i
+
 			if value.transposeDst != "" {
 				pkDst[key] = value.transposeDst
 			}
@@ -356,7 +490,12 @@ func (p *Processor) iterateForWriters() error {
 	}
 
 	for _, input := range p.inputs {
-		sess, err := p.rd.session(input, "flattening data")
+		task := "flattening data"
+		if len(p.inputs) > 1 && input.FileName != "" {
+			task = "flattening data (" + input.FileName + ")"
+		}
+
+		sess, err := p.rd.session(input, task)
 		if err != nil {
 			if errors.Is(err, errEmptyFile) {
 				continue
@@ -388,8 +527,8 @@ type lineBuf struct {
 }
 
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
-	wi := writeIterator{}
-	wi.pending = xsync.NewIntegerMapOf[int64, *lineBuf]()
+	wi := &writeIterator{}
+	wi.pending = xsync.NewMapOf[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
 
 	if len(p.includeKeys) == 1 {
@@ -436,7 +575,43 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 		},
 	)
 
-	return &wi
+	if p.f.Verbosity >= 3 {
+		p.pr.AddMetrics(
+			progress.Metric{
+				Name:  "expected row",
+				Type:  progress.Gauge,
+				Value: func() int64 { return atomic.LoadInt64(&wi.seqExpected) },
+			},
+		)
+
+		p.pr.AddMetrics(
+			progress.Metric{
+				Name: "heap objects",
+				Type: progress.Gauge,
+				Value: func() int64 {
+					m := runtime.MemStats{}
+					runtime.ReadMemStats(&m)
+
+					return int64(m.HeapObjects)
+				},
+			},
+		)
+
+		p.pr.AddMetrics(
+			progress.Metric{
+				Name: "heap frees",
+				Type: progress.Gauge,
+				Value: func() int64 {
+					m := runtime.MemStats{}
+					runtime.ReadMemStats(&m)
+
+					return int64(m.Frees)
+				},
+			},
+		)
+	}
+
+	return wi
 }
 
 type writeIterator struct {
@@ -467,41 +642,54 @@ type writeIterator struct {
 }
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
-	w.ExtractStrings = wi.p.f.ExtractStrings
-	w.FnString = func(seq int64, flatPath []byte, pl int, path []string, value []byte) {
+	w.configure(wi.p)
+
+	w.FnString = func(seq int64, flatPath []byte, pl int, _ []string, value []byte) extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
 
-		wi.setValue(seq, Value{
+		l, _ := wi.pending.Load(seq)
+		pk := l.h.hashBytes(flatPath)
+		k, _ := wi.p.flKeys.Load(pk)
+
+		wi.setValue(Value{
 			Type:   TypeString,
 			String: string(value),
-		}, flatPath)
+		}, pk, l)
+
+		return k.extractor
 	}
-	w.FnNumber = func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte) {
-		wi.setValue(seq, Value{
+	w.FnNumber = func(seq int64, flatPath []byte, pl int, _ []string, value float64, raw []byte) {
+		l, _ := wi.pending.Load(seq)
+		pk := l.h.hashBytes(flatPath)
+
+		wi.setValue(Value{
 			Type:      TypeFloat,
 			Number:    value,
 			RawNumber: string(raw),
-		}, flatPath)
+		}, pk, l)
 	}
-	w.FnBool = func(seq int64, flatPath []byte, pl int, path []string, value bool) {
-		wi.setValue(seq, Value{
+	w.FnBool = func(seq int64, flatPath []byte, pl int, _ []string, value bool) {
+		l, _ := wi.pending.Load(seq)
+		pk := l.h.hashBytes(flatPath)
+
+		wi.setValue(Value{
 			Type: TypeBool,
 			Bool: value,
-		}, flatPath)
+		}, pk, l)
 	}
-	w.FnNull = func(seq int64, flatPath []byte, pl int, path []string) {
-		wi.setValue(seq, Value{
+	w.FnNull = func(seq int64, flatPath []byte, pl int, _ []string) {
+		l, _ := wi.pending.Load(seq)
+		pk := l.h.hashBytes(flatPath)
+
+		wi.setValue(Value{
 			Type: TypeNull,
-		}, flatPath)
+		}, pk, l)
 	}
 }
 
-func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
-	l, _ := wi.pending.Load(seq)
-	pk := l.h.hashBytes(flatPath)
-
+func (wi *writeIterator) setValue(v Value, pk uint64, l *lineBuf) {
 	if wi.singleKeyHash != 0 && pk != wi.singleKeyHash {
 		return
 	}
@@ -555,37 +743,26 @@ func (wi *writeIterator) setValue(seq int64, v Value, flatPath []byte) {
 	}
 }
 
-var throttle int64
+func (p *Processor) watchMemUsage() {
+	if p.f.MemLimit == 0 {
+		return
+	}
 
-func init() {
-	go func() {
-		for {
-			m := runtime.MemStats{}
-			runtime.ReadMemStats(&m)
+	for {
+		m := runtime.MemStats{}
+		runtime.ReadMemStats(&m)
 
-			// 1 GB soft limit to start delays.
-			if m.HeapInuse > 1e9 {
-				atomic.StoreInt64(&throttle, 1)
-
-				return
-			}
-
-			time.Sleep(time.Second / 10)
+		// Default 1 GB soft limit to start delays.
+		if m.HeapInuse > uint64(1024*1024*p.f.MemLimit) {
+			atomic.StoreInt64(&p.throttle, 1)
 		}
-	}()
+
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (wi *writeIterator) lineStarted(seq int64) error {
-	inp := atomic.AddInt64(&wi.inProgress, 1)
-	if inp > int64(5*wi.p.f.Concurrency) {
-		if atomic.LoadInt64(&throttle) == 1 {
-			time.Sleep(10 * time.Millisecond)
-		}
-	} else if inp > int64(20*wi.p.f.Concurrency) {
-		if atomic.LoadInt64(&throttle) == 1 {
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
+	atomic.AddInt64(&wi.inProgress, 1)
 
 	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
 	wi.pending.Store(seq, l)
@@ -654,10 +831,10 @@ func (wi *writeIterator) waitPending() error {
 
 	for {
 		cnt := 0
-		min := int64(-1)
-		max := int64(-1)
+		minKey := int64(-1)
+		maxKey := int64(-1)
 
-		wi.finished.Range(func(key any, value any) bool {
+		wi.finished.Range(func(key any, _ any) bool {
 			cnt++
 
 			k, ok := key.(int64)
@@ -665,12 +842,12 @@ func (wi *writeIterator) waitPending() error {
 				panic(fmt.Sprintf("BUG: int64 expected, %T received", key))
 			}
 
-			if min == -1 || k < min {
-				min = k
+			if minKey == -1 || k < minKey {
+				minKey = k
 			}
 
-			if max == -1 || k > max {
-				max = k
+			if maxKey == -1 || k > maxKey {
+				maxKey = k
 			}
 
 			return true
@@ -691,7 +868,7 @@ func (wi *writeIterator) waitPending() error {
 
 		if i > 10 {
 			return fmt.Errorf("could not wait for lines %v (%d - %d), expected seq %d, in progress %d",
-				cnt, min, max, atomic.LoadInt64(&wi.seqExpected), wi.pending.Size())
+				cnt, minKey, maxKey, atomic.LoadInt64(&wi.seqExpected), wi.pending.Size())
 		}
 	}
 }

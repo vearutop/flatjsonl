@@ -114,7 +114,7 @@ Usage of flatjsonl:
   -concurrency int
         Number of concurrent routines in reader. (default 24)
   -config string
-        Configuration JSON or YAML file.
+        Configuration JSON value, path to JSON5 or YAML file.
   -csv string
         Output to CSV file (gzip encoded if ends with .gz).
   -dbg-cpu-prof string
@@ -139,6 +139,8 @@ Usage of flatjsonl:
         Max number of lines to process.
   -max-lines-keys int
         Max number of lines to process when scanning keys.
+  -mem-limit int
+        Heap in use soft limit, in MB. (default 1000)
   -offset-lines int
         Skip a number of first lines.
   -output string
@@ -181,6 +183,12 @@ includeKeys:
   - ".key2"
   - "const:my-value"
   - ".keyGroup.[0].key3"
+includeKeysRegex:
+  - ".keyGroup.[1].*"
+excludeKeys:
+  - ".keyGroup.[1].notNeeded"
+excludeKeysRegex:
+  - ".keyGroup.*.notNeeded"
 replaceKeys:
   ".key1": key1
   ".key2": created_at
@@ -189,6 +197,13 @@ parseTime:
 outputTimeFormat: '2006-01-02 15:04:05'
 outputTZ: UTC
 concatDelimiter: "::"
+extractValuesRegex:
+  ".foo.link": "URL"
+  ".*.nested": "JSON"
+# Use keepJSON to list keys with arrays and objects of highly cardinal data, 
+#  values would remain as JSON literals instead of being flattened to columns.
+keepJSON:
+  - ".deviceMapping"
 ```
 
 Parse time is a map of original key to time pattern. See https://pkg.go.dev/time#pkg-constants for pattern rules.
@@ -233,9 +248,15 @@ If multiple keys are replaced into similar key, coalesce function is used for re
 In cases of dynamic arrays or objects, you may want to transpose the values as rows of separate tables instead of
 columns of main table.
 
-This is possible with `transpose` configuration file field ([example](./flatjsonl/_testdata/transpose_cfg.json)), 
+This is possible with `transpose` configuration file field ([example](./flatjsonl/testdata/transpose_cfg.json)), 
 it accepts a map of key prefixes to transposed table name. During processing, values found in the prefixed keys would
 be moved as multiple rows in transposed table.
+
+### Extracting data from strings
+
+With `extractValuesRegex` config parameter, you can set a map of `regexp` matching key name to value format. 
+Currently `URL` and `JSON` are supported as formats. The string values in the matching keys would be decoded 
+and exposed as JSON.
 
 ## Examples
 

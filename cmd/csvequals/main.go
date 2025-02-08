@@ -14,11 +14,11 @@ import (
 	"github.com/bool64/progress"
 )
 
-func main() { //nolint
+func main() {
 	flag.Parse()
 
 	if flag.NArg() < 2 {
-		fmt.Println("Usage: csvdiff <file1.csv> <file2.csv>")
+		fmt.Println("Usage: csvequals <file1.csv> <file2.csv>")
 		flag.PrintDefaults()
 
 		return
@@ -56,11 +56,11 @@ func main() { //nolint
 		log.Fatal(err)
 	}
 
-	cr1 := &progress.CountingReader{Reader: f1}
+	cr1 := progress.NewCountingReader(f1)
 	c1 := csv.NewReader(cr1)
 	c1.ReuseRecord = true
 
-	cr2 := &progress.CountingReader{Reader: f2}
+	cr2 := progress.NewCountingReader(f2)
 	c2 := csv.NewReader(cr2)
 	c2.ReuseRecord = true
 
@@ -136,6 +136,9 @@ func main() { //nolint
 			log.Fatalln("found diff in line ", l, ":\n"+strings.Join(diff, "\n"))
 		}
 	}
+
+	cr1.Close()
+	cr2.Close()
 
 	println("files are equal")
 }

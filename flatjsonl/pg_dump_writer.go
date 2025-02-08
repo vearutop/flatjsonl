@@ -15,6 +15,8 @@ import (
 	gzip "github.com/klauspost/pgzip"
 )
 
+const partSuffix = "_part"
+
 // PGDumpWriter creates PostgreSQL dump file.   .
 type PGDumpWriter struct {
 	fn string
@@ -204,20 +206,20 @@ func (c *PGDumpWriter) insert(seq int64, tn string, values []string) error {
 			}
 
 			break
-		} else {
-			row := make([]string, 0, c.maxCols+1)
-			row = append(row, strconv.Itoa(int(seq)))
-			row = append(row, values[:c.maxCols]...)
-			values = values[c.maxCols:]
-
-			if err := tw.cw.Write(row); err != nil {
-				return err
-			}
-
-			part++
-			tableName = tn + "_part" + strconv.Itoa(part)
-			tw = c.csvCopiers[tableName]
 		}
+
+		row := make([]string, 0, c.maxCols+1)
+		row = append(row, strconv.Itoa(int(seq)))
+		row = append(row, values[:c.maxCols]...)
+		values = values[c.maxCols:]
+
+		if err := tw.cw.Write(row); err != nil {
+			return err
+		}
+
+		part++
+		tableName = tn + partSuffix + strconv.Itoa(part)
+		tw = c.csvCopiers[tableName]
 	}
 
 	return nil
@@ -259,7 +261,7 @@ func (c *PGDumpWriter) createTable(tn string, keys []flKey, isTransposed bool) e
 			}
 
 			part++
-			tableName = tn + "_part" + strconv.Itoa(part)
+			tableName = tn + partSuffix + strconv.Itoa(part)
 			createTable = `CREATE TABLE ` + sqluct.QuoteANSI(tableName) + ` (`
 			copyStmt = `COPY ` + sqluct.QuoteANSI(tableName) + ` ("_seq_id",`
 

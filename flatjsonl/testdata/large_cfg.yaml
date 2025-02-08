@@ -1,0 +1,6 @@
+includeKeysRegex:
+  - ".topics.topics.*.*"
+  - ".users.*.*"
+
+replaceKeysRegex:
+  ".topics.topics.*.*": "topics_topics_${2}_${1}"

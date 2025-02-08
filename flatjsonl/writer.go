@@ -382,10 +382,11 @@ func newFileWriter(fn string) (*fileWriter, error) {
 
 		switch {
 		case strings.HasSuffix(fn, ".gz"):
-			c.compressed = &progress.CountingWriter{Writer: c.f}
+			c.compressed = progress.NewCountingWriter(c.f)
 			c.f = gzip.NewWriter(c.compressed)
 		case strings.HasSuffix(fn, ".zst"):
-			c.compressed = &progress.CountingWriter{Writer: c.f}
+			c.compressed = progress.NewCountingWriter(c.f)
+
 			c.f, err = zstd.NewWriter(c.compressed, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
 			if err != nil {
 				return nil, err
@@ -393,7 +394,7 @@ func newFileWriter(fn string) (*fileWriter, error) {
 		}
 	}
 
-	c.uncompressed = &progress.CountingWriter{Writer: c.f}
+	c.uncompressed = progress.NewCountingWriter(c.f)
 
 	return c, nil
 }

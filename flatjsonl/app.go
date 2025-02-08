@@ -8,8 +8,6 @@ import (
 	"runtime/pprof"
 
 	"github.com/bool64/dev/version"
-	"github.com/swaggest/assertjson/json5"
-	"gopkg.in/yaml.v3"
 )
 
 // Main is the entry point for flatjsonl CLI tool.
@@ -68,24 +66,10 @@ func Main() {
 		inputs[0].FileName = ""
 	}
 
-	var cfg Config
-
-	if f.Config != "" {
-		b, err := os.ReadFile(f.Config)
-		if err != nil {
-			log.Fatalf("failed to read config file: %v", err)
-		}
-
-		yerr := yaml.Unmarshal(b, &cfg)
-		if yerr != nil {
-			err = json5.Unmarshal(b, &cfg)
-			if err != nil {
-				log.Fatalf("failed to decode config file: json5: %v, yaml: %v", err, yerr)
-			}
-		}
+	proc, err := New(f)
+	if err != nil {
+		log.Fatal(err)
 	}
-
-	proc := NewProcessor(f, cfg, inputs...)
 
 	if err := proc.Process(); err != nil {
 		log.Fatal(err)

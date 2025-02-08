@@ -1,6 +1,7 @@
 package flatjsonl
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -24,14 +25,25 @@ type FastWalker struct {
 	// * parserPool is a length of parent prefix in flatPath,
 	// * path holds a list of segments, it is nil if WantPath is false.
 	FnNumber func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte)
-	FnString func(seq int64, flatPath []byte, pl int, path []string, value []byte)
+	FnString func(seq int64, flatPath []byte, pl int, path []string, value []byte) extractor
 	FnBool   func(seq int64, flatPath []byte, pl int, path []string, value bool)
 	FnNull   func(seq int64, flatPath []byte, pl int, path []string)
 
 	WantPath       bool
 	ExtractStrings bool
+	KeepJSON       map[string]bool
 
 	buf []byte
+}
+
+func (fv *FastWalker) configure(p *Processor) {
+	fv.ExtractStrings = p.f.ExtractStrings
+	if len(p.cfg.KeepJSON) > 0 {
+		fv.KeepJSON = make(map[string]bool)
+		for _, v := range p.cfg.KeepJSON {
+			fv.KeepJSON[v] = true
+		}
+	}
 }
 
 // GetKey walks into a single key.
@@ -83,6 +95,15 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, path []strin
 
 	pl := len(flatPath)
 
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
+		fv.buf = fv.buf[:0]
+		fv.buf = v.MarshalTo(fv.buf)
+
+		fv.FnString(seq, flatPath, pl, path, fv.buf)
+
+		return
+	}
+
 	for i, v := range a {
 		k := "[" + strconv.Itoa(i) + "]"
 
@@ -105,9 +126,19 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, path []stri
 
 	pl := len(flatPath)
 
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
+		fv.buf = fv.buf[:0]
+		fv.buf = v.MarshalTo(fv.buf)
+
+		fv.FnString(seq, flatPath, pl, path, fv.buf)
+
+		return
+	}
+
 	o.Visit(func(key []byte, v *fastjson.Value) {
 		flatPath := append(flatPath, '.')
 		flatPath = append(flatPath, key...)
+
 		if fv.WantPath {
 			fv.WalkFastJSON(seq, flatPath, pl, append(path, string(key)), v)
 		} else {
@@ -122,10 +153,36 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 		panic(fmt.Sprintf("BUG: failed to use JSON string: %v", err))
 	}
 
-	fv.FnString(seq, flatPath, pl, path, s)
+	x := fv.FnString(seq, flatPath, pl, path, s)
 
-	// Check if string has nested JSON.
-	if fv.ExtractStrings && len(s) > 2 && (s[0] == '{' || s[0] == '[') {
+	if x != nil { //nolint:nestif
+		xs, name, err := x.extract(s)
+		if err == nil {
+			p := parserPool.Get()
+			defer parserPool.Put(p)
+
+			if v, err := p.ParseBytes(xs); err == nil {
+				pl := len(flatPath)
+
+				flatPath = append(flatPath, []byte("."+name)...)
+
+				if fv.WantPath {
+					fv.WalkFastJSON(seq, flatPath, pl, append(path, string(name)), v)
+				} else {
+					fv.WalkFastJSON(seq, flatPath, pl, nil, v)
+				}
+
+				return
+			}
+		}
+	}
+
+	if !fv.ExtractStrings || len(s) <= 2 {
+		return
+	}
+
+	// Check if string has nested JSON or URL.
+	if s[0] == '{' || s[0] == '[' {
 		p := parserPool.Get()
 		defer parserPool.Put(p)
 
@@ -142,6 +199,28 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 			}
 
 			return
+		}
+	}
+
+	if bytes.Contains(s, []byte("://")) { //nolint:nestif
+		us, _, err := (urlExtractor{}).extract(s)
+		if err == nil {
+			p := parserPool.Get()
+			defer parserPool.Put(p)
+
+			v, err := p.ParseBytes(us)
+			if err == nil {
+				flatPath = append(flatPath, []byte(".URL")...)
+				pl := len(flatPath)
+
+				if fv.WantPath {
+					fv.WalkFastJSON(seq, flatPath, pl, append(path, "URL"), v)
+				} else {
+					fv.WalkFastJSON(seq, flatPath, pl, nil, v)
+				}
+
+				return
+			}
 		}
 	}
 }
