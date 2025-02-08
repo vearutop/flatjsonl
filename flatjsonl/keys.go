@@ -24,6 +24,7 @@ type flKey struct {
 	transposeKey     intOrString
 	transposeTrimmed string
 	extractor        extractor
+	parent           uint64
 }
 
 type intOrString struct {
@@ -54,7 +55,7 @@ func (is intOrString) String() string {
 	return strconv.Itoa(is.i)
 }
 
-func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey {
+func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero bool) flKey {
 	k, ok := p.flKeys.Load(pk)
 	if ok {
 		return k
@@ -70,6 +71,7 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	k.path = pp
 	k.original = key
 	k.canonical = p.ck(key)
+	k.parent = parent
 
 	for tk, dst := range p.cfg.Transpose {
 		if strings.HasPrefix(k.original, tk) {
@@ -95,9 +97,30 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 		return existing
 	}
 
+	if p.f.ChildrenLimit > 0 && len(path) > 1 {
+		parentCardinality := p.parentCardinality[parent]
+		parentCardinality++
+
+		if parentCardinality > p.f.ChildrenLimit {
+			pp := k.path[0 : len(k.path)-1]
+			parentKey := KeyFromPath(pp)
+			grandParentKey := KeyFromPath(pp[:len(pp)-1])
+			ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
+
+			p.mu.Unlock()
+			// println("making parent key", parentKey, grandParentKey, ppk, gpk)
+			p.initKey(ppk, gpk, pp, TypeJSON, false)
+			p.mu.Lock()
+
+			p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
+			p.parentHighCardinality.Store(parent, true)
+		} else {
+			p.parentCardinality[parent] = parentCardinality
+		}
+	}
+
 	if _, ok := p.canonicalKeys[k.canonical]; !ok {
 		p.flKeysList = append(p.flKeysList, k.original)
-		p.keyHierarchy.Add(path)
 		p.canonicalKeys[k.canonical] = k
 	}
 
@@ -107,11 +130,15 @@ func (p *Processor) initKey(pk uint64, path []string, t Type, isZero bool) flKey
 	return k
 }
 
-func (p *Processor) scanKey(pk uint64, path []string, t Type, isZero bool) extractor {
+func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero bool) extractor {
+	if _, phc := p.parentHighCardinality.Load(parent); phc {
+		return nil
+	}
+
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
-		k = p.initKey(pk, path, t, isZero)
+		k = p.initKey(pk, parent, path, t, isZero)
 	}
 
 	updType := false
@@ -193,6 +220,30 @@ func (h hasher) hashBytes(flatPath []byte) uint64 {
 	return h.digest.Sum64()
 }
 
+// hashParentBytes takes flat path to element as a parent path and last segment.
+// It returns hashes for parent path and for full path.
+func (h hasher) hashParentBytes(flatPath []byte, parentLen int) (pk uint64, par uint64) {
+	h.digest.Reset()
+
+	p1 := flatPath[:parentLen]
+
+	_, err := h.digest.Write(p1)
+	if err != nil {
+		panic("hashing failed: " + err.Error())
+	}
+
+	par = h.digest.Sum64()
+
+	p2 := flatPath[parentLen:]
+
+	_, err = h.digest.Write(p2)
+	if err != nil {
+		panic("hashing failed: " + err.Error())
+	}
+
+	return h.digest.Sum64(), par
+}
+
 func (p *Processor) scanAvailableKeys() error {
 	p.Log("scanning keys...")
 	atomic.StoreInt64(&p.rd.Sequence, 0)
@@ -230,22 +281,28 @@ func (p *Processor) scanAvailableKeys() error {
 
 				w.WantPath = true
 
-				w.FnString = func(_ int64, flatPath []byte, path []string, value []byte) extractor {
-					return p.scanKey(h.hashBytes(flatPath), path, TypeString, len(value) == 0)
+				w.FnString = func(_ int64, flatPath []byte, pl int, path []string, value []byte) extractor {
+					pk, parent := h.hashParentBytes(flatPath, pl)
+
+					return p.scanKey(pk, parent, path, TypeString, len(value) == 0)
 				}
-				w.FnNumber = func(_ int64, flatPath []byte, path []string, value float64, _ []byte) {
+				w.FnNumber = func(_ int64, flatPath []byte, pl int, path []string, value float64, _ []byte) {
+					pk, parent := h.hashParentBytes(flatPath, pl)
 					isInt := float64(int(value)) == value
+
 					if isInt {
-						p.scanKey(h.hashBytes(flatPath), path, TypeInt, value == 0)
+						p.scanKey(pk, parent, path, TypeInt, value == 0)
 					} else {
-						p.scanKey(h.hashBytes(flatPath), path, TypeFloat, value == 0)
+						p.scanKey(pk, parent, path, TypeFloat, value == 0)
 					}
 				}
-				w.FnBool = func(_ int64, flatPath []byte, path []string, value bool) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeBool, !value)
+				w.FnBool = func(_ int64, flatPath []byte, pl int, path []string, value bool) {
+					pk, parent := h.hashParentBytes(flatPath, pl)
+					p.scanKey(pk, parent, path, TypeBool, !value)
 				}
-				w.FnNull = func(_ int64, flatPath []byte, path []string) {
-					p.scanKey(h.hashBytes(flatPath), path, TypeNull, true)
+				w.FnNull = func(_ int64, flatPath []byte, pl int, path []string) {
+					pk, parent := h.hashParentBytes(flatPath, pl)
+					p.scanKey(pk, parent, path, TypeNull, true)
 				}
 			}
 
@@ -261,9 +318,50 @@ func (p *Processor) scanAvailableKeys() error {
 		}
 	}
 
+	p.prepareScannedKeys()
 	p.iterateIncludeKeys()
 
 	return nil
+}
+
+func (p *Processor) prepareScannedKeys() {
+	var jsonKeys map[string]bool
+	if len(p.cfg.KeepJSON) > 0 {
+		jsonKeys = make(map[string]bool)
+		for _, key := range p.cfg.KeepJSON {
+			jsonKeys[key] = true
+		}
+	}
+
+	deleted := map[string]bool{}
+
+	p.flKeys.Range(func(key uint64, k flKey) bool {
+		if _, phc := p.parentHighCardinality.Load(k.parent); phc {
+			p.flKeys.Delete(key)
+
+			deleted[k.original] = true
+
+			return true
+		}
+
+		if k.t == TypeString && jsonKeys[k.original] {
+			k.t = TypeJSON
+		}
+
+		p.keyHierarchy.Add(k.path)
+
+		return true
+	})
+
+	var newFlKeys []string
+
+	for _, key := range p.flKeysList {
+		if !deleted[key] {
+			newFlKeys = append(newFlKeys, key)
+		}
+	}
+
+	p.flKeysList = newFlKeys
 }
 
 func (p *Processor) flKeysInit() {
@@ -300,6 +398,11 @@ func (p *Processor) flKeysInit() {
 	}
 
 	p.flKeys.Range(func(_ uint64, value flKey) bool {
+		if _, phc := p.parentHighCardinality.Load(value.parent); phc {
+			// Skip keys with high cardinality parents.
+			return true
+		}
+
 		v := p.canonicalKeys[value.canonical]
 		value.isZero = value.isZero && v.isZero
 		value.t = v.t.Update(value.t)

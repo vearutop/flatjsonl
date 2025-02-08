@@ -14,7 +14,7 @@ func KeyFromPath(path []string) string {
 	return "." + strings.Join(path, ".")
 }
 
-var pl fastjson.ParserPool
+var parserPool fastjson.ParserPool
 
 // FastWalker walks JSON with fastjson.
 type FastWalker struct {
@@ -24,10 +24,10 @@ type FastWalker struct {
 	// * flatPath is a dot-separated path to the current element,
 	// * parserPool is a length of parent prefix in flatPath,
 	// * path holds a list of segments, it is nil if WantPath is false.
-	FnNumber func(seq int64, flatPath []byte, path []string, value float64, raw []byte)
-	FnString func(seq int64, flatPath []byte, path []string, value []byte) extractor
-	FnBool   func(seq int64, flatPath []byte, path []string, value bool)
-	FnNull   func(seq int64, flatPath []byte, path []string)
+	FnNumber func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte)
+	FnString func(seq int64, flatPath []byte, pl int, path []string, value []byte) extractor
+	FnBool   func(seq int64, flatPath []byte, pl int, path []string, value bool)
+	FnNull   func(seq int64, flatPath []byte, pl int, path []string)
 
 	WantPath       bool
 	ExtractStrings bool
@@ -50,19 +50,19 @@ func (fv *FastWalker) configure(p *Processor) {
 func (fv *FastWalker) GetKey(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
 	vv := v.Get(path...)
 	if vv != nil {
-		fv.WalkFastJSON(seq, flatPath, path, vv)
+		fv.WalkFastJSON(seq, flatPath, 0, path, vv)
 	}
 }
 
 // WalkFastJSON iterates fastjson.Value JSON structure.
-func (fv *FastWalker) WalkFastJSON(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
+func (fv *FastWalker) WalkFastJSON(seq int64, flatPath []byte, pl int, path []string, v *fastjson.Value) {
 	switch v.Type() {
 	case fastjson.TypeObject:
 		fv.walkFastJSONObject(seq, flatPath, path, v)
 	case fastjson.TypeArray:
 		fv.walkFastJSONArray(seq, flatPath, path, v)
 	case fastjson.TypeString:
-		fv.walkFastJSONString(seq, flatPath, path, v)
+		fv.walkFastJSONString(seq, flatPath, pl, path, v)
 	case fastjson.TypeNumber:
 		n, err := v.Float64()
 		if err != nil {
@@ -72,16 +72,16 @@ func (fv *FastWalker) WalkFastJSON(seq int64, flatPath []byte, path []string, v 
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
-		fv.FnNumber(seq, flatPath, path, n, fv.buf)
+		fv.FnNumber(seq, flatPath, pl, path, n, fv.buf)
 	case fastjson.TypeFalse, fastjson.TypeTrue:
 		b, err := v.Bool()
 		if err != nil {
 			panic(fmt.Sprintf("BUG: failed to use JSON bool: %v", err))
 		}
 
-		fv.FnBool(seq, flatPath, path, b)
+		fv.FnBool(seq, flatPath, pl, path, b)
 	case fastjson.TypeNull:
-		fv.FnNull(seq, flatPath, path)
+		fv.FnNull(seq, flatPath, pl, path)
 	default:
 		panic(fmt.Sprintf("BUG: don't know how to walk: %s", v.Type()))
 	}
@@ -93,11 +93,13 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, path []strin
 		panic(fmt.Sprintf("BUG: failed to use JSON array: %v", err))
 	}
 
+	pl := len(flatPath)
+
 	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
-		fv.FnString(seq, flatPath, path, fv.buf)
+		fv.FnString(seq, flatPath, pl, path, fv.buf)
 
 		return
 	}
@@ -109,9 +111,9 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, path []strin
 		flatPath = append(flatPath, k...)
 
 		if fv.WantPath {
-			fv.WalkFastJSON(seq, flatPath, append(path, k), v)
+			fv.WalkFastJSON(seq, flatPath, pl, append(path, k), v)
 		} else {
-			fv.WalkFastJSON(seq, flatPath, nil, v)
+			fv.WalkFastJSON(seq, flatPath, pl, nil, v)
 		}
 	}
 }
@@ -122,11 +124,13 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, path []stri
 		panic(fmt.Sprintf("BUG: failed to use JSON object: %v", err))
 	}
 
+	pl := len(flatPath)
+
 	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
-		fv.FnString(seq, flatPath, path, fv.buf)
+		fv.FnString(seq, flatPath, pl, path, fv.buf)
 
 		return
 	}
@@ -136,34 +140,36 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, path []stri
 		flatPath = append(flatPath, key...)
 
 		if fv.WantPath {
-			fv.WalkFastJSON(seq, flatPath, append(path, string(key)), v)
+			fv.WalkFastJSON(seq, flatPath, pl, append(path, string(key)), v)
 		} else {
-			fv.WalkFastJSON(seq, flatPath, nil, v)
+			fv.WalkFastJSON(seq, flatPath, pl, nil, v)
 		}
 	})
 }
 
-func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
+func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, path []string, v *fastjson.Value) {
 	s, err := v.StringBytes()
 	if err != nil {
 		panic(fmt.Sprintf("BUG: failed to use JSON string: %v", err))
 	}
 
-	x := fv.FnString(seq, flatPath, path, s)
+	x := fv.FnString(seq, flatPath, pl, path, s)
 
 	if x != nil { //nolint:nestif
 		xs, name, err := x.extract(s)
 		if err == nil {
-			p := pl.Get()
-			defer pl.Put(p)
+			p := parserPool.Get()
+			defer parserPool.Put(p)
 
 			if v, err := p.ParseBytes(xs); err == nil {
+				pl := len(flatPath)
+
 				flatPath = append(flatPath, []byte("."+name)...)
 
 				if fv.WantPath {
-					fv.WalkFastJSON(seq, flatPath, append(path, string(name)), v)
+					fv.WalkFastJSON(seq, flatPath, pl, append(path, string(name)), v)
 				} else {
-					fv.WalkFastJSON(seq, flatPath, nil, v)
+					fv.WalkFastJSON(seq, flatPath, pl, nil, v)
 				}
 
 				return
@@ -177,17 +183,19 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 
 	// Check if string has nested JSON or URL.
 	if s[0] == '{' || s[0] == '[' {
-		p := pl.Get()
-		defer pl.Put(p)
+		p := parserPool.Get()
+		defer parserPool.Put(p)
 
 		v, err := p.ParseBytes(s)
 		if err == nil {
+			pl := len(flatPath)
+
 			flatPath = append(flatPath, []byte(".JSON")...)
 
 			if fv.WantPath {
-				fv.WalkFastJSON(seq, flatPath, append(path, "JSON"), v)
+				fv.WalkFastJSON(seq, flatPath, pl, append(path, "JSON"), v)
 			} else {
-				fv.WalkFastJSON(seq, flatPath, nil, v)
+				fv.WalkFastJSON(seq, flatPath, pl, nil, v)
 			}
 
 			return
@@ -197,17 +205,18 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, path []stri
 	if bytes.Contains(s, []byte("://")) { //nolint:nestif
 		us, _, err := (urlExtractor{}).extract(s)
 		if err == nil {
-			p := pl.Get()
-			defer pl.Put(p)
+			p := parserPool.Get()
+			defer parserPool.Put(p)
 
 			v, err := p.ParseBytes(us)
 			if err == nil {
 				flatPath = append(flatPath, []byte(".URL")...)
+				pl := len(flatPath)
 
 				if fv.WantPath {
-					fv.WalkFastJSON(seq, flatPath, append(path, "URL"), v)
+					fv.WalkFastJSON(seq, flatPath, pl, append(path, "URL"), v)
 				} else {
-					fv.WalkFastJSON(seq, flatPath, nil, v)
+					fv.WalkFastJSON(seq, flatPath, pl, nil, v)
 				}
 
 				return

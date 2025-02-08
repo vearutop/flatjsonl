@@ -111,6 +111,8 @@ Usage of flatjsonl:
         Buffer size (max length of file line) in bytes. (default 10000000)
   -case-sensitive-keys
         Use case-sensitive keys (can fail for SQLite).
+  -children-limit int
+        Max number of unique child keys in arrays/objects, keep JSON is enabled for high cardinality parent, 0 for unlimited. (default 50)
   -concurrency int
         Number of concurrent routines in reader. (default 24)
   -config string
