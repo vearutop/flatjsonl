@@ -57,7 +57,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
 
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
-	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 500, "Maximum columns in single SQL table (SQLite will fail with more than 2000).")
+	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 1000, "Maximum columns in single SQL table (SQLite will fail with more than 2000).")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
 	flag.StringVar(&f.PGDump, "pg-dump", "", "Output to PostgreSQL dump file.")
 

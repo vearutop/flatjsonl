@@ -9,36 +9,23 @@ import (
 	_ "modernc.org/sqlite" // Database driver.
 )
 
-// SQLiteWriter inserts rows into SQLite database.
-type SQLiteWriter struct {
-	db        *sql.DB
+// SQLiteCLIWriter imports CSV rows into SQLite database with `sqlite3` CLI tool.
+type SQLiteCLIWriter struct {
 	tableName string
-	tx        *sql.Tx
-	rowsTx    int
-	sizeTx    int
 	replacer  *strings.Replacer
 	p         *Processor
 	maxCols   int
+
+	fn string
+	cw *CSVWriter
 
 	transposed map[string]*baseWriter
 	b          *baseWriter
 }
 
-// NewSQLiteWriter creates an instance of SQLiteWriter.
-func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, error) {
-	var err error
-
-	db, err := sql.Open("sqlite", fn)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = db.Exec("PRAGMA synchronous = OFF;")
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = db.Exec("PRAGMA journal_mode = OFF;")
+// NewSQLiteCLIWriter creates an instance of SQLiteCLIWriter.
+func NewSQLiteCLIWriter(fn string, tableName string, p *Processor) (*SQLiteCLIWriter, error) {
+	cw, err := NewCSVWriter(fn + ".temp.csv")
 	if err != nil {
 		return nil, err
 	}
@@ -47,10 +34,8 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 		p.f.SQLMaxCols = 2000
 	}
 
-	c := &SQLiteWriter{
-		db:        db,
+	c := &SQLiteCLIWriter{
 		tableName: tableName,
-		replacer:  strings.NewReplacer(`"`, `""`),
 		p:         p,
 		maxCols:   p.f.SQLMaxCols - 1, // -1 for _seq_id.
 	}
@@ -59,7 +44,7 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 }
 
 // SetupKeys creates tables.
-func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
+func (c *SQLiteCLIWriter) SetupKeys(keys []flKey) error {
 	c.b = &baseWriter{}
 	c.b.p = c.p
 	c.b.setupKeys(keys)
@@ -91,7 +76,7 @@ func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
 	return nil
 }
 
-func (c *SQLiteWriter) table(dst string) string {
+func (c *SQLiteCLIWriter) table(dst string) string {
 	if dst != "" {
 		return c.tableName + "_" + dst
 	}
@@ -100,7 +85,7 @@ func (c *SQLiteWriter) table(dst string) string {
 }
 
 // ReceiveRow receives rows.
-func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
+func (c *SQLiteCLIWriter) ReceiveRow(seq int64, values []Value) error {
 	vv := c.b.receiveRowValues(values)
 
 	if err := c.insert(seq, c.tableName, vv); err != nil {
@@ -132,7 +117,7 @@ func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
 	return nil
 }
 
-func (c *SQLiteWriter) insert(seq int64, tn string, values []Value) error {
+func (c *SQLiteCLIWriter) insert(seq int64, tn string, values []Value) error {
 	c.rowsTx++
 
 	tableName := tn
@@ -166,7 +151,7 @@ func (c *SQLiteWriter) insert(seq int64, tn string, values []Value) error {
 	return c.execTx(res)
 }
 
-func (c *SQLiteWriter) commitTx() error {
+func (c *SQLiteCLIWriter) commitTx() error {
 	if err := c.tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit SQLite transaction: %w", err)
 	}
@@ -177,7 +162,7 @@ func (c *SQLiteWriter) commitTx() error {
 	return nil
 }
 
-func (c *SQLiteWriter) execTx(res string) error {
+func (c *SQLiteCLIWriter) execTx(res string) error {
 	if c.tx == nil {
 		tx, err := c.db.Begin()
 		if err != nil {
@@ -196,7 +181,7 @@ func (c *SQLiteWriter) execTx(res string) error {
 	return nil
 }
 
-func (c *SQLiteWriter) createTable(tn string, keys []flKey, isTransposed bool) error {
+func (c *SQLiteCLIWriter) createTable(tn string, keys []flKey, isTransposed bool) error {
 	tableName := tn
 	createTable := `CREATE TABLE "` + tableName + `" (
 `
@@ -261,7 +246,7 @@ _seq_id integer,
 }
 
 // Close commits outstanding transaction and closes database instance.
-func (c *SQLiteWriter) Close() error {
+func (c *SQLiteCLIWriter) Close() error {
 	if c.tx != nil {
 		err := c.tx.Commit()
 		if err != nil {
