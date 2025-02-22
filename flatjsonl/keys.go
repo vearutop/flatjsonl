@@ -130,9 +130,9 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 	return k
 }
 
-func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero bool) extractor {
+func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero bool) (_ extractor, stop bool) {
 	if _, phc := p.parentHighCardinality.Load(parent); phc {
-		return nil
+		return nil, true
 	}
 
 	k, ok := p.flKeys.Load(pk)
@@ -160,7 +160,7 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 		p.flKeys.Store(pk, k)
 	}
 
-	return k.extractor
+	return k.extractor, false
 }
 
 func scanTransposedKey(dst string, tk string, k *flKey) {
@@ -281,10 +281,34 @@ func (p *Processor) scanAvailableKeys() error {
 
 				w.WantPath = true
 
+				w.FnObjectStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
+					if pl == 0 {
+						return
+					}
+
+					pk, parent := h.hashParentBytes(flatPath, pl)
+
+					_, stop = p.scanKey(pk, parent, path, TypeObject, false)
+
+					return stop
+				}
+				w.FnArrayStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
+					if pl == 0 {
+						return
+					}
+
+					pk, parent := h.hashParentBytes(flatPath, pl)
+
+					_, stop = p.scanKey(pk, parent, path, TypeArray, false)
+
+					return stop
+				}
 				w.FnString = func(_ int64, flatPath []byte, pl int, path []string, value []byte) extractor {
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
-					return p.scanKey(pk, parent, path, TypeString, len(value) == 0)
+					x, _ := p.scanKey(pk, parent, path, TypeString, len(value) == 0)
+
+					return x
 				}
 				w.FnNumber = func(_ int64, flatPath []byte, pl int, path []string, value float64, _ []byte) {
 					pk, parent := h.hashParentBytes(flatPath, pl)
@@ -333,19 +357,42 @@ func (p *Processor) prepareScannedKeys() {
 		}
 	}
 
-	deleted := map[string]bool{}
+	var (
+		deleted = map[string]bool{}
+		hcOrig  []string
+	)
+
+	p.parentHighCardinality.Range(func(key uint64, value bool) bool {
+		k, ok := p.flKeys.Load(key)
+		if !ok {
+			println("BUG: high cardinality key not found")
+
+			return true
+		}
+
+		hcOrig = append(hcOrig, k.original)
+		k.t = TypeJSON
+
+		p.flKeys.Store(key, k)
+
+		return true
+	})
 
 	p.flKeys.Range(func(key uint64, k flKey) bool {
-		if _, phc := p.parentHighCardinality.Load(k.parent); phc {
-			p.flKeys.Delete(key)
-
+		if k.t == TypeObject || k.t == TypeArray {
 			deleted[k.original] = true
 
 			return true
 		}
 
-		if k.t == TypeString && jsonKeys[k.original] {
-			k.t = TypeJSON
+		for _, hc := range hcOrig {
+			if len(k.original) > len(hc) && strings.HasPrefix(k.original, hc) {
+				p.flKeys.Delete(key)
+
+				deleted[k.original] = true
+
+				return true
+			}
 		}
 
 		p.keyHierarchy.Add(k.path)

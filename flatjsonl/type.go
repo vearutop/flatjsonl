@@ -5,6 +5,8 @@ type Type string
 
 // Type enumeration.
 const (
+	TypeArray  = Type("array")
+	TypeObject = Type("object")
 	TypeString = Type("string")
 	TypeInt    = Type("int")
 	TypeFloat  = Type("float")
@@ -17,7 +19,7 @@ const (
 // Update merges original type with updated.
 func (t Type) Update(u Type) Type {
 	// Undefined type is replaced by update.
-	if t == "" || t == TypeNull {
+	if t == TypeAbsent || t == TypeNull || t == TypeObject || t == TypeArray {
 		return u
 	}
 
