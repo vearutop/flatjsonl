@@ -289,6 +289,7 @@ func (p *Processor) scanAvailableKeys() error {
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
 					_, stop = p.scanKey(pk, parent, path, TypeObject, false)
+
 					return stop
 				}
 				w.FnArrayStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
@@ -299,12 +300,14 @@ func (p *Processor) scanAvailableKeys() error {
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
 					_, stop = p.scanKey(pk, parent, path, TypeArray, false)
+
 					return stop
 				}
 				w.FnString = func(_ int64, flatPath []byte, pl int, path []string, value []byte) extractor {
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
 					x, _ := p.scanKey(pk, parent, path, TypeString, len(value) == 0)
+
 					return x
 				}
 				w.FnNumber = func(_ int64, flatPath []byte, pl int, path []string, value float64, _ []byte) {
@@ -354,8 +357,10 @@ func (p *Processor) prepareScannedKeys() {
 		}
 	}
 
-	deleted := map[string]bool{}
-	var hcOrig []string
+	var (
+		deleted = map[string]bool{}
+		hcOrig  []string
+	)
 
 	p.parentHighCardinality.Range(func(key uint64, value bool) bool {
 		k, ok := p.flKeys.Load(key)
