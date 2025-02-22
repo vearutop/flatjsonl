@@ -12,8 +12,6 @@ linters-settings:
     threshold: 100
   misspell:
     locale: US
-  unused:
-    check-exported: false
   unparam:
     check-exported: true
   cyclop:
@@ -35,7 +33,6 @@ linters:
     - cyclop
     - lll
     - gochecknoglobals
-    - gomnd
     - wrapcheck
     - paralleltest
     - forbidigo
@@ -50,26 +47,22 @@ linters:
     - dupword
     - depguard
     - tagalign
-    - execinquery
     - mnd
     - testifylint
+    - recvcheck
 
 issues:
   exclude-use-default: false
   exclude-rules:
     - linters:
         - testpackage
-        - gomnd
         - mnd
         - goconst
-        - goerr113
         - noctx
         - funlen
         - dupl
-        - structcheck
         - unused
         - unparam
-        - nosnakecase
       path: "_test.go"
     - linters:
         - errcheck # Error checking omitted for brevity.

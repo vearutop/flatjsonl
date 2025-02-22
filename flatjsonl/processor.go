@@ -333,7 +333,9 @@ func (p *Processor) maybeShowKeys() error {
 	}
 
 	if p.f.ShowKeysHier {
-		b, err := assertjson.MarshalIndentCompact(p.keyHierarchy.Hierarchy().(map[string]interface{})["."], "", " ", 120)
+		b, err := assertjson.MarshalIndentCompact(
+			p.keyHierarchy.Hierarchy().(map[string]interface{})["."], //nolint:errcheck
+			"", " ", 120)
 		if err != nil {
 			return err
 		}
@@ -820,7 +822,7 @@ func (wi *writeIterator) checkCompleted() error {
 			break
 		}
 
-		if err := wi.complete(seqExpected, l.(*lineBuf)); err != nil {
+		if err := wi.complete(seqExpected, l.(*lineBuf)); err != nil { //nolint:errcheck
 			return err
 		}
 	}
