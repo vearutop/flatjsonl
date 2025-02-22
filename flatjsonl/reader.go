@@ -131,20 +131,20 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 
 	switch cmp {
 	case "gzip":
+		cr.SetLines(nil)
+
 		if r, err = gzip.NewReader(sess.r); err != nil {
 			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
 		}
 
-		cr.SetLines(nil)
-
 		lines = progress.NewCountingReader(r)
 		sess.r = lines
 	case "zst":
-		if r, err = zstd.NewReader(sess.r); err != nil {
-			return nil, fmt.Errorf("failed to init gzip reader: %w", err)
-		}
-
 		cr.SetLines(nil)
+
+		if r, err = zstd.NewReader(sess.r); err != nil {
+			return nil, fmt.Errorf("failed to init zstd reader: %w", err)
+		}
 
 		lines = progress.NewCountingReader(r)
 		sess.r = lines
