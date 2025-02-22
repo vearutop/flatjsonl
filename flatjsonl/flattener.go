@@ -24,10 +24,12 @@ type FastWalker struct {
 	// * flatPath is a dot-separated path to the current element,
 	// * parserPool is a length of parent prefix in flatPath,
 	// * path holds a list of segments, it is nil if WantPath is false.
-	FnNumber func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte)
-	FnString func(seq int64, flatPath []byte, pl int, path []string, value []byte) extractor
-	FnBool   func(seq int64, flatPath []byte, pl int, path []string, value bool)
-	FnNull   func(seq int64, flatPath []byte, pl int, path []string)
+	FnObjectStop func(seq int64, flatPath []byte, pl int, path []string) (stop bool)
+	FnArrayStop  func(seq int64, flatPath []byte, pl int, path []string) (stop bool)
+	FnNumber     func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte)
+	FnString     func(seq int64, flatPath []byte, pl int, path []string, value []byte) extractor
+	FnBool       func(seq int64, flatPath []byte, pl int, path []string, value bool)
+	FnNull       func(seq int64, flatPath []byte, pl int, path []string)
 
 	WantPath       bool
 	ExtractStrings bool
@@ -58,9 +60,9 @@ func (fv *FastWalker) GetKey(seq int64, flatPath []byte, path []string, v *fastj
 func (fv *FastWalker) WalkFastJSON(seq int64, flatPath []byte, pl int, path []string, v *fastjson.Value) {
 	switch v.Type() {
 	case fastjson.TypeObject:
-		fv.walkFastJSONObject(seq, flatPath, path, v)
+		fv.walkFastJSONObject(seq, flatPath, pl, path, v)
 	case fastjson.TypeArray:
-		fv.walkFastJSONArray(seq, flatPath, path, v)
+		fv.walkFastJSONArray(seq, flatPath, pl, path, v)
 	case fastjson.TypeString:
 		fv.walkFastJSONString(seq, flatPath, pl, path, v)
 	case fastjson.TypeNumber:
@@ -87,13 +89,17 @@ func (fv *FastWalker) WalkFastJSON(seq int64, flatPath []byte, pl int, path []st
 	}
 }
 
-func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
+func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, pl int, path []string, v *fastjson.Value) {
 	a, err := v.Array()
 	if err != nil {
 		panic(fmt.Sprintf("BUG: failed to use JSON array: %v", err))
 	}
 
-	pl := len(flatPath)
+	if fv.FnArrayStop != nil {
+		fv.FnArrayStop(seq, flatPath, pl, path)
+	}
+
+	pl = len(flatPath)
 
 	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
 		fv.buf = fv.buf[:0]
@@ -118,13 +124,19 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, path []strin
 	}
 }
 
-func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, path []string, v *fastjson.Value) {
+func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, pl int, path []string, v *fastjson.Value) {
 	o, err := v.Object()
 	if err != nil {
 		panic(fmt.Sprintf("BUG: failed to use JSON object: %v", err))
 	}
 
-	pl := len(flatPath)
+	if fv.FnObjectStop != nil {
+		if fv.FnObjectStop(seq, flatPath, pl, path) {
+			return
+		}
+	}
+
+	pl = len(flatPath)
 
 	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
 		fv.buf = fv.buf[:0]

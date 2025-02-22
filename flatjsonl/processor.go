@@ -644,6 +644,8 @@ type writeIterator struct {
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.configure(wi.p)
 
+	w.FnObjectStop = nil
+	w.FnArrayStop = nil
 	w.FnString = func(seq int64, flatPath []byte, pl int, _ []string, value []byte) extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]

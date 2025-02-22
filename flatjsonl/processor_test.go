@@ -739,12 +739,19 @@ func TestNewProcessor_transpose_keep_json(t *testing.T) {
 }
 
 //func TestMakeHighCardinality(t *testing.T) {
+//	type structItem struct {
+//		Foo string
+//		Bar string
+//	}
+//
 //	type item struct {
 //		ID     int `json:"id"`
 //		Deeper struct {
-//			Params map[string]int `json:"params"`
+//			Params    map[string]int        `json:"params"`
+//			StructMap map[string]structItem `json:"struct_map"`
 //		}
-//		Numbers []int `json:"numbers"`
+//		Numbers []int        `json:"numbers"`
+//		Structs []structItem `json:"structs"`
 //	}
 //
 //	f, err := os.Create("testdata/high_cardinality.jsonl")
@@ -754,10 +761,19 @@ func TestNewProcessor_transpose_keep_json(t *testing.T) {
 //	for i := 0; i < 1000; i++ {
 //		it := item{}
 //		it.ID = i
+//		it.Deeper.StructMap = map[string]structItem{}
 //		it.Deeper.Params = map[string]int{}
 //		for i := 0; i < rand.N(100); i++ {
 //			it.Numbers = append(it.Numbers, i)
 //			it.Deeper.Params[strconv.Itoa(i)] = i
+//			it.Deeper.StructMap[strconv.Itoa(i)] = structItem{
+//				Foo: strconv.Itoa(i),
+//				Bar: strconv.Itoa(i),
+//			}
+//			it.Structs = append(it.Structs, structItem{
+//				Foo: strconv.Itoa(i),
+//				Bar: strconv.Itoa(i),
+//			})
 //		}
 //
 //		require.NoError(t, enc.Encode(it))
@@ -769,7 +785,7 @@ func TestNewProcessor_transpose_keep_json(t *testing.T) {
 func TestNewProcessor_highCardinality(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
-	f.Input = "testdata/high_cardinality.jsonl"
+	f.Input = "testdata/high_cardinality.jsonl.zst"
 	f.SQLite = "testdata/high_cardinality.sqlite"
 	f.SQLTable = "stats"
 	f.CSV = "testdata/high_cardinality.csv"
@@ -793,15 +809,21 @@ func TestNewProcessor_highCardinality(t *testing.T) {
 
 	require.NoError(t, proc.Process())
 
+	println(out.String())
+
 	assert.Equal(t, `keys:
 "._sequence",
 ".id",
 ".Deeper.params",
+".Deeper.struct_map",
 ".numbers",
+".structs",
 keys info:
 1: ._sequence, TYPE int
 2: .id, TYPE int
 3: .Deeper.params, TYPE json
-4: .numbers, TYPE json
+4: .Deeper.struct_map, TYPE json
+5: .numbers, TYPE json
+6: .structs, TYPE json
 `, out.String(), out.String())
 }

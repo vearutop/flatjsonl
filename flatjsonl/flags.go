@@ -82,7 +82,7 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.OffsetLines, "offset-lines", 0, "Skip a number of first lines.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
 	flag.IntVar(&f.FieldLimit, "field-limit", 0, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
-	flag.IntVar(&f.ChildrenLimit, "children-limit", 50, "Max number of unique child keys in arrays/objects, keep JSON is enabled for high cardinality parent, 0 for unlimited.")
+	flag.IntVar(&f.ChildrenLimit, "children-limit", 100, "Max number of unique child keys in arrays/objects, keep JSON is enabled for high cardinality parent, 0 for unlimited.")
 	flag.IntVar(&f.KeyLimit, "key-limit", 0, "Max length of key, exceeding tail is truncated, 0 for unlimited.")
 	flag.IntVar(&f.BufSize, "buf-size", 1e7, "Buffer size (max length of file line) in bytes.")
 
