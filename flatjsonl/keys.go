@@ -366,6 +366,7 @@ func (p *Processor) prepareScannedKeys() {
 		k, ok := p.flKeys.Load(key)
 		if !ok {
 			println("BUG: high cardinality key not found")
+
 			return true
 		}
 
