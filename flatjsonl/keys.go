@@ -104,16 +104,28 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		if parentCardinality > p.f.ChildrenLimit {
 			pp := k.path[0 : len(k.path)-1]
 			parentKey := KeyFromPath(pp)
-			grandParentKey := KeyFromPath(pp[:len(pp)-1])
-			ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
+			allowCardinality := false
 
-			p.mu.Unlock()
-			// println("making parent key", parentKey, grandParentKey, ppk, gpk)
-			p.initKey(ppk, gpk, pp, TypeJSON, false)
-			p.mu.Lock()
+			for _, ac := range p.cfg.AllowCardinality {
+				if parentKey == ac {
+					allowCardinality = true
+				}
+			}
 
-			p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
-			p.parentHighCardinality.Store(parent, true)
+			if !allowCardinality {
+				grandParentKey := KeyFromPath(pp[:len(pp)-1])
+				ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
+
+				p.mu.Unlock()
+				// println("making parent key", parentKey, grandParentKey, ppk, gpk)
+				p.initKey(ppk, gpk, pp, TypeJSON, false)
+				p.mu.Lock()
+
+				p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
+				p.parentHighCardinality.Store(parent, true)
+			} else {
+				p.parentCardinality[parent] = parentCardinality
+			}
 		} else {
 			p.parentCardinality[parent] = parentCardinality
 		}
@@ -382,6 +394,9 @@ func (p *Processor) prepareScannedKeys() {
 		if k.t == TypeObject || k.t == TypeArray {
 			deleted[k.original] = true
 
+			p.keyHierarchy.Add(k.path)
+			p.keyHierarchy.AddKey(k)
+
 			return true
 		}
 
@@ -396,6 +411,7 @@ func (p *Processor) prepareScannedKeys() {
 		}
 
 		p.keyHierarchy.Add(k.path)
+		p.keyHierarchy.AddKey(k)
 
 		return true
 	})
