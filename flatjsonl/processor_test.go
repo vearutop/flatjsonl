@@ -30,6 +30,7 @@ func TestNewProcessor(t *testing.T) {
 	f.ShowKeysFlat = true
 	f.ShowKeysHier = true
 	f.ShowKeysInfo = true
+	f.ShowJSONSchema = true
 	f.Concurrency = 1
 	f.PrepareOutput()
 

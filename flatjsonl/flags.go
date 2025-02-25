@@ -42,9 +42,10 @@ type Flags struct {
 	MatchLinePrefix   string
 	CaseSensitiveKeys bool
 
-	ShowKeysFlat bool
-	ShowKeysHier bool
-	ShowKeysInfo bool
+	ShowKeysFlat   bool
+	ShowKeysHier   bool
+	ShowKeysInfo   bool
+	ShowJSONSchema bool
 
 	Concurrency int
 	MemLimit    int
@@ -74,6 +75,8 @@ func (f *Flags) Register() {
 	flag.BoolVar(&f.ShowKeysFlat, "show-keys-flat", false, "Show all available keys as flat list.")
 	flag.BoolVar(&f.ShowKeysHier, "show-keys-hier", false, "Show all available keys as hierarchy.")
 	flag.BoolVar(&f.ShowKeysInfo, "show-keys-info", false, "Show keys, their replaces and types.")
+	flag.BoolVar(&f.ShowJSONSchema, "show-json-schema", false, "Show hierarchy as JSON schema.")
+
 	flag.BoolVar(&f.SkipZeroCols, "skip-zero-cols", false, "Skip columns with zero values.")
 	flag.BoolVar(&f.AddSequence, "add-sequence", false, "Add auto incremented sequence number.")
 	flag.BoolVar(&f.CaseSensitiveKeys, "case-sensitive-keys", false, "Use case-sensitive keys (can fail for SQLite).")
@@ -94,7 +97,7 @@ func (f *Flags) Register() {
 func (f *Flags) Parse() {
 	flag.Parse()
 
-	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo {
+	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo && !f.ShowJSONSchema {
 		inputs := f.Inputs()
 
 		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" && f.Raw == "" && f.PGDump == "" {
