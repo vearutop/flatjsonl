@@ -104,16 +104,28 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		if parentCardinality > p.f.ChildrenLimit {
 			pp := k.path[0 : len(k.path)-1]
 			parentKey := KeyFromPath(pp)
-			grandParentKey := KeyFromPath(pp[:len(pp)-1])
-			ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
+			allowCardinality := false
 
-			p.mu.Unlock()
-			// println("making parent key", parentKey, grandParentKey, ppk, gpk)
-			p.initKey(ppk, gpk, pp, TypeJSON, false)
-			p.mu.Lock()
+			for _, ac := range p.cfg.AllowCardinality {
+				if parentKey == ac {
+					allowCardinality = true
+				}
+			}
 
-			p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
-			p.parentHighCardinality.Store(parent, true)
+			if !allowCardinality {
+				grandParentKey := KeyFromPath(pp[:len(pp)-1])
+				ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
+
+				p.mu.Unlock()
+				// println("making parent key", parentKey, grandParentKey, ppk, gpk)
+				p.initKey(ppk, gpk, pp, TypeJSON, false)
+				p.mu.Lock()
+
+				p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
+				p.parentHighCardinality.Store(parent, true)
+			} else {
+				p.parentCardinality[parent] = parentCardinality
+			}
 		} else {
 			p.parentCardinality[parent] = parentCardinality
 		}
@@ -227,21 +239,31 @@ func (h hasher) hashParentBytes(flatPath []byte, parentLen int) (pk uint64, par 
 
 	p1 := flatPath[:parentLen]
 
-	_, err := h.digest.Write(p1)
-	if err != nil {
-		panic("hashing failed: " + err.Error())
-	}
+	if len(p1) == 0 {
+		par = 0
+	} else {
+		_, err := h.digest.Write(p1)
+		if err != nil {
+			panic("hashing failed: " + err.Error())
+		}
 
-	par = h.digest.Sum64()
+		par = h.digest.Sum64()
+	}
 
 	p2 := flatPath[parentLen:]
 
-	_, err = h.digest.Write(p2)
-	if err != nil {
-		panic("hashing failed: " + err.Error())
+	if len(p2) == 0 {
+		pk = 0
+	} else {
+		_, err := h.digest.Write(p2)
+		if err != nil {
+			panic("hashing failed: " + err.Error())
+		}
+
+		pk = h.digest.Sum64()
 	}
 
-	return h.digest.Sum64(), par
+	return pk, par
 }
 
 func (p *Processor) scanAvailableKeys() error {
@@ -282,7 +304,7 @@ func (p *Processor) scanAvailableKeys() error {
 				w.WantPath = true
 
 				w.FnObjectStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
-					if pl == 0 {
+					if len(flatPath) == 0 {
 						return
 					}
 
@@ -293,7 +315,7 @@ func (p *Processor) scanAvailableKeys() error {
 					return stop
 				}
 				w.FnArrayStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
-					if pl == 0 {
+					if len(flatPath) == 0 {
 						return
 					}
 
@@ -382,6 +404,14 @@ func (p *Processor) prepareScannedKeys() {
 		if k.t == TypeObject || k.t == TypeArray {
 			deleted[k.original] = true
 
+			if p.f.ShowKeysHier {
+				p.keyHierarchy.Add(k.path)
+			}
+
+			if p.f.ShowJSONSchema {
+				p.jsonSchema.AddKey(k, p.flKeys)
+			}
+
 			return true
 		}
 
@@ -395,7 +425,13 @@ func (p *Processor) prepareScannedKeys() {
 			}
 		}
 
-		p.keyHierarchy.Add(k.path)
+		if p.f.ShowKeysHier {
+			p.keyHierarchy.Add(k.path)
+		}
+
+		if p.f.ShowJSONSchema {
+			p.jsonSchema.AddKey(k, p.flKeys)
+		}
 
 		return true
 	})

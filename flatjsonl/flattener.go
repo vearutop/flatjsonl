@@ -6,7 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valyala/fastjson"
+	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/vearutop/fastjson"
 )
 
 // KeyFromPath joins path elements into a dot-separated scalar key.
@@ -171,6 +172,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 		xs, name, err := x.extract(s)
 		if err == nil {
 			p := parserPool.Get()
+			p.AllowUnexpectedTail = true
 			defer parserPool.Put(p)
 
 			if v, err := p.ParseBytes(xs); err == nil {
@@ -196,6 +198,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 	// Check if string has nested JSON or URL.
 	if s[0] == '{' || s[0] == '[' {
 		p := parserPool.Get()
+		p.AllowUnexpectedTail = true
 		defer parserPool.Put(p)
 
 		v, err := p.ParseBytes(s)
@@ -218,6 +221,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 		us, _, err := (urlExtractor{}).extract(s)
 		if err == nil {
 			p := parserPool.Get()
+			p.AllowUnexpectedTail = true
 			defer parserPool.Put(p)
 
 			v, err := p.ParseBytes(us)
@@ -255,8 +259,106 @@ func Format(v interface{}) string {
 	}
 }
 
+type JSONSchema struct {
+	Types      []string               `json:"type,omitempty"`
+	Properties map[string]*JSONSchema `json:"properties,omitempty"`
+	Items      *JSONSchema            `json:"items,omitempty"`
+}
+
+func (j *JSONSchema) AddType(t Type) {
+	tt := ""
+
+	switch t {
+	case TypeString:
+		tt = "string"
+	case TypeInt:
+		tt = "integer"
+	case TypeFloat:
+		tt = "number"
+	case TypeBool:
+		tt = "boolean"
+	case TypeArray:
+		tt = "array"
+	case TypeObject:
+		tt = "object"
+	case TypeJSON:
+		tt = "string"
+	}
+
+	for _, t := range j.Types {
+		if t == tt {
+			return
+		}
+	}
+
+	j.Types = append(j.Types, tt)
+}
+
+func (j *JSONSchema) AddKey(k flKey, keys *xsync.MapOf[uint64, flKey]) {
+	if k.parent == 0 {
+		return
+	}
+
+	parents := []flKey{k}
+
+	parent := k.parent
+	for {
+		if parent == 0 {
+			break
+		}
+
+		pk, ok := keys.Load(parent)
+		if !ok {
+			println("BUG: failed to load parent key:", parent)
+			return
+		}
+
+		parents = append(parents, pk)
+
+		parent = pk.parent
+	}
+
+	parentSchema := j
+	parentType := TypeObject
+	for i := len(parents) - 1; i >= 0; i-- {
+		pk := parents[i]
+		name := pk.path[len(pk.path)-1]
+
+		if i != 0 && pk.t == TypeString {
+			pk.t = TypeObject
+		}
+
+		if parentType == TypeObject {
+			if parentSchema.Properties == nil {
+				parentSchema.Properties = make(map[string]*JSONSchema)
+			}
+
+			property := parentSchema.Properties[name]
+			if property == nil {
+				property = &JSONSchema{}
+			}
+			parentSchema.Properties[name] = property
+			parentSchema = property
+
+			parentType = pk.t
+		} else if parentType == TypeArray {
+			if parentSchema.Items == nil {
+				parentSchema.Items = &JSONSchema{}
+			}
+
+			parentSchema = parentSchema.Items
+			parentType = pk.t
+		}
+	}
+
+	parentSchema.AddType(k.t)
+	return
+}
+
 // KeyHierarchy collects structural relations.
 type KeyHierarchy struct {
+	Schema JSONSchema
+
 	Name string
 	Sub  map[string]KeyHierarchy
 }

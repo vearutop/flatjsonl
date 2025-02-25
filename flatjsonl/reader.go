@@ -19,7 +19,7 @@ import (
 	"github.com/bool64/progress"
 	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
-	"github.com/valyala/fastjson"
+	"github.com/vearutop/fastjson"
 )
 
 const errEmptyFile = ctxd.SentinelError("empty file")
@@ -194,7 +194,7 @@ func (rd *Reader) Read(sess *readSession) error {
 
 		semaphore <- &syncWorker{
 			i:        i,
-			p:        &fastjson.Parser{},
+			p:        &fastjson.Parser{AllowUnexpectedTail: true},
 			used:     0,
 			path:     make([]string, 0, 20),
 			flatPath: make([]byte, 0, 5000),
@@ -260,7 +260,7 @@ func (rd *Reader) Read(sess *readSession) error {
 
 		if worker.used >= 100 {
 			worker.used = 0
-			worker.p = &fastjson.Parser{}
+			worker.p = &fastjson.Parser{AllowUnexpectedTail: true}
 		}
 
 		atomic.AddInt64(&rd.Processor.inProgress, 1)
