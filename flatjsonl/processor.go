@@ -56,6 +56,7 @@ type Processor struct {
 	mu            sync.Mutex
 	flKeysList    []string
 	keyHierarchy  KeyHierarchy
+	jsonSchema    jsonSchema
 	canonicalKeys map[string]flKey
 
 	totalLines int
@@ -336,6 +337,17 @@ func (p *Processor) maybeShowKeys() error {
 		b, err := assertjson.MarshalIndentCompact(
 			p.keyHierarchy.Hierarchy().(map[string]interface{})["."], //nolint:errcheck
 			"", " ", 120)
+		if err != nil {
+			return err
+		}
+
+		_, _ = fmt.Fprintln(p.Stdout, string(b))
+	}
+
+	if p.f.ShowJSONSchema {
+		p.jsonSchema.Title = "Root"
+
+		b, err := assertjson.MarshalIndentCompact(p.jsonSchema, "", " ", 120)
 		if err != nil {
 			return err
 		}

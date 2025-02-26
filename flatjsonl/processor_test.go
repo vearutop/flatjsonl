@@ -30,6 +30,7 @@ func TestNewProcessor(t *testing.T) {
 	f.ShowKeysFlat = true
 	f.ShowKeysHier = true
 	f.ShowKeysInfo = true
+	f.ShowJSONSchema = true
 	f.Concurrency = 1
 	f.PrepareOutput()
 
@@ -791,6 +792,7 @@ func TestNewProcessor_highCardinality(t *testing.T) {
 	f.CSV = "testdata/high_cardinality.csv"
 	f.ShowKeysFlat = true
 	f.ShowKeysInfo = true
+	f.ShowJSONSchema = true
 	f.Concurrency = 1
 	f.ChildrenLimit = 30
 	f.PrepareOutput()
@@ -825,5 +827,13 @@ keys info:
 4: .Deeper.struct_map, TYPE json
 5: .numbers, TYPE json
 6: .structs, TYPE json
+{
+ "title":"Root",
+ "properties":{
+  "Deeper":{"properties":{"params":{"type":["object"]},"struct_map":{"type":["object"]}}},
+  "_sequence":{"type":["integer"]},"id":{"type":["integer"]},"numbers":{"type":["array","null"]},
+  "structs":{"type":["array","null"]}
+ }
+}
 `, out.String(), out.String())
 }

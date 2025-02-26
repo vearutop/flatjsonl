@@ -19,7 +19,11 @@ const (
 // Update merges original type with updated.
 func (t Type) Update(u Type) Type {
 	// Undefined type is replaced by update.
-	if t == TypeAbsent || t == TypeNull || t == TypeObject || t == TypeArray {
+	if t == TypeAbsent || t == TypeNull {
+		return u
+	}
+
+	if t == TypeObject || t == TypeArray {
 		return u
 	}
 

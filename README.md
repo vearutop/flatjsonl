@@ -112,9 +112,9 @@ Usage of flatjsonl:
   -case-sensitive-keys
         Use case-sensitive keys (can fail for SQLite).
   -children-limit int
-        Max number of unique child keys in arrays/objects, keep JSON is enabled for high cardinality parent, 0 for unlimited. (default 50)
+        Max number of unique child keys in arrays/objects, keep JSON is enabled for high cardinality parent, 0 for unlimited. (default 100)
   -concurrency int
-        Number of concurrent routines in reader. (default 24)
+        Number of concurrent routines in reader. (default 28)
   -config string
         Configuration JSON value, path to JSON5 or YAML file.
   -csv string
@@ -157,6 +157,8 @@ Usage of flatjsonl:
         RAW file column delimiter.
   -replace-keys
         Use unique tail segment converted to snake_case as key.
+  -show-json-schema
+        Show hierarchy as JSON schema.
   -show-keys-flat
         Show all available keys as flat list.
   -show-keys-hier
