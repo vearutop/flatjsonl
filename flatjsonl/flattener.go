@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/vearutop/fastjson"
 )
 
@@ -255,6 +256,109 @@ func Format(v interface{}) string {
 		return strconv.FormatBool(val)
 	default:
 		panic(fmt.Sprintf("BUG: don't know how to format: %T", v))
+	}
+}
+
+type jsonSchema struct {
+	Title      string                 `json:"title,omitempty"`
+	Types      []string               `json:"type,omitempty"`
+	Properties map[string]*jsonSchema `json:"properties,omitempty"`
+	Items      *jsonSchema            `json:"items,omitempty"`
+}
+
+func (j *jsonSchema) AddType(t Type) {
+	var tt string
+
+	switch t {
+	case TypeString:
+		tt = "string"
+	case TypeInt:
+		tt = "integer"
+	case TypeFloat:
+		tt = "number"
+	case TypeBool:
+		tt = "boolean"
+	case TypeArray:
+		tt = "array"
+	case TypeObject:
+		tt = "object"
+	case TypeJSON:
+		return
+	case TypeNull:
+		tt = "null"
+	case TypeAbsent:
+		return
+	default:
+		panic(fmt.Sprintf("BUG: unknown type: %v", t))
+	}
+
+	for _, t := range j.Types {
+		if t == tt {
+			return
+		}
+	}
+
+	j.Types = append(j.Types, tt)
+}
+
+func (j *jsonSchema) AddKey(k flKey, keys *xsync.MapOf[uint64, flKey]) {
+	parents := []flKey{k}
+	parent := k.parent
+
+	for {
+		if parent == 0 {
+			break
+		}
+
+		pk, ok := keys.Load(parent)
+		if !ok {
+			println("BUG: failed to load parent key for JSON schema:", parent)
+
+			return
+		}
+
+		parents = append(parents, pk)
+
+		parent = pk.parent
+	}
+
+	parentSchema := j
+	parentType := TypeObject
+
+	for i := len(parents) - 1; i >= 0; i-- {
+		pk := parents[i]
+		name := pk.path[len(pk.path)-1]
+
+		if i != 0 && pk.t == TypeString {
+			pk.t = TypeObject
+		}
+
+		if parentType == TypeObject {
+			if parentSchema.Properties == nil {
+				parentSchema.Properties = make(map[string]*jsonSchema)
+			}
+
+			property := parentSchema.Properties[name]
+			if property == nil {
+				property = &jsonSchema{}
+			}
+
+			parentSchema.Properties[name] = property
+			parentSchema = property
+
+			parentType = pk.t
+		} else if parentType == TypeArray {
+			if parentSchema.Items == nil {
+				parentSchema.Items = &jsonSchema{}
+			}
+
+			parentSchema = parentSchema.Items
+			parentType = pk.t
+		}
+	}
+
+	for _, t := range k.tt {
+		parentSchema.AddType(t)
 	}
 }
 

@@ -17,6 +17,7 @@ type flKey struct {
 	path             []string
 	isZero           bool
 	t                Type
+	tt               []Type
 	original         string
 	canonical        string
 	replaced         string
@@ -25,6 +26,22 @@ type flKey struct {
 	transposeTrimmed string
 	extractor        extractor
 	parent           uint64
+}
+
+func (k *flKey) UpdateType(u Type) {
+	if len(k.tt) == 0 {
+		k.tt = append(k.tt, u)
+	} else {
+		for _, t := range k.tt {
+			if t != u {
+				k.tt = append(k.tt, u)
+
+				break
+			}
+		}
+	}
+
+	k.t = k.t.Update(u)
 }
 
 type intOrString struct {
@@ -66,7 +83,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 
 	key := KeyFromPath(path)
 
-	k.t = k.t.Update(t)
+	k.UpdateType(t)
 	k.isZero = k.isZero && isZero
 	k.path = pp
 	k.original = key
@@ -74,7 +91,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 	k.parent = parent
 
 	for tk, dst := range p.cfg.Transpose {
-		if strings.HasPrefix(k.original, tk) {
+		if len(k.original) > len(tk) && strings.HasPrefix(k.original, tk) {
 			scanTransposedKey(dst, tk, &k)
 
 			break
@@ -126,7 +143,8 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 	updType := false
 
 	if k.t != t {
-		k.t = k.t.Update(t)
+		k.UpdateType(t)
+
 		updType = true
 	}
 
@@ -136,7 +154,7 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 
 		k, _ = p.flKeys.Load(pk)
 
-		k.t = k.t.Update(t)
+		k.UpdateType(t)
 		k.isZero = k.isZero && isZero
 
 		p.flKeys.Store(pk, k)
@@ -180,6 +198,10 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 
 func scanTransposedKey(dst string, tk string, k *flKey) {
 	trimmed := strings.TrimPrefix(k.original, tk)
+	if len(trimmed) == 0 {
+		return
+	}
+
 	if trimmed[0] == '.' {
 		trimmed = trimmed[1:]
 	}
@@ -308,7 +330,7 @@ func (p *Processor) scanAvailableKeys() error {
 				w.WantPath = true
 
 				w.FnObjectStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
-					if pl == 0 {
+					if len(flatPath) == 0 {
 						return
 					}
 
@@ -319,7 +341,7 @@ func (p *Processor) scanAvailableKeys() error {
 					return stop
 				}
 				w.FnArrayStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
-					if pl == 0 {
+					if len(flatPath) == 0 {
 						return
 					}
 
@@ -408,14 +430,16 @@ func (p *Processor) prepareScannedKeys() {
 		if k.t == TypeObject || k.t == TypeArray {
 			deleted[k.original] = true
 
-			if p.f.ShowKeysHier {
-				p.keyHierarchy.Add(k.path)
-			}
-
 			return true
 		}
 
 		for _, hc := range hcOrig {
+			if k.original == hc {
+				if p.f.ShowJSONSchema {
+					p.jsonSchema.AddKey(k, p.flKeys)
+				}
+			}
+
 			if len(k.original) > len(hc) && strings.HasPrefix(k.original, hc) {
 				p.flKeys.Delete(key)
 
@@ -427,6 +451,10 @@ func (p *Processor) prepareScannedKeys() {
 
 		if p.f.ShowKeysHier {
 			p.keyHierarchy.Add(k.path)
+		}
+
+		if p.f.ShowJSONSchema {
+			p.jsonSchema.AddKey(k, p.flKeys)
 		}
 
 		return true
@@ -654,7 +682,7 @@ func (p *Processor) prepareKeys() {
 	for i, pk := range p.keys {
 		if pk.transposeDst == "" {
 			if j, ok := keyExists[pk.replaced]; ok {
-				pk.t = pk.t.Update(p.keys[i].t)
+				pk.UpdateType(p.keys[i].t)
 				p.keys[i] = pk
 				keyMap[i] = j
 

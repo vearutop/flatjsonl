@@ -205,7 +205,7 @@ func (b *baseWriter) initFilteredKeys() {
 
 	for o, t := range b.transposedMapping {
 		k := b.filteredKeys[t]
-		k.t = k.t.Update(b.keys[o].t)
+		k.UpdateType(b.keys[o].t)
 		b.filteredKeys[t] = k
 	}
 }

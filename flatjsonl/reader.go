@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -304,8 +305,9 @@ func (rd *Reader) Read(sess *readSession) error {
 func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	defer func() {
 		if r := recover(); r != nil {
-			println(string(w.line))
-			println(r)
+			println("panic on line:", string(w.line))
+			println(fmt.Sprintf("%v", r))
+			println(string(debug.Stack()))
 		}
 	}()
 
