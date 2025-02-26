@@ -97,26 +97,8 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		return existing
 	}
 
-	if p.f.ChildrenLimit > 0 && len(path) > 1 {
-		parentCardinality := p.parentCardinality[parent]
-		parentCardinality++
-
-		if parentCardinality > p.f.ChildrenLimit {
-			pp := k.path[0 : len(k.path)-1]
-			parentKey := KeyFromPath(pp)
-			grandParentKey := KeyFromPath(pp[:len(pp)-1])
-			ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
-
-			p.mu.Unlock()
-			// println("making parent key", parentKey, grandParentKey, ppk, gpk)
-			p.initKey(ppk, gpk, pp, TypeJSON, false)
-			p.mu.Lock()
-
-			p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
-			p.parentHighCardinality.Store(parent, true)
-		} else {
-			p.parentCardinality[parent] = parentCardinality
-		}
+	if p.f.ChildrenLimit > 0 && len(k.path) > 1 {
+		p.collectKeyCardinality(k)
 	}
 
 	if _, ok := p.canonicalKeys[k.canonical]; !ok {
@@ -161,6 +143,39 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 	}
 
 	return k.extractor, false
+}
+
+func (p *Processor) collectKeyCardinality(k flKey) {
+	parentCardinality := p.parentCardinality[k.parent]
+	parentCardinality++
+
+	if parentCardinality > p.f.ChildrenLimit {
+		pp := k.path[0 : len(k.path)-1]
+		parentKey := KeyFromPath(pp)
+		allowCardinality := false
+
+		for _, ac := range p.cfg.AllowCardinality {
+			if parentKey == ac {
+				allowCardinality = true
+			}
+		}
+
+		if !allowCardinality {
+			grandParentKey := KeyFromPath(pp[:len(pp)-1])
+			ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
+
+			p.mu.Unlock()
+			p.initKey(ppk, gpk, pp, TypeJSON, false)
+			p.mu.Lock()
+
+			p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
+			p.parentHighCardinality.Store(k.parent, true)
+		} else {
+			p.parentCardinality[k.parent] = parentCardinality
+		}
+	} else {
+		p.parentCardinality[k.parent] = parentCardinality
+	}
 }
 
 func scanTransposedKey(dst string, tk string, k *flKey) {
@@ -210,6 +225,10 @@ func newHasher() *hasher {
 }
 
 func (h hasher) hashBytes(flatPath []byte) uint64 {
+	if len(flatPath) == 0 {
+		return 0
+	}
+
 	h.digest.Reset()
 
 	_, err := h.digest.Write(flatPath)
@@ -226,19 +245,26 @@ func (h hasher) hashParentBytes(flatPath []byte, parentLen int) (pk uint64, par 
 	h.digest.Reset()
 
 	p1 := flatPath[:parentLen]
-
-	_, err := h.digest.Write(p1)
-	if err != nil {
-		panic("hashing failed: " + err.Error())
-	}
-
-	par = h.digest.Sum64()
-
 	p2 := flatPath[parentLen:]
 
-	_, err = h.digest.Write(p2)
-	if err != nil {
-		panic("hashing failed: " + err.Error())
+	if len(p1) == 0 {
+		par = 0
+	} else {
+		_, err := h.digest.Write(p1)
+		if err != nil {
+			panic("hashing failed: " + err.Error())
+		}
+
+		par = h.digest.Sum64()
+	}
+
+	if len(p2) != 0 {
+		_, err := h.digest.Write(p2)
+		if err != nil {
+			panic("hashing failed: " + err.Error())
+		}
+	} else {
+		return par, par
 	}
 
 	return h.digest.Sum64(), par
@@ -382,6 +408,10 @@ func (p *Processor) prepareScannedKeys() {
 		if k.t == TypeObject || k.t == TypeArray {
 			deleted[k.original] = true
 
+			if p.f.ShowKeysHier {
+				p.keyHierarchy.Add(k.path)
+			}
+
 			return true
 		}
 
@@ -395,7 +425,9 @@ func (p *Processor) prepareScannedKeys() {
 			}
 		}
 
-		p.keyHierarchy.Add(k.path)
+		if p.f.ShowKeysHier {
+			p.keyHierarchy.Add(k.path)
+		}
 
 		return true
 	})
