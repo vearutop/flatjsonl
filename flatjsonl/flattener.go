@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valyala/fastjson"
+	"github.com/vearutop/fastjson"
 )
 
 // KeyFromPath joins path elements into a dot-separated scalar key.
@@ -171,6 +171,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 		xs, name, err := x.extract(s)
 		if err == nil {
 			p := parserPool.Get()
+			p.AllowUnexpectedTail = true
 			defer parserPool.Put(p)
 
 			if v, err := p.ParseBytes(xs); err == nil {
@@ -196,6 +197,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 	// Check if string has nested JSON or URL.
 	if s[0] == '{' || s[0] == '[' {
 		p := parserPool.Get()
+		p.AllowUnexpectedTail = true
 		defer parserPool.Put(p)
 
 		v, err := p.ParseBytes(s)
@@ -218,6 +220,7 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 		us, _, err := (urlExtractor{}).extract(s)
 		if err == nil {
 			p := parserPool.Get()
+			p.AllowUnexpectedTail = true
 			defer parserPool.Put(p)
 
 			v, err := p.ParseBytes(us)

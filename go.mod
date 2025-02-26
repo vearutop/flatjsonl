@@ -13,7 +13,7 @@ require (
 	github.com/puzpuzpuz/xsync/v3 v3.5.1
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggest/assertjson v1.9.0
-	github.com/valyala/fastjson v1.6.4
+	github.com/vearutop/fastjson v1.0.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.35.0
 )
