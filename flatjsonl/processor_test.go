@@ -739,6 +739,39 @@ func TestNewProcessor_transpose_keep_json(t *testing.T) {
 `)
 }
 
+func TestNewProcessor_transpose_keep_json_regex(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "testdata/transpose2.jsonl"
+	f.Output = "testdata/transpose2_json.csv"
+	f.SQLTable = "whatever"
+	f.ShowKeysFlat = true
+	f.ShowKeysHier = true
+	f.ShowKeysInfo = true
+	f.Concurrency = 1
+	f.RawDelim = ","
+	f.ReplaceKeys = true
+	f.PrepareOutput()
+
+	cj, err := os.ReadFile("testdata/transpose_keep_json_regex_cfg.json")
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, json.Unmarshal(cj, &cfg))
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Process())
+
+	assertFileEquals(t, f.Output, `sequence,name,tags,deep_arr,tokens,flat_map
+1,a,"[""t1"",""t2"",""t3""]","[{""abaz"":{""a"":5,""b"":6},""afoo"":{""a"":15,""b"":12}}]","{""foo"":{""a"":1,""b"":2}}","{""ccc"":123,""ddd"":456}"
+2,b,"[""t1"",""t5"",""t6""]",,"{""bar"":{""a"":3,""b"":4}}","{""rrr"":""aaa"",""fff"":334}"
+3,c,"[""t1"",""t4"",""t5""]","[{""abar"":{""a"":1,""b"":2}}]","{""baz"":{""a"":5,""b"":6},""foo"":{""a"":15,""b"":12}}",
+`)
+}
+
 //func TestMakeHighCardinality(t *testing.T) {
 //	type structItem struct {
 //		Foo string

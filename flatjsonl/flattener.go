@@ -3,6 +3,7 @@ package flatjsonl
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -35,6 +36,7 @@ type FastWalker struct {
 	WantPath       bool
 	ExtractStrings bool
 	KeepJSON       map[string]bool
+	KeepJSONRegex  []*regexp.Regexp
 
 	buf []byte
 }
@@ -46,6 +48,14 @@ func (fv *FastWalker) configure(p *Processor) {
 		for _, v := range p.cfg.KeepJSON {
 			fv.KeepJSON[v] = true
 		}
+	}
+
+	for _, r := range p.cfg.KeepJSONRegex {
+		reg, err := regex(r)
+		if err != nil {
+			panic(err)
+		}
+		fv.KeepJSONRegex = append(fv.KeepJSONRegex, reg)
 	}
 }
 
@@ -111,6 +121,17 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, pl int, path
 		return
 	}
 
+	for _, r := range fv.KeepJSONRegex {
+		if r.MatchString(string(flatPath)) {
+			fv.buf = fv.buf[:0]
+			fv.buf = v.MarshalTo(fv.buf)
+
+			fv.FnString(seq, flatPath, pl, path, fv.buf)
+
+			return
+		}
+	}
+
 	for i, v := range a {
 		k := "[" + strconv.Itoa(i) + "]"
 
@@ -146,6 +167,17 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, pl int, pat
 		fv.FnString(seq, flatPath, pl, path, fv.buf)
 
 		return
+	}
+
+	for _, r := range fv.KeepJSONRegex {
+		if r.MatchString(string(flatPath)) {
+			fv.buf = fv.buf[:0]
+			fv.buf = v.MarshalTo(fv.buf)
+
+			fv.FnString(seq, flatPath, pl, path, fv.buf)
+
+			return
+		}
 	}
 
 	o.Visit(func(key []byte, v *fastjson.Value) {
