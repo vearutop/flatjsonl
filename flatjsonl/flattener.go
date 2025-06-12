@@ -55,6 +55,7 @@ func (fv *FastWalker) configure(p *Processor) {
 		if err != nil {
 			panic(err)
 		}
+
 		fv.KeepJSONRegex = append(fv.KeepJSONRegex, reg)
 	}
 }
@@ -122,7 +123,7 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, pl int, path
 	}
 
 	for _, r := range fv.KeepJSONRegex {
-		if r.MatchString(string(flatPath)) {
+		if r.Match(flatPath) {
 			fv.buf = fv.buf[:0]
 			fv.buf = v.MarshalTo(fv.buf)
 
@@ -170,7 +171,7 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, pl int, pat
 	}
 
 	for _, r := range fv.KeepJSONRegex {
-		if r.MatchString(string(flatPath)) {
+		if r.Match(flatPath) {
 			fv.buf = fv.buf[:0]
 			fv.buf = v.MarshalTo(fv.buf)
 
