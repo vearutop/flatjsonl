@@ -208,6 +208,9 @@ extractValuesRegex:
 #  values would remain as JSON literals instead of being flattened to columns.
 keepJSON:
   - ".deviceMapping"
+# Use keepJSONRegex to list key patterns with arrays and objects of highly cardinal data.
+keepJSONRegex:
+  - ".data.*.values"
 ```
 
 Parse time is a map of original key to time pattern. See https://pkg.go.dev/time#pkg-constants for pattern rules.

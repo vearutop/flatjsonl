@@ -16,5 +16,6 @@ type Config struct {
 	Transpose          map[string]string  `json:"transpose" yaml:"transpose" description:"Map of key prefixes to transposed table names."`
 	ExtractValuesRegex map[string]extract `json:"extractValuesRegex" yaml:"extractValuesRegex" description:"Map of key regex to extraction format, values can be 'URL', 'JSON'."`
 	KeepJSON           []string           `json:"keepJSON" yaml:"keepJSON" description:"List of keys to keep as JSON literals."`
+	KeepJSONRegex      []string           `json:"keepJSONRegex" yaml:"keepJSONRegex" description:"List of key patterns to keep as JSON literals."`
 	AllowCardinality   []string           `json:"allowCardinality" yaml:"allowCardinality" description:"List of keys to allow high cardinality of child keys."`
 }
