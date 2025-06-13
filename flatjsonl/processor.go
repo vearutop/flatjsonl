@@ -17,7 +17,7 @@ import (
 	_ "time/tzdata" // Loading timezones.
 
 	"github.com/bool64/progress"
-	xsync "github.com/puzpuzpuz/xsync/v3"
+	xsync "github.com/puzpuzpuz/xsync/v4"
 	"github.com/swaggest/assertjson"
 	"github.com/swaggest/assertjson/json5"
 	"gopkg.in/yaml.v3"
@@ -49,9 +49,9 @@ type Processor struct {
 	// keys are ordered by replaced column names, indexes match values of includeKeys.
 	keys []flKey
 
-	flKeys                *xsync.MapOf[uint64, flKey]
+	flKeys                *xsync.Map[uint64, flKey]
 	parentCardinality     map[uint64]int
-	parentHighCardinality *xsync.MapOf[uint64, bool]
+	parentHighCardinality *xsync.Map[uint64, bool]
 
 	mu            sync.Mutex
 	flKeysList    []string
@@ -142,8 +142,8 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		flKeysList:   make([]string, 0),
 		keyHierarchy: KeyHierarchy{Name: "."},
 
-		flKeys:                xsync.NewMapOf[uint64, flKey](),
-		parentHighCardinality: xsync.NewMapOf[uint64, bool](),
+		flKeys:                xsync.NewMap[uint64, flKey](),
+		parentHighCardinality: xsync.NewMap[uint64, bool](),
 		parentCardinality:     map[uint64]int{},
 	}
 
@@ -542,7 +542,7 @@ type lineBuf struct {
 
 func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := &writeIterator{}
-	wi.pending = xsync.NewMapOf[int64, *lineBuf]()
+	wi.pending = xsync.NewMap[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
 
 	if len(p.includeKeys) == 1 {
@@ -641,9 +641,9 @@ type writeIterator struct {
 	// Read-write under concurrency.
 	lineBufPool sync.Pool
 	seqExpected int64
-	pending     *xsync.MapOf[int64, *lineBuf]
+	pending     *xsync.Map[int64, *lineBuf]
 
-	// Finished was originally *xsync.MapOf[int64, *lineBuf], but for unclear, hardly reproducible reason
+	// Finished was originally *xsync.Map[int64, *lineBuf], but for unclear, hardly reproducible reason
 	// it was leading to eventually failing "waiting pending".
 	// Seems Store with eventual LoadAndDelete can have eviction-style inconsistency under heavy concurrent load.
 	// E.g. LoadAndDelete would not find the entry that was Stored.
