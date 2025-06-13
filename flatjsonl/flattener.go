@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/vearutop/fastjson"
 )
 
@@ -334,7 +334,7 @@ func (j *jsonSchema) AddType(t Type) {
 	j.Types = append(j.Types, tt)
 }
 
-func (j *jsonSchema) AddKey(k flKey, keys *xsync.MapOf[uint64, flKey]) {
+func (j *jsonSchema) AddKey(k flKey, keys *xsync.Map[uint64, flKey]) {
 	parents := []flKey{k}
 	parent := k.parent
 
