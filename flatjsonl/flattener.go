@@ -46,6 +46,7 @@ func (fv *FastWalker) configure(p *Processor) {
 	fv.ExtractStrings = p.f.ExtractStrings
 
 	fv.extractJSON = make(map[string]bool)
+
 	for k, v := range p.cfg.ExtractValuesRegex {
 		if v == extractJSON {
 			fv.extractJSON[k] = true
@@ -122,7 +123,7 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, pl int, path
 
 	pl = len(flatPath)
 
-	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl,nestif
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
@@ -174,7 +175,7 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, pl int, pat
 
 	pl = len(flatPath)
 
-	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] {
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl,nestif
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
