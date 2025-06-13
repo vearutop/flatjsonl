@@ -37,12 +37,21 @@ type FastWalker struct {
 	ExtractStrings bool
 	KeepJSON       map[string]bool
 	KeepJSONRegex  []*regexp.Regexp
+	extractJSON    map[string]bool
 
 	buf []byte
 }
 
 func (fv *FastWalker) configure(p *Processor) {
 	fv.ExtractStrings = p.f.ExtractStrings
+
+	fv.extractJSON = make(map[string]bool)
+	for k, v := range p.cfg.ExtractValuesRegex {
+		if v == extractJSON {
+			fv.extractJSON[k] = true
+		}
+	}
+
 	if len(p.cfg.KeepJSON) > 0 {
 		fv.KeepJSON = make(map[string]bool)
 		for _, v := range p.cfg.KeepJSON {
@@ -119,17 +128,21 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, pl int, path
 
 		fv.FnString(seq, flatPath, pl, path, fv.buf)
 
-		return
-	}
-
-	for _, r := range fv.KeepJSONRegex {
-		if r.Match(flatPath) {
-			fv.buf = fv.buf[:0]
-			fv.buf = v.MarshalTo(fv.buf)
-
-			fv.FnString(seq, flatPath, pl, path, fv.buf)
-
+		if !fv.extractJSON[string(flatPath)] {
 			return
+		}
+	} else {
+		for _, r := range fv.KeepJSONRegex {
+			if r.Match(flatPath) {
+				fv.buf = fv.buf[:0]
+				fv.buf = v.MarshalTo(fv.buf)
+
+				fv.FnString(seq, flatPath, pl, path, fv.buf)
+
+				if !fv.extractJSON[string(flatPath)] {
+					return
+				}
+			}
 		}
 	}
 
@@ -167,17 +180,21 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, pl int, pat
 
 		fv.FnString(seq, flatPath, pl, path, fv.buf)
 
-		return
-	}
-
-	for _, r := range fv.KeepJSONRegex {
-		if r.Match(flatPath) {
-			fv.buf = fv.buf[:0]
-			fv.buf = v.MarshalTo(fv.buf)
-
-			fv.FnString(seq, flatPath, pl, path, fv.buf)
-
+		if !fv.extractJSON[string(flatPath)] {
 			return
+		}
+	} else {
+		for _, r := range fv.KeepJSONRegex {
+			if r.Match(flatPath) {
+				fv.buf = fv.buf[:0]
+				fv.buf = v.MarshalTo(fv.buf)
+
+				fv.FnString(seq, flatPath, pl, path, fv.buf)
+
+				if !fv.extractJSON[string(flatPath)] {
+					return
+				}
+			}
 		}
 	}
 
