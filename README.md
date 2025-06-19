@@ -68,6 +68,15 @@ If `includeKeys` is not empty in [configuration file](#configuration-file), firs
 
 ## Install
 
+
+### Macos Brew
+
+```
+brew tap vearutop/tools && brew update && brew install flatjsonl
+```
+
+### Go Install
+
 ```
 go install github.com/vearutop/flatjsonl@latest
 $(go env GOPATH)/bin/flatjsonl --help
