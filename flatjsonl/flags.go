@@ -1,8 +1,10 @@
 package flatjsonl
 
 import (
+	"database/sql"
 	"flag"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,22 +18,24 @@ type Flags struct {
 
 	CSV string
 
-	SQLite     string
-	SQLMaxCols int
-	SQLTable   string
+	SQLite         string
+	SQLiteInstance *sql.DB
+	SQLMaxCols     int
+	SQLTable       string
 
 	PGDump string
 
 	Raw      string
 	RawDelim string
 
-	MaxLines      int
-	OffsetLines   int
-	MaxLinesKeys  int
-	FieldLimit    int
-	ChildrenLimit int
-	KeyLimit      int
-	BufSize       int
+	MaxLines            int
+	OffsetLines         int
+	MaxLinesKeys        int
+	FieldLimit          int
+	ChildrenLimitObject int
+	ChildrenLimitArray  int
+	KeyLimit            int
+	BufSize             int
 
 	Config            string
 	GetKey            string
@@ -53,12 +57,15 @@ type Flags struct {
 
 // Register registers command-line flags.
 func (f *Flags) Register() {
+	f.ChildrenLimitObject = 100
+	f.ChildrenLimitArray = 10
+
 	flag.StringVar(&f.Input, "input", "", "Input from JSONL files, comma-separated.")
 	flag.StringVar(&f.Output, "output", "", "Output to a file (default <input>.csv).")
 	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
 
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
-	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 500, "Maximum columns in single SQL table (SQLite will fail with more than 2000).")
+	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 2000, "Maximum columns in single SQL table (SQLite will fail with more than 2000).")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
 	flag.StringVar(&f.PGDump, "pg-dump", "", "Output to PostgreSQL dump file.")
 
@@ -84,7 +91,28 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.OffsetLines, "offset-lines", 0, "Skip a number of first lines.")
 	flag.IntVar(&f.MaxLinesKeys, "max-lines-keys", 0, "Max number of lines to process when scanning keys.")
 	flag.IntVar(&f.FieldLimit, "field-limit", 0, "Max length of field value, exceeding tail is truncated, 0 for unlimited.")
-	flag.IntVar(&f.ChildrenLimit, "children-limit", 100, "Max number of unique child keys in arrays/objects, keep JSON is enabled for high cardinality parent, 0 for unlimited.")
+	flag.Func("children-limit", "Max number of unique child keys, keep JSON is enabled for high cardinality parent, 0 for unlimited, comma-separated for <object>,<array>, default 100,10.", func(s string) error {
+		v := strings.Split(s, ",")
+
+		o, err := strconv.Atoi(v[0])
+		if err != nil {
+			return err
+		}
+
+		f.ChildrenLimitObject = o
+		f.ChildrenLimitArray = o
+
+		if len(v) > 1 {
+			a, err := strconv.Atoi(v[1])
+			if err != nil {
+				return err
+			}
+
+			f.ChildrenLimitArray = a
+		}
+
+		return nil
+	})
 	flag.IntVar(&f.KeyLimit, "key-limit", 0, "Max length of key, exceeding tail is truncated, 0 for unlimited.")
 	flag.IntVar(&f.BufSize, "buf-size", 1e7, "Buffer size (max length of file line) in bytes.")
 

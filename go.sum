@@ -12,8 +12,8 @@ github.com/bool64/progress v0.3.13 h1:KsHcE/q1gjMsUcz1avTi3mPHVKMSfv4lUzCw79Y8bU
 github.com/bool64/progress v0.3.13/go.mod h1:1shl9XxTn5bGYX4aTFkqzORBNUFxRNcfvQu3H59o64I=
 github.com/bool64/shared v0.1.5 h1:fp3eUhBsrSjNCQPcSdQqZxxh9bBwrYiZ+zOKFkM0/2E=
 github.com/bool64/shared v0.1.5/go.mod h1:081yz68YC9jeFB3+Bbmno2RFWvGKv1lPKkMP6MHJlPs=
-github.com/bool64/sqluct v0.2.5 h1:ThC+YdHPt8aKjS+AXs5nBTwxtClsQL8ukwhNXnsKB0Y=
-github.com/bool64/sqluct v0.2.5/go.mod h1:DY6C6ehBuKrT8vTQeiKwBdC022bUcfpkDKUSdog1DXQ=
+github.com/bool64/sqluct v0.2.7 h1:xYVFg/YvKI1VC/7arnE0EWZ4Y+OeaPqsCRDthwr4jSI=
+github.com/bool64/sqluct v0.2.7/go.mod h1:DY6C6ehBuKrT8vTQeiKwBdC022bUcfpkDKUSdog1DXQ=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
