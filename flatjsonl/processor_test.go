@@ -827,7 +827,7 @@ func TestNewProcessor_highCardinality(t *testing.T) {
 	f.ShowKeysInfo = true
 	f.ShowJSONSchema = true
 	f.Concurrency = 1
-	f.ChildrenLimit = 30
+	f.ChildrenLimitObject = 30
 	f.PrepareOutput()
 
 	var cfg flatjsonl.Config

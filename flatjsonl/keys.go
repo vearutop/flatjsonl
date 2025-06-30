@@ -114,7 +114,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		return existing
 	}
 
-	if p.f.ChildrenLimit > 0 && len(k.path) > 1 {
+	if p.f.ChildrenLimitObject > 0 && len(k.path) > 1 {
 		p.collectKeyCardinality(k)
 	}
 
@@ -167,7 +167,29 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 	parentCardinality := p.parentCardinality[k.parent]
 	parentCardinality++
 
-	if parentCardinality > p.f.ChildrenLimit {
+	limit := p.f.ChildrenLimitObject
+
+	if p.f.ChildrenLimitArray != 0 && len(k.path) > 1 {
+		// Check if last path item has a form of "[123]".
+		l := k.path[len(k.path)-1]
+		if len(l) > 2 && l[0] == '[' && l[len(l)-1] == ']' {
+			isArrayItem := true
+
+			for i := 1; i < len(l)-2; i++ {
+				if l[i] < '0' || l[i] > '9' {
+					isArrayItem = false
+
+					break
+				}
+			}
+
+			if isArrayItem {
+				limit = p.f.ChildrenLimitArray
+			}
+		}
+	}
+
+	if parentCardinality > limit {
 		pp := k.path[0 : len(k.path)-1]
 		parentKey := KeyFromPath(pp)
 		allowCardinality := false

@@ -8,7 +8,7 @@ require (
 	github.com/bool64/ctxd v1.2.1
 	github.com/bool64/dev v0.2.40
 	github.com/bool64/progress v0.3.13
-	github.com/bool64/sqluct v0.2.5
+	github.com/bool64/sqluct v0.2.7
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/klauspost/compress v1.18.0
 	github.com/klauspost/pgzip v1.2.6

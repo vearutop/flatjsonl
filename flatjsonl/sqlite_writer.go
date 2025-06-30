@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bool64/sqluct"
 	_ "modernc.org/sqlite" // Database driver.
 )
 
@@ -28,9 +29,13 @@ type SQLiteWriter struct {
 func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, error) {
 	var err error
 
-	db, err := sql.Open("sqlite", fn)
-	if err != nil {
-		return nil, err
+	db := p.f.SQLiteInstance
+
+	if db == nil {
+		db, err = sql.Open("sqlite", fn)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	_, err = db.Exec("pragma journal_mode=off;")
@@ -39,7 +44,7 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 	}
 
 	if p.f.SQLMaxCols == 0 {
-		p.f.SQLMaxCols = 500
+		p.f.SQLMaxCols = 2000
 	}
 
 	c := &SQLiteWriter{
@@ -219,7 +224,7 @@ _seq_id integer,
 
 			part++
 			tableName = tn + partSuffix + strconv.Itoa(part)
-			createTable = `CREATE TABLE "` + tableName + `" (
+			createTable = `CREATE TABLE "` + sqluct.QuoteBackticks(tableName) + `" (
 `
 
 			if !isTransposed {
@@ -242,7 +247,7 @@ _seq_id integer,
 			tp = " REAL"
 		}
 
-		createTable += `"` + k.replaced + `"` + tp + `,` + "\n"
+		createTable += sqluct.QuoteRequiredBackticks(k.replaced) + tp + `,` + "\n"
 	}
 
 	createTable = createTable[:len(createTable)-2] + "\n)"
