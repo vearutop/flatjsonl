@@ -32,6 +32,7 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 	}
 
 	c.w = bufio.NewWriter(c.uncompressed)
+	c.b = &baseWriter{}
 
 	return c, nil
 }

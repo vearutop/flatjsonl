@@ -408,18 +408,26 @@ func (p *Processor) setupWriters() error {
 			return fmt.Errorf("failed to create CSV file: %w", err)
 		}
 
-		cw.b = &baseWriter{}
 		cw.b.p = p
 		p.w.Add(cw)
 	}
 
 	if p.f.SQLite != "" {
-		cw, err := NewSQLiteWriter(p.f.SQLite, p.f.SQLTable, p)
-		if err != nil {
-			return fmt.Errorf("failed to open SQLite file: %w", err)
-		}
+		if p.f.SQLiteCLI {
+			cw, err := NewSQLite3CLIWriter(p.f.SQLite, p.f.SQLTable)
+			if err != nil {
+				return fmt.Errorf("failed to open SQLite file: %w", err)
+			}
 
-		p.w.Add(cw)
+			p.w.Add(cw)
+		} else {
+			cw, err := NewSQLiteWriter(p.f.SQLite, p.f.SQLTable, p)
+			if err != nil {
+				return fmt.Errorf("failed to open SQLite file: %w", err)
+			}
+
+			p.w.Add(cw)
+		}
 	}
 
 	if p.f.PGDump != "" {
@@ -437,7 +445,6 @@ func (p *Processor) setupWriters() error {
 			return fmt.Errorf("failed to setup raw writer: %w", err)
 		}
 
-		rw.b = &baseWriter{}
 		rw.b.p = p
 
 		p.w.Add(rw)
