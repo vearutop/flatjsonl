@@ -8,12 +8,14 @@ import (
 	"os/exec"
 )
 
+// SQLite3CLIWriter writes data to SQLite3 DB with CLI CSV import.
 type SQLite3CLIWriter struct {
 	mainCSV *CSVWriter
 	cmd     *exec.Cmd
 	w       io.WriteCloser
 }
 
+// NewSQLite3CLIWriter creates SQLite3 CLI writer.
 func NewSQLite3CLIWriter(fn string, tableName string) (*SQLite3CLIWriter, error) {
 	sw := &SQLite3CLIWriter{}
 
@@ -55,14 +57,17 @@ func NewSQLite3CLIWriter(fn string, tableName string) (*SQLite3CLIWriter, error)
 	return sw, nil
 }
 
+// SetupKeys inits writer with list of known keys.
 func (w *SQLite3CLIWriter) SetupKeys(keys []flKey) error {
 	return w.mainCSV.SetupKeys(keys)
 }
 
+// ReceiveRow collects data values.
 func (w *SQLite3CLIWriter) ReceiveRow(seq int64, values []Value) error {
 	return w.mainCSV.ReceiveRow(seq, values)
 }
 
+// Close flushes all the remainders and closes resources.
 func (w *SQLite3CLIWriter) Close() error {
 	if err := w.mainCSV.Close(); err != nil {
 		return err
