@@ -120,10 +120,10 @@ Usage of flatjsonl:
         Buffer size (max length of file line) in bytes. (default 10000000)
   -case-sensitive-keys
         Use case-sensitive keys (can fail for SQLite).
-  -children-limit int
-        Max number of unique child keys in arrays/objects, keep JSON is enabled for high cardinality parent, 0 for unlimited. (default 100)
+  -children-limit value
+        Max number of unique child keys, keep JSON is enabled for high cardinality parent, 0 for unlimited, comma-separated for <object>,<array>, default 100,10.
   -concurrency int
-        Number of concurrent routines in reader. (default 28)
+        Number of concurrent routines in reader. (default 8)
   -config string
         Configuration JSON value, path to JSON5 or YAML file.
   -csv string
@@ -177,11 +177,13 @@ Usage of flatjsonl:
   -skip-zero-cols
         Skip columns with zero values.
   -sql-max-cols int
-        Maximum columns in single SQL table (SQLite will fail with more than 2000). (default 500)
+        Maximum columns in single SQL table (SQLite will fail with more than 2000). (default 2000)
   -sql-table string
         Table name. (default "flatjsonl")
   -sqlite string
         Output to SQLite file.
+  -sqlite3-cli
+        Use SQLite3 CLI to import via CSV.
   -verbosity int
         Show progress in STDERR, 0 disables status, 2 adds more metrics. (default 1)
   -version

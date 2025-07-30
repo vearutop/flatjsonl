@@ -30,6 +30,7 @@ func NewCSVWriter(fn string) (*CSVWriter, error) {
 	}
 
 	c.w = csv.NewWriter(c.uncompressed)
+	c.b = &baseWriter{}
 
 	return c, nil
 }
@@ -133,6 +134,10 @@ func (c *CSVWriter) Close() error {
 		if err := tw.f.Close(); err != nil {
 			println("failed to close transpose CSV file: " + err.Error())
 		}
+	}
+
+	if c.fileWriter == nil {
+		return nil
 	}
 
 	return c.f.Close()

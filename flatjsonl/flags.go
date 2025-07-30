@@ -20,6 +20,7 @@ type Flags struct {
 
 	SQLite         string
 	SQLiteInstance *sql.DB
+	SQLiteCLI      bool
 	SQLMaxCols     int
 	SQLTable       string
 
@@ -65,6 +66,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
 
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
+	flag.BoolVar(&f.SQLiteCLI, "sqlite3-cli", false, "Use SQLite3 CLI to import via CSV.")
 	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 2000, "Maximum columns in single SQL table (SQLite will fail with more than 2000).")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
 	flag.StringVar(&f.PGDump, "pg-dump", "", "Output to PostgreSQL dump file.")
