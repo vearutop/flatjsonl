@@ -298,3 +298,115 @@ Extract a single column from JSONL log (equivalent to `cat huge.log | jq .foo.ba
 ```
 flatjsonl -input huge.log -raw entries.log -get-key ".foo.bar.baz"
 ```
+
+
+// DEFAULT
+```
+      182.97 real       463.48 user        57.38 sys
+          2497462272  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             7241922  page reclaims
+                 347  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+               77866  signals received
+               67667  voluntary context switches
+             7899820  involuntary context switches
+       5164102312273  instructions retired
+       1768351639343  cycles elapsed
+          2497468224  peak memory footprint
+```
+
+// DEFAULT with pprof
+```
+      172.92 real       466.66 user        55.41 sys
+          2392965120  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             6995676  page reclaims
+                 338  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+              125296  signals received
+               82196  voluntary context switches
+             7701066  involuntary context switches
+       5210436276741  instructions retired
+       1774051575417  cycles elapsed
+          2393167616  peak memory footprint
+```
+
+// PRAGMA synchronous=off
+```
+      170.89 real       462.76 user        54.40 sys
+          2400960512  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             6978300  page reclaims
+                 356  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+              124088  signals received
+               79482  voluntary context switches
+             7808639  involuntary context switches
+       5200016759225  instructions retired
+       1758775480707  cycles elapsed
+          2399786688  peak memory footprint
+```
+
+// DEV
+```
+      463.52 real      1319.08 user       202.72 sys
+          2746433536  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+            10595920  page reclaims
+                   0  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+              388542  signals received
+              181201  voluntary context switches
+            12903269  involuntary context switches
+      13360789009970  instructions retired
+       5137724408734  cycles elapsed
+          3141082560  peak memory footprint
+```
+
+// sqlite3 import
+// /usr/bin/time -l catp tt.csv.zst | sqlite3 db.sqlite ".import --csv '|cat -' my_table"
+```
+       58.19 real         1.31 user         0.77 sys
+            11730944  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                 973  page reclaims
+                  32  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                1054  signals received
+              123791  voluntary context switches
+              155280  involuntary context switches
+         14069983540  instructions retired
+          6817462843  cycles elapsed
+             7996864  peak memory footprint
+```

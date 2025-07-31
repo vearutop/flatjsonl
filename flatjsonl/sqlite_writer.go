@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/bool64/sqluct"
-	_ "modernc.org/sqlite" // Database driver.
 )
 
 // SQLiteWriter inserts rows into SQLite database.
@@ -27,18 +26,30 @@ type SQLiteWriter struct {
 
 // NewSQLiteWriter creates an instance of SQLiteWriter.
 func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, error) {
+	println("sqlite v3")
+
 	var err error
 
 	db := p.f.SQLiteInstance
 
 	if db == nil {
-		db, err = sql.Open("sqlite", fn)
+		db, err = sql.Open(sqliteDriver, fn+"?_mutex=no")
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	_, err = db.Exec("pragma journal_mode=off;")
+	if err != nil {
+		return nil, err
+	}
+
+	//_, err = db.Exec("pragma synchronous=off;")
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	_, err = db.Exec("PRAGMA cache_size = -20000;") // 20 MB cache
 	if err != nil {
 		return nil, err
 	}

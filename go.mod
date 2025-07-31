@@ -12,6 +12,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/klauspost/compress v1.18.0
 	github.com/klauspost/pgzip v1.2.6
+	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/stretchr/testify v1.9.0
 	github.com/swaggest/assertjson v1.9.0
