@@ -736,11 +736,12 @@ func (p *Processor) prepareKeys() {
 func (p *Processor) prepareKey(origKey string) (kk string) {
 	ck := p.ck(origKey)
 
-	if rep, ok := p.replaceKeys[ck]; ok {
-		return rep
-	}
-
 	defer func() {
+		if p.f.StripKeys {
+			kk = strings.TrimSpace(kk)
+			kk = strings.Fields(kk)[0]
+		}
+
 		if p.f.KeyLimit > 0 && len(kk) > p.f.KeyLimit {
 			i := p.includeKeys[kk]
 			is := strconv.Itoa(i)
@@ -750,6 +751,10 @@ func (p *Processor) prepareKey(origKey string) (kk string) {
 			p.replaceKeys[ck] = kk
 		}
 	}()
+
+	if rep, ok := p.replaceKeys[ck]; ok {
+		return rep
+	}
 
 	for reg, rep := range p.replaceRegex {
 		kr := origKey
