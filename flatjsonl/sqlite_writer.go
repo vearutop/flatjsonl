@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/bool64/sqluct"
-	_ "modernc.org/sqlite" // Database driver.
+	_ "github.com/marcboeker/go-duckdb/v2" // DB driver.
+	_ "modernc.org/sqlite"                 // Database driver.
 )
 
 // SQLiteWriter inserts rows into SQLite database.
@@ -32,16 +33,21 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 	db := p.f.SQLiteInstance
 
 	if db == nil {
-		db, err = sql.Open("sqlite", fn)
+		if strings.HasSuffix(fn, ".duckdb") {
+			db, err = sql.Open("duckdb", fn)
+		} else {
+			db, err = sql.Open("sqlite", fn)
+		}
+
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	_, err = db.Exec("pragma journal_mode=off;")
-	if err != nil {
-		return nil, err
-	}
+	//_, err = db.Exec("pragma journal_mode=off;")
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	if p.f.SQLMaxCols == 0 {
 		p.f.SQLMaxCols = 2000
@@ -224,7 +230,7 @@ _seq_id integer,
 
 			part++
 			tableName = tn + partSuffix + strconv.Itoa(part)
-			createTable = `CREATE TABLE "` + sqluct.QuoteBackticks(tableName) + `" (
+			createTable = `CREATE TABLE "` + sqluct.QuoteANSI(tableName) + `" (
 `
 
 			if !isTransposed {
@@ -247,14 +253,14 @@ _seq_id integer,
 			tp = " REAL"
 		}
 
-		createTable += sqluct.QuoteRequiredBackticks(k.replaced) + tp + `,` + "\n"
+		createTable += sqluct.QuoteRequiredANSI(k.replaced) + tp + `,` + "\n"
 	}
 
 	createTable = createTable[:len(createTable)-2] + "\n)"
 
 	_, err := c.db.Exec(createTable)
 	if err != nil {
-		return fmt.Errorf("failed to create SQLite table with %d keys: %w", len(keys), err)
+		return fmt.Errorf("failed to create SQLite table with %d keys: %w\n%s", len(keys), err, createTable)
 	}
 
 	return nil
