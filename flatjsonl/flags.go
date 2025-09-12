@@ -3,10 +3,13 @@ package flatjsonl
 import (
 	"database/sql"
 	"flag"
+	"fmt"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/oschwald/maxminddb-golang"
 )
 
 // Flags contains command-line flags.
@@ -122,6 +125,17 @@ func (f *Flags) Register() {
 
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
 	flag.IntVar(&f.MemLimit, "mem-limit", 1000, "Heap in use soft limit, in MB.")
+
+	flag.Func("geo-ip-db", "MaxMind GeoIP db file for GEOIP extractor, you can provide multiple files", func(fn string) error {
+		db, err := maxminddb.Open(fn)
+		if err != nil {
+			return fmt.Errorf("open MaxMind DB %q: %w", fn, err)
+		}
+
+		geoIPDatabases = append(geoIPDatabases, db)
+
+		return nil
+	})
 }
 
 // Parse parses and prepares command-line flags.
