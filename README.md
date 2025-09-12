@@ -215,6 +215,7 @@ concatDelimiter: "::"
 extractValuesRegex:
   ".foo.link": "URL"
   ".*.nested": "JSON"
+  ".req.ip_address": "GEOIP"
 # Use keepJSON to list keys with arrays and objects of highly cardinal data, 
 #  values would remain as JSON literals instead of being flattened to columns.
 keepJSON:

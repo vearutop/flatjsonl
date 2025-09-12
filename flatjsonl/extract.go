@@ -5,8 +5,9 @@ type extract string
 
 // Types of extractable content.
 const (
-	extractURL  = extract("URL")
-	extractJSON = extract("JSON")
+	extractURL   = extract("URL")
+	extractJSON  = extract("JSON")
+	extractGeoIP = extract("GEOIP")
 )
 
 // Enum describes the type.
@@ -14,6 +15,7 @@ func (extract) Enum() []any {
 	return []any{
 		extractURL,
 		extractJSON,
+		extractGeoIP,
 	}
 }
 
@@ -24,6 +26,8 @@ func (e extract) Extractor() extractor {
 		return urlExtractor{}
 	case extractJSON:
 		return jsonExtractor{}
+	case extractGeoIP:
+		return geoIPExtractor{}
 	}
 
 	return nil
