@@ -383,8 +383,11 @@ func (p *Processor) showKeysInfo() {
 			line += ", TRANSPOSED TO " + k.transposeDst
 		}
 
-		if k.extractor != nil {
-			line += ", EXTRACTED " + string(k.extractor.name())
+		if len(k.extractors) > 0 {
+			line += ", EXTRACTED"
+			for _, e := range k.extractors {
+				line += " " + string(e.name())
+			}
 		}
 
 		_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", line)
@@ -667,7 +670,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 	w.FnObjectStop = nil
 	w.FnArrayStop = nil
-	w.FnString = func(seq int64, flatPath []byte, pl int, _ []string, value []byte) extractor {
+	w.FnString = func(seq int64, flatPath []byte, pl int, _ []string, value []byte) []extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
@@ -681,7 +684,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			String: string(value),
 		}, pk, l)
 
-		return k.extractor
+		return k.extractors
 	}
 	w.FnNumber = func(seq int64, flatPath []byte, pl int, _ []string, value float64, raw []byte) {
 		l, _ := wi.pending.Load(seq)

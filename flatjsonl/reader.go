@@ -367,7 +367,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	return nil
 }
 
-func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, pl int, path []string, value []byte) extractor) []byte {
+func (rd *Reader) prefixedLine(seq int64, line []byte, walkFn func(seq int64, flatPath []byte, pl int, path []string, value []byte) []extractor) []byte {
 	pos := bytes.Index(line, []byte("{"))
 
 	if pos == -1 {

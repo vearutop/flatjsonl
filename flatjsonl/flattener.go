@@ -29,7 +29,7 @@ type FastWalker struct {
 	FnObjectStop func(seq int64, flatPath []byte, pl int, path []string) (stop bool)
 	FnArrayStop  func(seq int64, flatPath []byte, pl int, path []string) (stop bool)
 	FnNumber     func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte)
-	FnString     func(seq int64, flatPath []byte, pl int, path []string, value []byte) extractor
+	FnString     func(seq int64, flatPath []byte, pl int, path []string, value []byte) []extractor
 	FnBool       func(seq int64, flatPath []byte, pl int, path []string, value bool)
 	FnNull       func(seq int64, flatPath []byte, pl int, path []string)
 
@@ -217,27 +217,29 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 		panic(fmt.Sprintf("BUG: failed to use JSON string: %v", err))
 	}
 
-	x := fv.FnString(seq, flatPath, pl, path, s)
+	extractors := fv.FnString(seq, flatPath, pl, path, s)
 
-	if x != nil { //nolint:nestif
-		xs, name, err := x.extract(s)
-		if err == nil {
-			p := parserPool.Get()
-			p.AllowUnexpectedTail = true
-			defer parserPool.Put(p)
+	if len(extractors) > 0 { //nolint:nestif
+		for _, x := range extractors {
+			xs, name, err := x.extract(s)
+			if err == nil {
+				p := parserPool.Get()
+				p.AllowUnexpectedTail = true
+				defer parserPool.Put(p)
 
-			if v, err := p.ParseBytes(xs); err == nil {
-				pl := len(flatPath)
+				if v, err := p.ParseBytes(xs); err == nil {
+					pl := len(flatPath)
 
-				flatPath = append(flatPath, []byte("."+name)...)
+					flatPath = append(flatPath, []byte("."+name)...)
 
-				if fv.WantPath {
-					fv.WalkFastJSON(seq, flatPath, pl, append(path, string(name)), v)
-				} else {
-					fv.WalkFastJSON(seq, flatPath, pl, nil, v)
+					if fv.WantPath {
+						fv.WalkFastJSON(seq, flatPath, pl, append(path, string(name)), v)
+					} else {
+						fv.WalkFastJSON(seq, flatPath, pl, nil, v)
+					}
+
+					return
 				}
-
-				return
 			}
 		}
 	}
