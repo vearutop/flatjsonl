@@ -12,6 +12,12 @@ import (
 
 // Main is the entry point for flatjsonl CLI tool.
 func Main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	var (
 		showVersion   bool
 		cpuProfile    string
@@ -33,17 +39,17 @@ func Main() {
 	if showVersion {
 		fmt.Println(version.Module("github.com/vearutop/flatjsonl").Version)
 
-		return
+		return nil
 	}
 
 	if cpuProfile != "" {
 		f, err := os.Create(cpuProfile)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		if err = pprof.StartCPUProfile(f); err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		defer pprof.StopCPUProfile()
@@ -53,13 +59,13 @@ func Main() {
 	if len(inputs) == 0 {
 		flag.Usage()
 
-		return
+		return nil
 	}
 
 	if loopInputSize > 0 {
 		i, err := LoopReaderFromFile(inputs[0].FileName, loopInputSize)
 		if err != nil {
-			log.Fatalf("failed to init loop reader: %v", err)
+			return fmt.Errorf("failed to init loop reader: %w", err)
 		}
 
 		inputs[0].Reader = i
@@ -68,25 +74,27 @@ func Main() {
 
 	proc, err := New(f)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	if err := proc.Process(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	if memProfile != "" {
 		f, err := os.Create(memProfile)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		if err := pprof.WriteHeapProfile(f); err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		if err := f.Close(); err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
+
+	return nil
 }

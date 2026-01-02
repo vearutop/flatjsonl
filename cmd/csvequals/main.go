@@ -15,13 +15,19 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	flag.Parse()
 
 	if flag.NArg() < 2 {
 		fmt.Println("Usage: csvequals <file1.csv> <file2.csv>")
 		flag.PrintDefaults()
 
-		return
+		return nil
 	}
 
 	fn1 := flag.Arg(0)
@@ -29,17 +35,17 @@ func main() {
 
 	f1, err := os.Open(fn1)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	f1s, err := os.Stat(fn1)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	f2, err := os.Open(fn2)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	defer func() {
@@ -47,13 +53,13 @@ func main() {
 		err2 := f2.Close()
 
 		if err1 != nil || err2 != nil {
-			log.Fatal(err1, err2)
+			log.Println(err1, err2)
 		}
 	}()
 
 	f2s, err := os.Stat(fn1)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	cr1 := progress.NewCountingReader(f1)
@@ -95,12 +101,12 @@ func main() {
 
 		r1, err := c1.Read()
 		if err != nil && !errors.Is(err, io.EOF) {
-			log.Fatal("file1 reading: ", err)
+			return fmt.Errorf("file1 reading: %w", err)
 		}
 
 		r2, err := c2.Read()
 		if err != nil && !errors.Is(err, io.EOF) {
-			log.Fatal("file2 reading: ", err)
+			return fmt.Errorf("file2 reading: %w", err)
 		}
 
 		if r1 == nil && r2 == nil {
@@ -108,11 +114,11 @@ func main() {
 		}
 
 		if r1 == nil {
-			log.Fatal("too few lines in file1")
+			return errors.New("too few lines in file1")
 		}
 
 		if r2 == nil {
-			log.Fatal("too few lines in file2")
+			return errors.New("too few lines in file2")
 		}
 
 		if keys1 == nil {
@@ -133,7 +139,7 @@ func main() {
 		diff := mapDiff(m1, m2)
 
 		if len(diff) > 0 {
-			log.Fatalln("found diff in line ", l, ":\n"+strings.Join(diff, "\n"))
+			return fmt.Errorf("found diff in line %d:\n"+strings.Join(diff, "\n"), l)
 		}
 	}
 
@@ -141,6 +147,8 @@ func main() {
 	cr2.Close()
 
 	println("files are equal")
+
+	return nil
 }
 
 func mapDiff(m1, m2 map[string]string) []string {

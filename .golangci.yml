@@ -5,6 +5,12 @@ run:
 linters:
   default: all
   disable:
+    - funlen
+    - exhaustive
+    - embeddedstructfieldcheck
+    - err113
+    - gosec
+    - noctx
     - testpackage
     - noinlineerr
     - wsl_v5
@@ -31,13 +37,19 @@ linters:
     - varnamelen
     - wrapcheck
   settings:
+    nestif:
+      min-complexity: 7
     dupl:
       threshold: 100
     errcheck:
       check-type-assertions: true
       check-blank: true
     gocyclo:
-      min-complexity: 20
+      min-complexity: 25
+    gocognit:
+      min-complexity: 40
+    cyclop:
+      max-complexity: 25
     misspell:
       locale: US
     unparam:
@@ -62,6 +74,9 @@ linters:
       - linters:
           - revive
         text: 'unused-parameter: parameter'
+      - linters:
+          - errcheck
+        text: "Error return value of `fmt.Fprint"
     paths:
       - third_party$
       - builtin$
@@ -70,7 +85,6 @@ formatters:
   enable:
     - gci
     - gofmt
-    - gofumpt
     - goimports
   exclusions:
     generated: lax

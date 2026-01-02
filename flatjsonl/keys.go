@@ -352,8 +352,9 @@ func (p *Processor) scanAvailableKeys() error {
 				w.WantPath = true
 
 				w.FnObjectStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
+					// Nothing to do with empty path.
 					if len(flatPath) == 0 {
-						return
+						return false
 					}
 
 					pk, parent := h.hashParentBytes(flatPath, pl)
@@ -362,6 +363,7 @@ func (p *Processor) scanAvailableKeys() error {
 
 					return stop
 				}
+
 				w.FnArrayStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
 					if len(flatPath) == 0 {
 						return

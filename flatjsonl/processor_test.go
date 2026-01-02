@@ -745,50 +745,6 @@ func TestNewProcessor_transpose_keep_json_regex(t *testing.T) {
 `)
 }
 
-//func TestMakeHighCardinality(t *testing.T) {
-//	type structItem struct {
-//		Foo string
-//		Bar string
-//	}
-//
-//	type item struct {
-//		ID     int `json:"id"`
-//		Deeper struct {
-//			Params    map[string]int        `json:"params"`
-//			StructMap map[string]structItem `json:"struct_map"`
-//		}
-//		Numbers []int        `json:"numbers"`
-//		Structs []structItem `json:"structs"`
-//	}
-//
-//	f, err := os.Create("testdata/high_cardinality.jsonl")
-//	require.NoError(t, err)
-//
-//	enc := json.NewEncoder(f)
-//	for i := 0; i < 1000; i++ {
-//		it := item{}
-//		it.ID = i
-//		it.Deeper.StructMap = map[string]structItem{}
-//		it.Deeper.Params = map[string]int{}
-//		for i := 0; i < rand.N(100); i++ {
-//			it.Numbers = append(it.Numbers, i)
-//			it.Deeper.Params[strconv.Itoa(i)] = i
-//			it.Deeper.StructMap[strconv.Itoa(i)] = structItem{
-//				Foo: strconv.Itoa(i),
-//				Bar: strconv.Itoa(i),
-//			}
-//			it.Structs = append(it.Structs, structItem{
-//				Foo: strconv.Itoa(i),
-//				Bar: strconv.Itoa(i),
-//			})
-//		}
-//
-//		require.NoError(t, enc.Encode(it))
-//	}
-//
-//	require.NoError(t, f.Close())
-//}
-
 func TestNewProcessor_highCardinality(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true

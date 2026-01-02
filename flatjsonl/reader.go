@@ -98,7 +98,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 		cmp string
 	)
 
-	if in.FileName != "" { //nolint:nestif
+	if in.FileName != "" {
 		fj, err := os.Open(in.FileName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open file %s: %w", in, err)
@@ -323,7 +323,7 @@ func (rd *Reader) doLine(w *syncWorker, seq, n int64, sess *readSession) error {
 	}
 
 	line := w.line
-	if len(line) < 2 || line[0] != '{' { //nolint:nestif
+	if len(line) < 2 || line[0] != '{' {
 		if line = rd.prefixedLine(seq, line, w.walker.FnString); line == nil {
 			if sess.lineFinished != nil {
 				if err := sess.lineFinished(seq); err != nil {

@@ -132,6 +132,7 @@ func (f *Flags) Register() {
 	flag.Func("netrie-db", "Netrie db file for NETIP extractor, you can provide multiple files", f.LoadNetrieDB)
 }
 
+// LoadGeoIPDB loads a GeoIP database from the specified file.
 func (f *Flags) LoadGeoIPDB(fn string) error {
 	db, err := maxminddb.Open(fn)
 	if err != nil {
@@ -143,6 +144,7 @@ func (f *Flags) LoadGeoIPDB(fn string) error {
 	return nil
 }
 
+// LoadNetrieDB loads a netrie database.
 func (f *Flags) LoadNetrieDB(fn string) error {
 	db, err := netrie.LoadFromFile(fn)
 	if err != nil {

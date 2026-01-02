@@ -123,7 +123,7 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, pl int, path
 
 	pl = len(flatPath)
 
-	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl,nestif
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
@@ -175,7 +175,7 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, pl int, pat
 
 	pl = len(flatPath)
 
-	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl,nestif
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
@@ -364,11 +364,7 @@ func (j *jsonSchema) AddKey(k flKey, keys *xsync.Map[uint64, flKey]) {
 	parents := []flKey{k}
 	parent := k.parent
 
-	for {
-		if parent == 0 {
-			break
-		}
-
+	for parent != 0 {
 		pk, ok := keys.Load(parent)
 		if !ok {
 			println("BUG: failed to load parent key for JSON schema:", parent)
