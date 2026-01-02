@@ -1,5 +1,5 @@
-{"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=0#piu","nested":"{\"quux\":123}"}}
-{"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=1#piu","nested":"{\"quux\":124}"}}
+{"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=0#piu","nested":"{\"quux\":123}"},"ip":"81.2.69.145"}
+{"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=1#piu","nested":"{\"quux\":124}"},"ip":"71.96.0.3"}
 {"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=2#piu","nested":"{\"quux\":125}"}}
-{"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=3#piu","nested":"{\"quux\":126}"}}
-{"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=4#piu","nested":"{\"quux\":127}"}}
+{"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=3#piu","nested":"{\"quux\":126}"},"ip":"2001:480:10::1"}
+{"foo":{"link":"https://user:pass@example.com:1234/foo/bar/?baz=1\u0026baz=2\u0026quux=abc\u0026i=4#piu","nested":"{\"quux\":127}"},"ip":"1.0.0.4"}

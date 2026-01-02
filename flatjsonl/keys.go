@@ -24,7 +24,7 @@ type flKey struct {
 	transposeDst     string
 	transposeKey     intOrString
 	transposeTrimmed string
-	extractor        extractor
+	extractors       []extractor
 	parent           uint64
 }
 
@@ -100,7 +100,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 
 	for r, x := range p.extractRegex {
 		if r.MatchString(key) {
-			k.extractor = x
+			k.extractors = append(k.extractors, x...)
 
 			break
 		}
@@ -129,7 +129,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 	return k
 }
 
-func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero bool) (_ extractor, stop bool) {
+func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero bool) (_ []extractor, stop bool) {
 	if _, phc := p.parentHighCardinality.Load(parent); phc {
 		return nil, true
 	}
@@ -160,7 +160,7 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 		p.flKeys.Store(pk, k)
 	}
 
-	return k.extractor, false
+	return k.extractors, false
 }
 
 func (p *Processor) collectKeyCardinality(k flKey) {
@@ -352,8 +352,9 @@ func (p *Processor) scanAvailableKeys() error {
 				w.WantPath = true
 
 				w.FnObjectStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
+					// Nothing to do with empty path.
 					if len(flatPath) == 0 {
-						return
+						return false
 					}
 
 					pk, parent := h.hashParentBytes(flatPath, pl)
@@ -362,6 +363,7 @@ func (p *Processor) scanAvailableKeys() error {
 
 					return stop
 				}
+
 				w.FnArrayStop = func(_ int64, flatPath []byte, pl int, path []string) (stop bool) {
 					if len(flatPath) == 0 {
 						return
@@ -373,7 +375,7 @@ func (p *Processor) scanAvailableKeys() error {
 
 					return stop
 				}
-				w.FnString = func(_ int64, flatPath []byte, pl int, path []string, value []byte) extractor {
+				w.FnString = func(_ int64, flatPath []byte, pl int, path []string, value []byte) []extractor {
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
 					x, _ := p.scanKey(pk, parent, path, TypeString, len(value) == 0)
@@ -516,7 +518,7 @@ func (p *Processor) flKeysInit() {
 
 			for r, x := range p.extractRegex {
 				if r.MatchString(key) {
-					k.extractor = x
+					k.extractors = append(k.extractors, x...)
 
 					break
 				}

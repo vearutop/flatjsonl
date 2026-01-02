@@ -29,7 +29,7 @@ type FastWalker struct {
 	FnObjectStop func(seq int64, flatPath []byte, pl int, path []string) (stop bool)
 	FnArrayStop  func(seq int64, flatPath []byte, pl int, path []string) (stop bool)
 	FnNumber     func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte)
-	FnString     func(seq int64, flatPath []byte, pl int, path []string, value []byte) extractor
+	FnString     func(seq int64, flatPath []byte, pl int, path []string, value []byte) []extractor
 	FnBool       func(seq int64, flatPath []byte, pl int, path []string, value bool)
 	FnNull       func(seq int64, flatPath []byte, pl int, path []string)
 
@@ -123,7 +123,7 @@ func (fv *FastWalker) walkFastJSONArray(seq int64, flatPath []byte, pl int, path
 
 	pl = len(flatPath)
 
-	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl,nestif
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
@@ -175,7 +175,7 @@ func (fv *FastWalker) walkFastJSONObject(seq int64, flatPath []byte, pl int, pat
 
 	pl = len(flatPath)
 
-	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl,nestif
+	if len(fv.KeepJSON) > 0 && fv.KeepJSON[string(flatPath)] { //nolint:dupl
 		fv.buf = fv.buf[:0]
 		fv.buf = v.MarshalTo(fv.buf)
 
@@ -217,28 +217,36 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 		panic(fmt.Sprintf("BUG: failed to use JSON string: %v", err))
 	}
 
-	x := fv.FnString(seq, flatPath, pl, path, s)
+	extractors := fv.FnString(seq, flatPath, pl, path, s)
 
-	if x != nil { //nolint:nestif
-		xs, name, err := x.extract(s)
-		if err == nil {
-			p := parserPool.Get()
-			p.AllowUnexpectedTail = true
-			defer parserPool.Put(p)
+	if len(extractors) > 0 { //nolint:nestif
+		extracted := 0
 
-			if v, err := p.ParseBytes(xs); err == nil {
-				pl := len(flatPath)
+		for _, x := range extractors {
+			xs, name, err := x.extract(s)
+			if err == nil {
+				p := parserPool.Get()
+				p.AllowUnexpectedTail = true
+				defer parserPool.Put(p)
 
-				flatPath = append(flatPath, []byte("."+name)...)
+				if v, err := p.ParseBytes(xs); err == nil {
+					pl := len(flatPath)
 
-				if fv.WantPath {
-					fv.WalkFastJSON(seq, flatPath, pl, append(path, string(name)), v)
-				} else {
-					fv.WalkFastJSON(seq, flatPath, pl, nil, v)
+					flatPath = append(flatPath, []byte("."+name)...)
+
+					if fv.WantPath {
+						fv.WalkFastJSON(seq, flatPath, pl, append(path, string(name)), v)
+					} else {
+						fv.WalkFastJSON(seq, flatPath, pl, nil, v)
+					}
+
+					extracted++
 				}
-
-				return
 			}
+		}
+
+		if extracted > 0 {
+			return
 		}
 	}
 
@@ -356,11 +364,7 @@ func (j *jsonSchema) AddKey(k flKey, keys *xsync.Map[uint64, flKey]) {
 	parents := []flKey{k}
 	parent := k.parent
 
-	for {
-		if parent == 0 {
-			break
-		}
-
+	for parent != 0 {
 		pk, ok := keys.Load(parent)
 		if !ok {
 			println("BUG: failed to load parent key for JSON schema:", parent)
@@ -384,7 +388,8 @@ func (j *jsonSchema) AddKey(k flKey, keys *xsync.Map[uint64, flKey]) {
 			pk.t = TypeObject
 		}
 
-		if parentType == TypeObject {
+		switch parentType {
+		case TypeObject:
 			if parentSchema.Properties == nil {
 				parentSchema.Properties = make(map[string]*jsonSchema)
 			}
@@ -398,7 +403,7 @@ func (j *jsonSchema) AddKey(k flKey, keys *xsync.Map[uint64, flKey]) {
 			parentSchema = property
 
 			parentType = pk.t
-		} else if parentType == TypeArray {
+		case TypeArray:
 			if parentSchema.Items == nil {
 				parentSchema.Items = &jsonSchema{}
 			}

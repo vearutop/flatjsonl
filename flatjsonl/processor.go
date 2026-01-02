@@ -40,7 +40,7 @@ type Processor struct {
 	includeRegex []*regexp.Regexp
 	excludeRegex []*regexp.Regexp
 	replaceRegex map[*regexp.Regexp]string
-	extractRegex map[*regexp.Regexp]extractor
+	extractRegex map[*regexp.Regexp][]extractor
 	constVals    map[int]string
 
 	replaceKeys  map[string]string
@@ -182,7 +182,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 	}
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
-	p.extractRegex = map[*regexp.Regexp]extractor{}
+	p.extractRegex = map[*regexp.Regexp][]extractor{}
 
 	for _, reg := range p.cfg.ExcludeKeysRegex {
 		r, err := regex(reg)
@@ -211,13 +211,23 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		p.replaceRegex[r] = rep
 	}
 
-	for reg, x := range p.cfg.ExtractValuesRegex {
+	for reg, xx := range p.cfg.ExtractValuesRegex {
 		r, err := regex(reg)
 		if err != nil {
 			return nil, fmt.Errorf("include keys: %w", err)
 		}
 
-		p.extractRegex[r] = x.Extractor()
+		var extractors []extractor
+
+		for _, x := range strings.Split(string(xx), ",") {
+			if xt := extract(x).Extractor(); xt != nil {
+				extractors = append(extractors, xt)
+			}
+		}
+
+		if len(extractors) > 0 {
+			p.extractRegex[r] = extractors
+		}
 	}
 
 	go p.watchMemUsage()
@@ -383,8 +393,11 @@ func (p *Processor) showKeysInfo() {
 			line += ", TRANSPOSED TO " + k.transposeDst
 		}
 
-		if k.extractor != nil {
-			line += ", EXTRACTED " + string(k.extractor.name())
+		if len(k.extractors) > 0 {
+			line += ", EXTRACTED"
+			for _, e := range k.extractors {
+				line += " " + string(e.name())
+			}
 		}
 
 		_, _ = fmt.Fprintln(p.Stdout, strconv.Itoa(i)+":", line)
@@ -667,7 +680,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 	w.FnObjectStop = nil
 	w.FnArrayStop = nil
-	w.FnString = func(seq int64, flatPath []byte, pl int, _ []string, value []byte) extractor {
+	w.FnString = func(seq int64, flatPath []byte, pl int, _ []string, value []byte) []extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
@@ -681,7 +694,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			String: string(value),
 		}, pk, l)
 
-		return k.extractor
+		return k.extractors
 	}
 	w.FnNumber = func(seq int64, flatPath []byte, pl int, _ []string, value float64, raw []byte) {
 		l, _ := wi.pending.Load(seq)

@@ -8,6 +8,7 @@ const (
 	extractURL   = extract("URL")
 	extractJSON  = extract("JSON")
 	extractGeoIP = extract("GEOIP")
+	extractNetIP = extract("NETIP")
 )
 
 // Enum describes the type.
@@ -16,6 +17,7 @@ func (extract) Enum() []any {
 		extractURL,
 		extractJSON,
 		extractGeoIP,
+		extractNetIP,
 	}
 }
 
@@ -28,6 +30,8 @@ func (e extract) Extractor() extractor {
 		return jsonExtractor{}
 	case extractGeoIP:
 		return geoIPExtractor{}
+	case extractNetIP:
+		return netIPExtractor{}
 	}
 
 	return nil

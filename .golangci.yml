@@ -1,78 +1,94 @@
-# See https://github.com/golangci/golangci-lint/blob/master/.golangci.example.yml
+# See https://golangci-lint.run/docs/linters/configuration/
+version: "2"
 run:
   tests: true
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  gocyclo:
-    min-complexity: 20
-  dupl:
-    threshold: 100
-  misspell:
-    locale: US
-  unparam:
-    check-exported: true
-  cyclop:
-    max-complexity: 20
-  gocognit:
-    min-complexity: 40
-
 linters:
-  enable-all: true
+  default: all
   disable:
-    - nestif
-    - gochecknoinits
-    - gocritic
-    - exhaustive
     - funlen
+    - exhaustive
+    - embeddedstructfieldcheck
+    - err113
     - gosec
-    - goerr113
-    - intrange
-    - gocyclo
-    - cyclop
-    - lll
-    - gochecknoglobals
-    - wrapcheck
-    - paralleltest
+    - noctx
+    - testpackage
+    - noinlineerr
+    - wsl_v5
+    - funcorder
+    - copyloopvar
+    - depguard
+    - dupword
+    - errname
+    - exhaustruct
     - forbidigo
     - forcetypeassert
-    - varnamelen
-    - tagliatelle
-    - errname
+    - gochecknoglobals
+    - intrange
     - ireturn
-    - exhaustruct
-    - nonamedreturns
-    - testableexamples
-    - dupword
-    - depguard
-    - tagalign
+    - lll
     - mnd
-    - testifylint
+    - nonamedreturns
+    - paralleltest
     - recvcheck
-
-issues:
-  exclude-use-default: false
-  exclude-rules:
-    - linters:
-        - testpackage
-        - mnd
-        - goconst
-        - noctx
-        - funlen
-        - dupl
-        - unused
-        - unparam
-      path: "_test.go"
-    - linters:
-        - errcheck # Error checking omitted for brevity.
-        - gosec
-      path: "example_"
-    - linters:
-        - revive
-      text: "unused-parameter: parameter"
-    - linters:
-        - errcheck
-      text: "Error return value of `fmt.Fprint"
-
+    - tagalign
+    - tagliatelle
+    - testableexamples
+    - testifylint
+    - varnamelen
+    - wrapcheck
+  settings:
+    nestif:
+      min-complexity: 7
+    dupl:
+      threshold: 100
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    gocyclo:
+      min-complexity: 25
+    gocognit:
+      min-complexity: 40
+    cyclop:
+      max-complexity: 25
+    misspell:
+      locale: US
+    unparam:
+      check-exported: true
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - gosec
+          - dupl
+          - funlen
+          - goconst
+          - mnd
+          - noctx
+          - unparam
+          - unused
+        path: _test.go
+      - linters:
+          - errcheck
+          - gosec
+        path: example_
+      - linters:
+          - revive
+        text: 'unused-parameter: parameter'
+      - linters:
+          - errcheck
+        text: "Error return value of `fmt.Fprint"
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

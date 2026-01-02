@@ -1,4 +1,10 @@
 {
+  "includeKeys": [
+    ".ip",
+    ".ip.NETIP.asns",
+    ".ip.GEOIP.city.names.en",
+    ".ip.GEOIP.autonomous_system_organization"
+  ],
   "includeKeysRegex": [
     ".foo.link.URL.*.*.*",
     ".foo.link.URL.*.*",
@@ -11,6 +17,7 @@
   },
   "extractValuesRegex": {
     ".*.link": "URL",
-    ".*.nested": "JSON"
+    ".*.nested": "JSON",
+    ".ip": "GEOIP,NETIP"
   }
 }
