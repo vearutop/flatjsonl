@@ -4,12 +4,14 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"path"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/oschwald/maxminddb-golang"
+	"github.com/vearutop/netrie"
 )
 
 // Flags contains command-line flags.
@@ -126,16 +128,33 @@ func (f *Flags) Register() {
 	flag.IntVar(&f.Concurrency, "concurrency", 2*runtime.NumCPU(), "Number of concurrent routines in reader.")
 	flag.IntVar(&f.MemLimit, "mem-limit", 1000, "Heap in use soft limit, in MB.")
 
-	flag.Func("geo-ip-db", "MaxMind GeoIP db file for GEOIP extractor, you can provide multiple files", func(fn string) error {
-		db, err := maxminddb.Open(fn)
-		if err != nil {
-			return fmt.Errorf("open MaxMind DB %q: %w", fn, err)
-		}
+	flag.Func("geo-ip-db", "MaxMind GeoIP db file for GEOIP extractor, you can provide multiple files", f.LoadGeoIPDB)
+	flag.Func("netrie-db", "Netrie db file for NETIP extractor, you can provide multiple files", f.LoadNetrieDB)
+}
 
-		geoIPDatabases = append(geoIPDatabases, db)
+func (f *Flags) LoadGeoIPDB(fn string) error {
+	db, err := maxminddb.Open(fn)
+	if err != nil {
+		return fmt.Errorf("open MaxMind DB %q: %w", fn, err)
+	}
 
-		return nil
-	})
+	geoIPDatabases = append(geoIPDatabases, db)
+
+	return nil
+}
+
+func (f *Flags) LoadNetrieDB(fn string) error {
+	db, err := netrie.LoadFromFile(fn)
+	if err != nil {
+		return fmt.Errorf("open Netrie DB %q: %w", fn, err)
+	}
+
+	name := path.Base(fn)
+	name = strings.TrimSuffix(name, path.Ext(name))
+
+	netrieDatabases[name] = db
+
+	return nil
 }
 
 // Parse parses and prepares command-line flags.

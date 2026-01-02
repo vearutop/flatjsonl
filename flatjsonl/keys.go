@@ -100,7 +100,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 
 	for r, x := range p.extractRegex {
 		if r.MatchString(key) {
-			k.extractors = append(k.extractors, x)
+			k.extractors = append(k.extractors, x...)
 
 			break
 		}
@@ -516,7 +516,7 @@ func (p *Processor) flKeysInit() {
 
 			for r, x := range p.extractRegex {
 				if r.MatchString(key) {
-					k.extractors = append(k.extractors, x)
+					k.extractors = append(k.extractors, x...)
 
 					break
 				}

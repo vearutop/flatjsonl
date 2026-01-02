@@ -220,6 +220,8 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 	extractors := fv.FnString(seq, flatPath, pl, path, s)
 
 	if len(extractors) > 0 { //nolint:nestif
+		extracted := 0
+
 		for _, x := range extractors {
 			xs, name, err := x.extract(s)
 			if err == nil {
@@ -238,9 +240,13 @@ func (fv *FastWalker) walkFastJSONString(seq int64, flatPath []byte, pl int, pat
 						fv.WalkFastJSON(seq, flatPath, pl, nil, v)
 					}
 
-					return
+					extracted++
 				}
 			}
+		}
+
+		if extracted > 0 {
+			return
 		}
 	}
 
@@ -386,7 +392,8 @@ func (j *jsonSchema) AddKey(k flKey, keys *xsync.Map[uint64, flKey]) {
 			pk.t = TypeObject
 		}
 
-		if parentType == TypeObject {
+		switch parentType {
+		case TypeObject:
 			if parentSchema.Properties == nil {
 				parentSchema.Properties = make(map[string]*jsonSchema)
 			}
@@ -400,7 +407,7 @@ func (j *jsonSchema) AddKey(k flKey, keys *xsync.Map[uint64, flKey]) {
 			parentSchema = property
 
 			parentType = pk.t
-		} else if parentType == TypeArray {
+		case TypeArray:
 			if parentSchema.Items == nil {
 				parentSchema.Items = &jsonSchema{}
 			}
