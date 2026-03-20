@@ -1,4 +1,4 @@
-#GOLANGCI_LINT_VERSION := "v2.5.0" # Optional configuration to pinpoint golangci-lint version.
+#GOLANGCI_LINT_VERSION := "v2.11.3" # Optional configuration to pinpoint golangci-lint version.
 
 # The head of Makefile determines location of dev-go to include standard targets.
 GO ?= go
@@ -42,6 +42,5 @@ export RELEASE_TARGETS="darwin/amd64 darwin/arm64 linux/amd64 linux/dbg-amd64 li
 -include $(DEVGO_PATH)/makefiles/build.mk
 
 # Add your custom targets here.
-
 ## Run tests
 test: test-unit

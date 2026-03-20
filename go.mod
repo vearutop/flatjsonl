@@ -4,11 +4,11 @@ go 1.24.0
 
 require (
 	github.com/bool64/ctxd v1.2.1
-	github.com/bool64/dev v0.2.43
+	github.com/bool64/dev v0.2.45
 	github.com/bool64/progress v0.3.23
 	github.com/bool64/sqluct v0.2.8
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/klauspost/compress v1.18.2
+	github.com/klauspost/compress v1.18.5
 	github.com/klauspost/pgzip v1.2.6
 	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/puzpuzpuz/xsync/v4 v4.2.0

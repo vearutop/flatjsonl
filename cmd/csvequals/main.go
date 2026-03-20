@@ -152,7 +152,7 @@ func run() error {
 }
 
 func mapDiff(m1, m2 map[string]string) []string {
-	var diff []string //nolint:prealloc
+	var diff []string
 
 	for k, v1 := range m1 {
 		v2, ok := m2[k]

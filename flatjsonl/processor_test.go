@@ -799,3 +799,57 @@ keys info:
 }
 `, out.String(), out.String())
 }
+
+func TestNewProcessor_scalar_vs_array(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "testdata/float_vs_array.jsonl"
+	f.CSV = "testdata/float_vs_array.csv"
+	f.ShowKeysFlat = true
+	f.ShowKeysInfo = true
+	f.ShowJSONSchema = true
+	f.Concurrency = 1
+	f.ChildrenLimitObject = 30
+	f.PrepareOutput()
+
+	var cfg flatjsonl.Config
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+
+	out := bytes.NewBuffer(nil)
+	proc.Stdout = out
+
+	require.NoError(t, proc.Process())
+
+	println(out.String())
+
+	assert.Equal(t, `keys:
+"._sequence",
+".a",
+".b",
+".a.[0]",
+".a.[1]",
+".a.[2]",
+".a.a1",
+".a.a2",
+".a.a3",
+keys info:
+1: ._sequence, TYPE int
+2: .a, TYPE float
+3: .b, TYPE string
+4: .a.[0], TYPE int
+5: .a.[1], TYPE int
+6: .a.[2], TYPE int
+7: .a.a1, TYPE int
+8: .a.a2, TYPE int
+9: .a.a3, TYPE int
+{
+ "title":"Root",
+ "properties":{
+  "_sequence":{"type":["integer"]},"a":{"type":["integer","number","array","object"]},
+  "b":{"type":["integer","string","boolean"]}
+ }
+}
+`, out.String(), out.String())
+}
