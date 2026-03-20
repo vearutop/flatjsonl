@@ -27,6 +27,10 @@ func (t Type) Update(u Type) Type {
 		return u
 	}
 
+	if u == TypeObject || u == TypeArray {
+		return t
+	}
+
 	// Same type is not updated.
 	if t == u {
 		return t

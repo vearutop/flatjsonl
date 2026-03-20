@@ -226,6 +226,10 @@ func scanTransposedKey(dst string, tk string, k *flKey) {
 
 	if trimmed[0] == '.' {
 		trimmed = trimmed[1:]
+
+		if len(trimmed) == 0 {
+			return
+		}
 	}
 
 	// Array.
