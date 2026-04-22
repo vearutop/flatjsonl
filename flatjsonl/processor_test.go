@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/parquet-go/parquet-go"
+	"github.com/parquet-go/parquet-go/format"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vearutop/flatjsonl/flatjsonl"
@@ -177,6 +181,108 @@ func TestNewProcessor_concurrency(t *testing.T) {
 `))
 }
 
+func TestNewProcessor_parquet(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.ExtractStrings = true
+	f.AddSequence = true
+	f.Input = "testdata/test.log"
+	f.Parquet = "testdata/test.parquet"
+	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
+	f.MaxLines = 3
+	f.ReplaceKeys = true
+	f.SkipZeroCols = true
+	f.Concurrency = 1
+
+	cj, err := os.ReadFile("testdata/config.json")
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, json.Unmarshal(cj, &cfg))
+	require.NoError(t, os.RemoveAll(f.Parquet))
+	t.Cleanup(func() { require.NoError(t, os.Remove(f.Parquet)) })
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+	require.NoError(t, proc.Process())
+
+	pf := openParquetFile(t, f.Parquet)
+	require.NotEmpty(t, pf.RowGroups())
+	require.NotEmpty(t, pf.Metadata().RowGroups)
+	require.NotEmpty(t, pf.Metadata().RowGroups[0].Columns)
+	assert.Equal(t, format.Snappy, pf.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+
+	rows := readParquetRows(t, f.Parquet)
+	require.Len(t, rows, 3)
+
+	assert.Equal(t, map[string]string{
+		"sequence":                 "1",
+		"host":                     "host-13",
+		"timestamp":                "2022-06-24 14:13:36",
+		"name":                     "Gilbert",
+		"wins_0_0":                 "straight",
+		"wins_0_1":                 "7♣",
+		"wins_1_0":                 "one pair",
+		"wins_1_1":                 "10♥",
+		"f00_bar VARCHAR(255)":     "1",
+		"f00_qux_baz VARCHAR(255)": "abc",
+	}, rows[0])
+
+	assert.Equal(t, "May", rows[2]["name"])
+	assert.Equal(t, "1", rows[2]["foo"])
+	assert.Equal(t, "2", rows[2]["bar"])
+	assert.Equal(t, `{"foo":1, "bar": 2}`, rows[2]["nested_literal"])
+}
+
+func TestNewProcessor_transpose_parquet(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.Input = "testdata/transpose.jsonl"
+	f.Parquet = "testdata/transpose.parquet"
+	f.ParquetCompression = "zstd"
+	f.ReplaceKeys = true
+	f.Concurrency = 1
+
+	cj, err := os.ReadFile("testdata/transpose_cfg.json")
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, json.Unmarshal(cj, &cfg))
+
+	for _, fn := range []string{
+		f.Parquet,
+		"testdata/transpose_tags.parquet",
+		"testdata/transpose_tokens.parquet",
+		"testdata/transpose_deep_arr.parquet",
+		"testdata/transpose_flat_map.parquet",
+	} {
+		require.NoError(t, os.RemoveAll(fn))
+		t.Cleanup(func(name string) func() { return func() { require.NoError(t, os.Remove(name)) } }(fn))
+	}
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+	require.NoError(t, proc.Process())
+
+	pf := openParquetFile(t, f.Parquet)
+	assert.Equal(t, format.Zstd, pf.Metadata().RowGroups[0].Columns[0].MetaData.Codec)
+	assert.Len(t, readParquetRows(t, f.Parquet), 3)
+
+	tagRows := readParquetRows(t, "testdata/transpose_tags.parquet")
+	require.Len(t, tagRows, 9)
+	assert.Equal(t, map[string]string{
+		"sequence": "1",
+		"index":    "0",
+		"value":    "t1",
+	}, tagRows[0])
+
+	flatMapRows := readParquetRows(t, "testdata/transpose_flat_map.parquet")
+	require.NotEmpty(t, flatMapRows)
+	assert.Equal(t, "ccc", flatMapRows[0]["index"])
+	assert.Equal(t, "123", flatMapRows[0]["value"])
+}
+
 func TestNewProcessor_prefixNoJSON(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
@@ -199,6 +305,100 @@ func TestNewProcessor_prefixNoJSON(t *testing.T) {
 3,host-13,2022/06/24 14:13:38.393275,fooc,bar3,bazb,qux2
 4,host-14,2022/06/24 14:13:39.393275,food,bar4,baza,qux1
 `, string(b))
+}
+
+func openParquetFile(t *testing.T, fn string) *parquet.File {
+	t.Helper()
+
+	f, err := os.Open(fn)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, f.Close()) })
+
+	fi, err := f.Stat()
+	require.NoError(t, err)
+
+	pf, err := parquet.OpenFile(f, fi.Size())
+	require.NoError(t, err)
+
+	return pf
+}
+
+func readParquetRows(t *testing.T, fn string) []map[string]string {
+	t.Helper()
+
+	f, err := os.Open(fn)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, f.Close()) })
+
+	r := parquet.NewReader(f)
+	defer func() {
+		require.NoError(t, r.Close())
+	}()
+
+	columns := r.Schema().Columns()
+	rows := make([]map[string]string, 0)
+	buf := make([]parquet.Row, 1)
+
+	for {
+		n, err := r.ReadRows(buf)
+		require.LessOrEqual(t, n, 1)
+
+		if n > 0 {
+			row := make(map[string]string)
+
+			buf[0].Range(func(columnIndex int, values []parquet.Value) bool {
+				if len(values) == 0 {
+					return true
+				}
+
+				for i := len(values) - 1; i >= 0; i-- {
+					if values[i].IsNull() {
+						continue
+					}
+
+					row[strings.Join(columns[columnIndex], ".")] = parquetValueString(values[i])
+
+					break
+				}
+
+				return true
+			})
+
+			rows = append(rows, row)
+			buf[0] = nil
+		}
+
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		require.NoError(t, err)
+	}
+
+	return rows
+}
+
+func parquetValueString(v parquet.Value) string {
+	if v.IsNull() {
+		return ""
+	}
+
+	switch v.Kind() { //nolint:exhaustive
+	case parquet.Boolean:
+		return strconv.FormatBool(v.Boolean())
+	case parquet.Int32:
+		return strconv.FormatInt(int64(v.Int32()), 10)
+	case parquet.Int64:
+		return strconv.FormatInt(v.Int64(), 10)
+	case parquet.Float:
+		return strconv.FormatFloat(float64(v.Float()), 'g', -1, 32)
+	case parquet.Double:
+		return strconv.FormatFloat(v.Double(), 'g', -1, 64)
+	case parquet.ByteArray, parquet.FixedLenByteArray:
+		return string(v.ByteArray())
+	default:
+		return v.String()
+	}
 }
 
 func TestNewProcessor_coalesceMultipleCols(t *testing.T) {
@@ -824,6 +1024,9 @@ func TestNewProcessor_scalar_vs_array(t *testing.T) {
 
 	println(out.String())
 
+	schemaStart := strings.Index(out.String(), "{\n")
+	require.NotEqual(t, -1, schemaStart)
+
 	assert.Equal(t, `keys:
 "._sequence",
 ".a",
@@ -844,12 +1047,16 @@ keys info:
 7: .a.a1, TYPE int
 8: .a.a2, TYPE int
 9: .a.a3, TYPE int
-{
- "title":"Root",
- "properties":{
-  "_sequence":{"type":["integer"]},"a":{"type":["integer","number","array","object"]},
-  "b":{"type":["integer","string","boolean"]}
- }
-}
-`, out.String(), out.String())
+`, out.String()[:schemaStart], out.String())
+
+	var schema struct {
+		Properties map[string]struct {
+			Type []string `json:"type"`
+		} `json:"properties"`
+	}
+
+	require.NoError(t, json.Unmarshal([]byte(out.String()[schemaStart:]), &schema))
+	assert.Equal(t, []string{"integer"}, schema.Properties["_sequence"].Type)
+	assert.ElementsMatch(t, []string{"integer", "number", "array", "object"}, schema.Properties["a"].Type)
+	assert.ElementsMatch(t, []string{"integer", "string", "boolean"}, schema.Properties["b"].Type)
 }

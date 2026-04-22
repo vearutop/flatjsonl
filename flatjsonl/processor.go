@@ -425,6 +425,15 @@ func (p *Processor) setupWriters() error {
 		p.w.Add(cw)
 	}
 
+	if p.f.Parquet != "" {
+		pw, err := NewParquetWriter(p.f.Parquet, p.f.ParquetCompression, p)
+		if err != nil {
+			return fmt.Errorf("failed to create parquet file: %w", err)
+		}
+
+		p.w.Add(pw)
+	}
+
 	if p.f.SQLite != "" {
 		if p.f.SQLiteCLI {
 			cw, err := NewSQLite3CLIWriter(p.f.SQLite, p.f.SQLTable)

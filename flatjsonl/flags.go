@@ -23,6 +23,9 @@ type Flags struct {
 
 	CSV string
 
+	Parquet            string
+	ParquetCompression string
+
 	SQLite         string
 	SQLiteInstance *sql.DB
 	SQLiteCLI      bool
@@ -70,6 +73,9 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.Input, "input", "", "Input from JSONL files, comma-separated.")
 	flag.StringVar(&f.Output, "output", "", "Output to a file (default <input>.csv).")
 	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
+	flag.StringVar(&f.Parquet, "parquet", "", "Output to Parquet file.")
+	flag.StringVar(&f.ParquetCompression, "parquet-compression", "snappy",
+		"Parquet column compression: snappy, zstd, gzip, none.")
 
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
 	flag.BoolVar(&f.SQLiteCLI, "sqlite3-cli", false, "Use SQLite3 CLI to import via CSV.")
@@ -166,7 +172,7 @@ func (f *Flags) Parse() {
 	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo && !f.ShowJSONSchema {
 		inputs := f.Inputs()
 
-		if len(inputs) > 0 && f.CSV == "" && f.SQLite == "" && f.Raw == "" && f.PGDump == "" {
+		if len(inputs) > 0 && f.CSV == "" && f.Parquet == "" && f.SQLite == "" && f.Raw == "" && f.PGDump == "" {
 			f.Output = inputs[0].FileName + ".csv"
 		}
 	}
@@ -193,6 +199,18 @@ func (f *Flags) PrepareOutput() {
 			}
 
 			f.CSV = output
+
+			continue
+		}
+
+		if strings.HasSuffix(outputLow, ".parquet") {
+			if f.Parquet != "" {
+				println("Parquet output is already enabled, skipping", output)
+
+				continue
+			}
+
+			f.Parquet = output
 
 			continue
 		}

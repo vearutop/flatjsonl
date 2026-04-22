@@ -17,7 +17,7 @@ common source of information for ad-hoc analytics and investigations.
 They can be processed with `jq` and grepped for a variety of data checks, however there are much more powerful and 
 convenient tools that operate on rows and columns, rather than hierarchical structures.
 
-This tool converts structured logs into tabular data (`CSV`, `SQLite`, `PostgreSQL dump`) with flexible mapping options.
+This tool converts structured logs into tabular data (`CSV`, `Parquet`, `SQLite`, `PostgreSQL dump`) with flexible mapping options.
 
 ## Performance
 
@@ -156,6 +156,10 @@ Usage of flatjsonl:
         Skip a number of first lines.
   -output string
         Output to a file (default <input>.csv).
+  -parquet string
+        Output to Parquet file.
+  -parquet-compression string
+        Parquet column compression: snappy, zstd, gzip, none. (default "snappy")
   -pg-dump string
         Output to PostgreSQL dump file.
   -progress-interval duration
@@ -284,6 +288,11 @@ SQLite table `events` in file `report.sqlite`.
 
 ```
 flatjsonl -sqlite report.sqlite -sql-table events -config events.json events.jsonl
+```
+
+Export the same input to Parquet with Snappy compression.
+```
+flatjsonl -parquet report.parquet -parquet-compression snappy -config events.json events.jsonl
 ```
 
 Show flat list of keys found in first 100 (or less) lines of `events.jsonl`.
