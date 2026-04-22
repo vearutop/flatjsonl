@@ -116,7 +116,7 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 
 		switch {
 		case strings.HasSuffix(in.FileName, ".gz"):
-			cmp = "gzip"
+			cmp = "gzip" //nolint: goconst
 		case strings.HasSuffix(in.FileName, ".zst"):
 			cmp = "zst"
 		}
