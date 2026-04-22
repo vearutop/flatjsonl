@@ -2,7 +2,6 @@ package flatjsonl
 
 import (
 	"fmt"
-	"reflect"
 	"strconv"
 
 	"github.com/parquet-go/parquet-go"
@@ -19,10 +18,14 @@ type ParquetWriter struct {
 	compression string
 	p           *Processor
 
-	w *parquet.Writer
+	w *parquet.GenericWriter[any]
 
-	rowType reflect.Type
-	setters []parquetFieldSetter
+	rowsInGroup int
+	flushSize   int
+
+	orderedColumns []parquetColumn
+	rowsBatch      []parquet.Row
+	batchSize      int
 
 	transposed map[string]*ParquetWriter
 
@@ -30,7 +33,12 @@ type ParquetWriter struct {
 	b *baseWriter
 }
 
-type parquetFieldSetter func(field reflect.Value, value Value) error
+type parquetColumn struct {
+	valueIndex  int
+	columnIndex int
+	columnType  Type
+	columnName  string
+}
 
 // NewParquetWriter creates an instance of ParquetWriter.
 func NewParquetWriter(fn string, compression string, p *Processor) (*ParquetWriter, error) {
@@ -88,105 +96,93 @@ func (c *ParquetWriter) SetupKeys(keys []flKey) (err error) {
 }
 
 func (c *ParquetWriter) setupParquetWriter() error {
-	fields := make([]reflect.StructField, len(c.b.filteredKeys))
-	c.setters = make([]parquetFieldSetter, len(c.b.filteredKeys))
+	group := parquet.Group{}
 
-	for i, k := range c.b.filteredKeys {
-		ft, setter := parquetFieldForType(k.t)
-
-		fields[i] = reflect.StructField{
-			Name: "Field" + strconv.Itoa(i),
-			Type: ft,
-			Tag:  reflect.StructTag(`parquet:` + strconv.Quote(k.replaced+",optional")),
-		}
-		c.setters[i] = setter
-	}
-
-	c.rowType = reflect.StructOf(fields)
-
-	schema := parquet.SchemaOf(reflect.New(c.rowType).Interface())
 	codec, err := parquetCompressionCodec(c.compression)
-
 	if err != nil {
 		return err
 	}
 
-	c.w = parquet.NewWriter(c.uncompressed, &parquet.WriterConfig{
+	for _, k := range c.b.filteredKeys {
+		group[k.replaced] = parquet.Optional(parquetNode(k.t))
+	}
+
+	schema := parquet.NewSchema("flatjsonl", group)
+	c.w = parquet.NewGenericWriter[any](c.uncompressed, &parquet.WriterConfig{
 		Schema:      schema,
 		Compression: codec,
 	})
 
+	c.flushSize = parquetFlushSize(len(c.b.filteredKeys))
+	c.batchSize = parquetBatchSize(len(c.b.filteredKeys))
+
+	for _, colPath := range schema.Columns() {
+		leaf, ok := schema.Lookup(colPath...)
+		if !ok {
+			return fmt.Errorf("failed to look up parquet column %v", colPath)
+		}
+
+		name := colPath[len(colPath)-1]
+		found := false
+
+		for i, k := range c.b.filteredKeys {
+			if k.replaced == name {
+				c.orderedColumns = append(c.orderedColumns, parquetColumn{
+					valueIndex:  i,
+					columnIndex: leaf.ColumnIndex,
+					columnType:  k.t,
+					columnName:  k.replaced,
+				})
+				found = true
+
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("failed to map parquet column %q to filtered keys", name)
+		}
+	}
+
 	return nil
 }
 
-func parquetFieldForType(t Type) (reflect.Type, parquetFieldSetter) {
+func parquetNode(t Type) parquet.Node {
 	switch t { //nolint:exhaustive
 	case TypeBool:
-		return reflect.TypeOf((*bool)(nil)), func(field reflect.Value, value Value) error {
-			v := value.Bool
-			field.Set(reflect.ValueOf(&v))
-
-			return nil
-		}
+		return parquet.Leaf(parquet.BooleanType)
 	case TypeInt:
-		return reflect.TypeOf((*int64)(nil)), func(field reflect.Value, value Value) error {
-			var v int64
-
-			switch value.Type { //nolint:exhaustive
-			case TypeFloat:
-				v = int64(value.Number)
-			case TypeBool:
-				if value.Bool {
-					v = 1
-				}
-			case TypeString:
-				var err error
-
-				v, err = strconv.ParseInt(value.String, 10, 64)
-				if err != nil {
-					return fmt.Errorf("parse int value %q: %w", value.String, err)
-				}
-			default:
-				return fmt.Errorf("unexpected value type %s for int column", value.Type)
-			}
-
-			field.Set(reflect.ValueOf(&v))
-
-			return nil
-		}
+		return parquet.Int(64)
 	case TypeFloat:
-		return reflect.TypeOf((*float64)(nil)), func(field reflect.Value, value Value) error {
-			var v float64
-
-			switch value.Type { //nolint:exhaustive
-			case TypeFloat:
-				v = value.Number
-			case TypeBool:
-				if value.Bool {
-					v = 1
-				}
-			case TypeString:
-				var err error
-
-				v, err = strconv.ParseFloat(value.String, 64)
-				if err != nil {
-					return fmt.Errorf("parse float value %q: %w", value.String, err)
-				}
-			default:
-				return fmt.Errorf("unexpected value type %s for float column", value.Type)
-			}
-
-			field.Set(reflect.ValueOf(&v))
-
-			return nil
-		}
+		return parquet.Leaf(parquet.DoubleType)
 	default:
-		return reflect.TypeOf((*string)(nil)), func(field reflect.Value, value Value) error {
-			v := value.Format()
-			field.Set(reflect.ValueOf(&v))
+		return parquet.String()
+	}
+}
 
-			return nil
-		}
+func parquetFlushSize(numCols int) int {
+	switch {
+	case numCols >= 1500:
+		return 500
+	case numCols >= 1000:
+		return 1000
+	case numCols >= 500:
+		return 2500
+	default:
+		return 10000
+	}
+}
+
+func parquetBatchSize(numCols int) int {
+	switch {
+	case numCols >= 1500:
+		return 64
+	case numCols >= 1000:
+		return 128
+	case numCols >= 500:
+		return 256
+	default:
+		return 512
 	}
 }
 
@@ -233,19 +229,127 @@ func (c *ParquetWriter) ReceiveRow(seq int64, values []Value) error {
 }
 
 func (c *ParquetWriter) writeRow(values []Value) error {
-	row := reflect.New(c.rowType).Elem()
+	row := make(parquet.Row, 0, len(c.orderedColumns))
 
-	for i, v := range values {
-		if v.Type == TypeAbsent || v.Type == TypeNull {
-			continue
+	for _, col := range c.orderedColumns {
+		v := values[col.valueIndex]
+
+		pv, err := parquetValue(v, col.columnType, col.columnIndex)
+		if err != nil {
+			return fmt.Errorf("column %s: %w", col.columnName, err)
 		}
 
-		if err := c.setters[i](row.Field(i), v); err != nil {
-			return fmt.Errorf("column %s: %w", c.b.filteredKeys[i].replaced, err)
-		}
+		row = append(row, pv)
 	}
 
-	return c.w.Write(row.Addr().Interface())
+	c.rowsBatch = append(c.rowsBatch, row)
+
+	if len(c.rowsBatch) >= c.batchSize {
+		if _, err := c.w.WriteRows(c.rowsBatch); err != nil {
+			return err
+		}
+
+		clear(c.rowsBatch)
+		c.rowsBatch = c.rowsBatch[:0]
+	}
+
+	c.rowsInGroup++
+
+	if c.rowsInGroup >= c.flushSize {
+		if err := c.flushBatch(); err != nil {
+			return err
+		}
+
+		if err := c.w.Flush(); err != nil {
+			return fmt.Errorf("failed to flush parquet row group: %w", err)
+		}
+
+		c.rowsInGroup = 0
+	}
+
+	return nil
+}
+
+func (c *ParquetWriter) flushBatch() error {
+	if len(c.rowsBatch) == 0 {
+		return nil
+	}
+
+	if _, err := c.w.WriteRows(c.rowsBatch); err != nil {
+		return fmt.Errorf("failed to write parquet rows: %w", err)
+	}
+
+	clear(c.rowsBatch)
+	c.rowsBatch = c.rowsBatch[:0]
+
+	return nil
+}
+
+func parquetValue(v Value, inferredType Type, columnIndex int) (parquet.Value, error) {
+	if v.Type == TypeNull || v.Type == TypeAbsent {
+		return parquet.ValueOf(nil).Level(0, 0, columnIndex), nil
+	}
+
+	switch inferredType { //nolint:exhaustive
+	case TypeBool:
+		switch v.Type { //nolint:exhaustive
+		case TypeBool:
+			return parquet.BooleanValue(v.Bool).Level(0, 1, columnIndex), nil
+		case TypeFloat:
+			return parquet.BooleanValue(v.Number != 0).Level(0, 1, columnIndex), nil
+		case TypeString:
+			b, err := strconv.ParseBool(v.String)
+			if err != nil {
+				return parquet.Value{}, fmt.Errorf("parse bool value %q: %w", v.String, err)
+			}
+
+			return parquet.BooleanValue(b).Level(0, 1, columnIndex), nil
+		default:
+			return parquet.Value{}, fmt.Errorf("unexpected value type %s for bool column", v.Type)
+		}
+	case TypeInt:
+		switch v.Type { //nolint:exhaustive
+		case TypeFloat:
+			return parquet.Int64Value(int64(v.Number)).Level(0, 1, columnIndex), nil
+		case TypeBool:
+			if v.Bool {
+				return parquet.Int64Value(1).Level(0, 1, columnIndex), nil
+			}
+
+			return parquet.Int64Value(0).Level(0, 1, columnIndex), nil
+		case TypeString:
+			i, err := strconv.ParseInt(v.String, 10, 64)
+			if err != nil {
+				return parquet.Value{}, fmt.Errorf("parse int value %q: %w", v.String, err)
+			}
+
+			return parquet.Int64Value(i).Level(0, 1, columnIndex), nil
+		default:
+			return parquet.Value{}, fmt.Errorf("unexpected value type %s for int column", v.Type)
+		}
+	case TypeFloat:
+		switch v.Type { //nolint:exhaustive
+		case TypeFloat:
+			return parquet.DoubleValue(v.Number).Level(0, 1, columnIndex), nil
+		case TypeBool:
+			if v.Bool {
+				return parquet.DoubleValue(1).Level(0, 1, columnIndex), nil
+			}
+
+			return parquet.DoubleValue(0).Level(0, 1, columnIndex), nil
+		case TypeString:
+			f, err := strconv.ParseFloat(v.String, 64)
+			if err != nil {
+				return parquet.Value{}, fmt.Errorf("parse float value %q: %w", v.String, err)
+			}
+
+			return parquet.DoubleValue(f).Level(0, 1, columnIndex), nil
+		default:
+			return parquet.Value{}, fmt.Errorf("unexpected value type %s for float column", v.Type)
+		}
+	default:
+		return parquet.ByteArrayValue([]byte(v.Format())).Level(0, 1, columnIndex), nil
+	}
 }
 
 // Close flushes rows and closes file.
@@ -257,6 +361,10 @@ func (c *ParquetWriter) Close() error {
 	}
 
 	if c.w != nil {
+		if err := c.flushBatch(); err != nil {
+			return err
+		}
+
 		if err := c.w.Close(); err != nil {
 			return fmt.Errorf("failed to close parquet writer: %w", err)
 		}
