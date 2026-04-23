@@ -434,6 +434,15 @@ func (p *Processor) setupWriters() error {
 		p.w.Add(pw)
 	}
 
+	if p.f.DuckDB != "" {
+		w, err := NewDuckDBCLIWriter(p.f.DuckDB, p.f.SQLTable)
+		if err != nil {
+			return fmt.Errorf("failed to open DuckDB CLI writer: %w", err)
+		}
+
+		p.w.Add(w)
+	}
+
 	if p.f.SQLite != "" {
 		if p.f.SQLiteCLI {
 			cw, err := NewSQLite3CLIWriter(p.f.SQLite, p.f.SQLTable)

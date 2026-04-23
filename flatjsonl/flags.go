@@ -26,6 +26,8 @@ type Flags struct {
 	Parquet            string
 	ParquetCompression string
 
+	DuckDB string
+
 	SQLite         string
 	SQLiteInstance *sql.DB
 	SQLiteCLI      bool
@@ -76,10 +78,11 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.Parquet, "parquet", "", "Output to Parquet file.")
 	flag.StringVar(&f.ParquetCompression, "parquet-compression", "snappy",
 		"Parquet column compression: snappy, zstd, gzip, none.")
+	flag.StringVar(&f.DuckDB, "duck-db", "", "Output to DuckDB database file via DuckDB CLI.")
 
 	flag.StringVar(&f.SQLite, "sqlite", "", "Output to SQLite file.")
 	flag.BoolVar(&f.SQLiteCLI, "sqlite3-cli", false, "Use SQLite3 CLI to import via CSV.")
-	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 2000, "Maximum columns in single SQL table (SQLite will fail with more than 2000).")
+	flag.IntVar(&f.SQLMaxCols, "sql-max-cols", 2000, "Maximum columns in single SQL table.")
 	flag.StringVar(&f.SQLTable, "sql-table", "flatjsonl", "Table name.")
 	flag.StringVar(&f.PGDump, "pg-dump", "", "Output to PostgreSQL dump file.")
 
@@ -172,7 +175,7 @@ func (f *Flags) Parse() {
 	if f.Output == "" && !f.ShowKeysHier && !f.ShowKeysFlat && !f.ShowKeysInfo && !f.ShowJSONSchema {
 		inputs := f.Inputs()
 
-		if len(inputs) > 0 && f.CSV == "" && f.Parquet == "" && f.SQLite == "" && f.Raw == "" && f.PGDump == "" {
+		if len(inputs) > 0 && f.CSV == "" && f.Parquet == "" && f.DuckDB == "" && f.SQLite == "" && f.Raw == "" && f.PGDump == "" {
 			f.Output = inputs[0].FileName + ".csv"
 		}
 	}
@@ -211,6 +214,18 @@ func (f *Flags) PrepareOutput() {
 			}
 
 			f.Parquet = output
+
+			continue
+		}
+
+		if strings.HasSuffix(outputLow, ".duckdb") {
+			if f.DuckDB != "" {
+				println("DuckDB output is already enabled, skipping", output)
+
+				continue
+			}
+
+			f.DuckDB = output
 
 			continue
 		}
