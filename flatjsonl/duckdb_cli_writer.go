@@ -37,7 +37,7 @@ func NewDuckDBCLIWriter(fn string, tableName string) (*DuckDBCLIWriter, error) {
 		return nil, errors.New("duckdb CLI is not available in PATH")
 	}
 
-	query := "CREATE TABLE " + quoteDuckDBIdent(tableName) +
+	query := "CREATE TABLE " + quoteDuckDBIdent(tableName) + //nolint: unqueryvet
 		" AS SELECT * FROM read_csv('/dev/stdin', header=true, auto_detect=true)"
 
 	dw.cmd = exec.Command(cliPath, fn, "-c", query)
