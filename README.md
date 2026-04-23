@@ -17,7 +17,7 @@ common source of information for ad-hoc analytics and investigations.
 They can be processed with `jq` and grepped for a variety of data checks, however there are much more powerful and 
 convenient tools that operate on rows and columns, rather than hierarchical structures.
 
-This tool converts structured logs into tabular data (`CSV`, `Parquet`, `SQLite`, `PostgreSQL dump`) with flexible mapping options.
+This tool converts structured logs into tabular data (`CSV`, `Parquet`, `SQLite`, `DuckDB`, `PostgreSQL dump`) with flexible mapping options.
 
 ## Performance
 
@@ -84,6 +84,17 @@ $(go env GOPATH)/bin/flatjsonl --help
 
 Or download binary from [releases](https://github.com/vearutop/flatjsonl/releases).
 
+### DuckDB Export
+
+DuckDB export uses the `duckdb` CLI, which avoids CGO dependency in `flatjsonl`.
+The `duckdb` binary must be available in `PATH`.
+
+```bash
+go install github.com/vearutop/flatjsonl@latest
+$(go env GOPATH)/bin/flatjsonl -duck-db events.duckdb events.log
+```
+
+
 ### Linux AMD64
 
 ```
@@ -134,6 +145,8 @@ Usage of flatjsonl:
         (benchmark) Repeat input until total target size reached, bytes.
   -dbg-mem-prof string
         Write mem profile to file.
+  -duck-db string
+        Output to DuckDB database file via DuckDB CLI.
   -extract-strings
         Check string values for JSON content and extract when available.
   -field-limit int
@@ -181,7 +194,7 @@ Usage of flatjsonl:
   -skip-zero-cols
         Skip columns with zero values.
   -sql-max-cols int
-        Maximum columns in single SQL table (SQLite will fail with more than 2000). (default 2000)
+        Maximum columns in single SQL table. (default 2000)
   -sql-table string
         Table name. (default "flatjsonl")
   -sqlite string
@@ -192,6 +205,14 @@ Usage of flatjsonl:
         Show progress in STDERR, 0 disables status, 2 adds more metrics. (default 1)
   -version
         Show version and exit.
+```
+
+### DuckDB Export
+
+DuckDB export requires the `duckdb` CLI to be available in `PATH`.
+
+```bash
+./flatjsonl -duck-db events.duckdb -sql-table events events.log
 ```
 
 ### Configuration file
