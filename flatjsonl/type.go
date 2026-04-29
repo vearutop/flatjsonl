@@ -36,6 +36,11 @@ func (t Type) Update(u Type) Type {
 		return t
 	}
 
+	// JSON replaces any type.
+	if u == TypeJSON || t == TypeJSON {
+		return TypeJSON
+	}
+
 	// String replaces any type.
 	if u == TypeString || t == TypeString {
 		return TypeString
