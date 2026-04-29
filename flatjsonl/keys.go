@@ -129,19 +129,13 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 	return k
 }
 
-func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero bool) (_ []extractor, stop bool) {
+func (p *Processor) scanKey(h *hasher, pk, parent uint64, path []string, t Type, isZero bool) (_ []extractor, stop bool) {
 	var tm *transposeMatch
 	if m, ok := p.matchTransposePath(path); ok {
 		tm = &m
 		normalizedPath := m.normalizedPath()
-		nk := m.normalizedKey()
-		pk = newHasher().hashBytes([]byte(nk))
-
-		if len(normalizedPath) > 1 {
-			parent = newHasher().hashBytes([]byte(KeyFromPath(normalizedPath[:len(normalizedPath)-1])))
-		} else {
-			parent = 0
-		}
+		pk = h.hashPath(normalizedPath)
+		parent = h.hashParentPath(normalizedPath)
 
 		path = normalizedPath
 	}
@@ -330,15 +324,12 @@ func (p *Processor) normalizeTransposeKey(value flKey, tm transposeMatch) (uint6
 	value.transposeKey = tm.rowKey
 	value.transposeTrimmed = tm.trimmed
 	value.path = tm.normalizedPath()
-	value.original = tm.normalizedKey()
+	value.original = KeyFromPath(value.path)
 	value.canonical = p.ck(value.original)
 
 	h := newHasher()
-	pk := h.hashBytes([]byte(value.original))
-	parent := uint64(0)
-	if len(value.path) > 1 {
-		parent = h.hashBytes([]byte(KeyFromPath(value.path[:len(value.path)-1])))
-	}
+	pk := h.hashPath(value.path)
+	parent := h.hashParentPath(value.path)
 
 	return pk, parent, value
 }
@@ -366,6 +357,43 @@ func (h hasher) hashBytes(flatPath []byte) uint64 {
 	}
 
 	return h.digest.Sum64()
+}
+
+func (h hasher) hashPath(path []string) uint64 {
+	if len(path) == 0 {
+		return 0
+	}
+
+	h.digest.Reset()
+
+	_, err := h.digest.WriteString(".")
+	if err != nil {
+		panic("hashing failed: " + err.Error())
+	}
+
+	for i, s := range path {
+		if i > 0 {
+			_, err = h.digest.WriteString(".")
+			if err != nil {
+				panic("hashing failed: " + err.Error())
+			}
+		}
+
+		_, err = h.digest.WriteString(s)
+		if err != nil {
+			panic("hashing failed: " + err.Error())
+		}
+	}
+
+	return h.digest.Sum64()
+}
+
+func (h hasher) hashParentPath(path []string) uint64 {
+	if len(path) <= 1 {
+		return 0
+	}
+
+	return h.hashPath(path[:len(path)-1])
 }
 
 // hashParentBytes takes flat path to element as a parent path and last segment.
@@ -444,7 +472,7 @@ func (p *Processor) scanAvailableKeys() error {
 
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
-					_, stop = p.scanKey(pk, parent, path, TypeObject, false)
+					_, stop = p.scanKey(h, pk, parent, path, TypeObject, false)
 
 					return stop
 				}
@@ -456,14 +484,14 @@ func (p *Processor) scanAvailableKeys() error {
 
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
-					_, stop = p.scanKey(pk, parent, path, TypeArray, false)
+					_, stop = p.scanKey(h, pk, parent, path, TypeArray, false)
 
 					return stop
 				}
 				w.FnString = func(_ int64, flatPath []byte, pl int, path []string, value []byte) []extractor {
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
-					x, _ := p.scanKey(pk, parent, path, TypeString, len(value) == 0)
+					x, _ := p.scanKey(h, pk, parent, path, TypeString, len(value) == 0)
 
 					return x
 				}
@@ -472,18 +500,18 @@ func (p *Processor) scanAvailableKeys() error {
 					isInt := float64(int(value)) == value
 
 					if isInt {
-						p.scanKey(pk, parent, path, TypeInt, value == 0)
+						p.scanKey(h, pk, parent, path, TypeInt, value == 0)
 					} else {
-						p.scanKey(pk, parent, path, TypeFloat, value == 0)
+						p.scanKey(h, pk, parent, path, TypeFloat, value == 0)
 					}
 				}
 				w.FnBool = func(_ int64, flatPath []byte, pl int, path []string, value bool) {
 					pk, parent := h.hashParentBytes(flatPath, pl)
-					p.scanKey(pk, parent, path, TypeBool, !value)
+					p.scanKey(h, pk, parent, path, TypeBool, !value)
 				}
 				w.FnNull = func(_ int64, flatPath []byte, pl int, path []string) {
 					pk, parent := h.hashParentBytes(flatPath, pl)
-					p.scanKey(pk, parent, path, TypeNull, true)
+					p.scanKey(h, pk, parent, path, TypeNull, true)
 				}
 			}
 

@@ -739,7 +739,7 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
-		k, _ := wi.lookupKey(pk, path)
+		k, _ := wi.lookupKey(l.h, pk, path)
 
 		wi.setValue(Value{
 			Type:   TypeString,
@@ -777,13 +777,13 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 	}
 }
 
-func (wi *writeIterator) lookupKey(pk uint64, path []string) (flKey, bool) {
+func (wi *writeIterator) lookupKey(h *hasher, pk uint64, path []string) (flKey, bool) {
 	if k, ok := wi.p.flKeys.Load(pk); ok {
 		return k, true
 	}
 
 	if tm, ok := wi.p.matchTransposePath(path); ok {
-		npk := newHasher().hashBytes([]byte(tm.normalizedKey()))
+		npk := h.hashPath(tm.normalizedPath())
 		return wi.p.flKeys.Load(npk)
 	}
 

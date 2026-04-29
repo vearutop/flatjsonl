@@ -19,10 +19,11 @@ type transposeMatcher struct {
 }
 
 type transposeMatch struct {
-	src     string
-	dst     string
-	rowKey  intOrString
-	trimmed string
+	src        string
+	dst        string
+	srcPath    []string
+	rowKey     intOrString
+	trimmed    string
 	trimmedSeg []string
 }
 
@@ -151,8 +152,9 @@ func (ts transposeSpec) match(path []string) (transposeMatch, bool) {
 	fieldSegs := remainder[1:]
 
 	m := transposeMatch{
-		src: ts.src,
-		dst: ts.dst,
+		src:     ts.src,
+		dst:     ts.dst,
+		srcPath: ts.path,
 	}
 
 	if len(rowSeg) > 2 && rowSeg[0] == '[' && rowSeg[len(rowSeg)-1] == ']' {
@@ -185,23 +187,27 @@ func (tm transposeMatch) wildcardSegment() string {
 }
 
 func (tm transposeMatch) normalizedPath() []string {
-	if len(tm.trimmedSeg) == 0 {
-		path := make([]string, 0, len(strings.Split(strings.TrimPrefix(tm.src, "."), "."))+1)
-		path = append(path, strings.Split(strings.TrimPrefix(tm.src, "."), ".")...)
-		path = append(path, tm.wildcardSegment())
-
-		return path
-	}
-
-	base := strings.Split(strings.TrimPrefix(tm.src, "."), ".")
-	path := make([]string, 0, len(base)+1+len(tm.trimmedSeg))
-	path = append(path, base...)
+	path := make([]string, 0, len(tm.srcPath)+1+len(tm.trimmedSeg))
+	path = append(path, tm.srcPath...)
 	path = append(path, tm.wildcardSegment())
-	path = append(path, tm.trimmedSeg...)
+	if len(tm.trimmedSeg) > 0 {
+		path = append(path, tm.trimmedSeg...)
+	}
 
 	return path
 }
 
 func (tm transposeMatch) normalizedKey() string {
-	return KeyFromPath(tm.normalizedPath())
+	var b strings.Builder
+	b.Grow(len(tm.src) + 8)
+	b.WriteString(tm.src)
+	b.WriteByte('.')
+	b.WriteString(tm.wildcardSegment())
+
+	for _, seg := range tm.trimmedSeg {
+		b.WriteByte('.')
+		b.WriteString(seg)
+	}
+
+	return b.String()
 }
