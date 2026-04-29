@@ -605,6 +605,12 @@ func (p *Processor) prepareScannedKeys() {
 		}
 	}
 
+	if len(p.promotedTranspose) == 0 {
+		p.flKeysList = newFlKeys
+
+		return
+	}
+
 	seen := map[string]bool{}
 	for _, key := range newFlKeys {
 		seen[key] = true
@@ -734,10 +740,13 @@ func (p *Processor) iterateIncludeKeys() {
 	p.flKeysInit()
 
 	canonicalIncludes := make(map[string]bool)
+	checkTransposeNormalization := len(p.transpose.byRoot) > 0
 
 	for _, k := range p.flKeysList {
-		if tm, ok := p.matchTransposePath(strings.Split(strings.TrimPrefix(k, "."), ".")); ok && tm.normalizedKey() != k {
-			continue
+		if checkTransposeNormalization {
+			if tm, ok := p.matchTransposePath(strings.Split(strings.TrimPrefix(k, "."), ".")); ok && tm.normalizedKey() != k {
+				continue
+			}
 		}
 
 		if _, ok := p.includeKeys[k]; ok {
