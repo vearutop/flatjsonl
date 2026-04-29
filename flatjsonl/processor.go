@@ -830,6 +830,20 @@ func (wi *writeIterator) lineFinished(seq int64) error {
 		panic("BUG: could not find pending line to finish")
 	}
 
+	if atomic.LoadInt64(&wi.p.throttle) != 0 {
+		for atomic.LoadInt64(&wi.p.throttle) != 0 && atomic.LoadInt64(&wi.seqExpected) != seq {
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		if atomic.LoadInt64(&wi.seqExpected) == seq {
+			if err := wi.complete(seq, l); err != nil {
+				return err
+			}
+
+			return wi.checkCompleted()
+		}
+	}
+
 	wi.finished.Store(seq, l)
 
 	return wi.checkCompleted()
