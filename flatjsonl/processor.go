@@ -45,12 +45,14 @@ type Processor struct {
 
 	replaceKeys  map[string]string
 	replaceByKey map[string]string
+	transpose    transposeMatcher
 
 	// keys are ordered by replaced column names, indexes match values of includeKeys.
 	keys []flKey
 
 	flKeys                *xsync.Map[uint64, flKey]
 	parentCardinality     map[uint64]int
+	parentChildren        map[uint64]map[string]struct{}
 	parentHighCardinality *xsync.Map[uint64, bool]
 
 	mu            sync.Mutex
@@ -145,6 +147,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		flKeys:                xsync.NewMap[uint64, flKey](),
 		parentHighCardinality: xsync.NewMap[uint64, bool](),
 		parentCardinality:     map[uint64]int{},
+		parentChildren:        map[uint64]map[string]struct{}{},
 	}
 
 	p.rd.Processor = p
@@ -183,6 +186,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
 	p.extractRegex = map[*regexp.Regexp][]extractor{}
+	p.transpose = compileTransposeSpecs(cfg.Transpose)
 
 	for _, reg := range p.cfg.ExcludeKeysRegex {
 		r, err := regex(reg)

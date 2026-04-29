@@ -21,6 +21,7 @@ type flKey struct {
 	original         string
 	canonical        string
 	replaced         string
+	transposeSrc     string
 	transposeDst     string
 	transposeKey     intOrString
 	transposeTrimmed string
@@ -90,12 +91,11 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 	k.canonical = p.ck(key)
 	k.parent = parent
 
-	for tk, dst := range p.cfg.Transpose {
-		if len(k.original) > len(tk) && strings.HasPrefix(k.original, tk) {
-			scanTransposedKey(dst, tk, &k)
-
-			break
-		}
+	if tm, ok := p.matchTransposePath(path); ok {
+		k.transposeSrc = tm.src
+		k.transposeDst = tm.dst
+		k.transposeKey = tm.rowKey
+		k.transposeTrimmed = tm.trimmed
 	}
 
 	for r, x := range p.extractRegex {
@@ -164,12 +164,19 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 }
 
 func (p *Processor) collectKeyCardinality(k flKey) {
-	parentCardinality := p.parentCardinality[k.parent]
-	parentCardinality++
+	parentHash := k.parent
+	childKey := k.original
 
 	limit := p.f.ChildrenLimitObject
 
-	if p.f.ChildrenLimitArray != 0 && len(k.path) > 1 {
+	if k.transposeDst != "" {
+		parentHash = newHasher().hashBytes([]byte(k.transposeSrc))
+		childKey = k.transposeTrimmed
+
+		if k.transposeKey.t == TypeInt && p.f.ChildrenLimitArray != 0 {
+			limit = p.f.ChildrenLimitArray
+		}
+	} else if p.f.ChildrenLimitArray != 0 && len(k.path) > 1 {
 		// Check if last path item has a form of "[123]".
 		l := k.path[len(k.path)-1]
 		if len(l) > 2 && l[0] == '[' && l[len(l)-1] == ']' {
@@ -189,9 +196,34 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 		}
 	}
 
+	children := p.parentChildren[parentHash]
+	if children == nil {
+		children = map[string]struct{}{}
+		p.parentChildren[parentHash] = children
+	}
+
+	if _, exists := children[childKey]; exists {
+		return
+	}
+
+	children[childKey] = struct{}{}
+
+	parentCardinality := len(children)
+
 	if parentCardinality > limit {
-		pp := k.path[0 : len(k.path)-1]
-		parentKey := KeyFromPath(pp)
+		var (
+			pp        []string
+			parentKey string
+		)
+
+		if k.transposeDst != "" {
+			pp = strings.Split(strings.TrimPrefix(k.transposeSrc, "."), ".")
+			parentKey = k.transposeSrc
+		} else {
+			pp = k.path[0 : len(k.path)-1]
+			parentKey = KeyFromPath(pp)
+		}
+
 		allowCardinality := false
 
 		for _, ac := range p.cfg.AllowCardinality {
@@ -201,7 +233,11 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 		}
 
 		if !allowCardinality {
-			grandParentKey := KeyFromPath(pp[:len(pp)-1])
+			grandParentKey := ""
+			if len(pp) > 1 {
+				grandParentKey = KeyFromPath(pp[:len(pp)-1])
+			}
+
 			ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
 
 			p.mu.Unlock()
@@ -209,57 +245,13 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 			p.mu.Lock()
 
 			p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
-			p.parentHighCardinality.Store(k.parent, true)
+			p.parentHighCardinality.Store(parentHash, true)
 		} else {
-			p.parentCardinality[k.parent] = parentCardinality
+			p.parentCardinality[parentHash] = parentCardinality
 		}
 	} else {
-		p.parentCardinality[k.parent] = parentCardinality
+		p.parentCardinality[parentHash] = parentCardinality
 	}
-}
-
-func scanTransposedKey(dst string, tk string, k *flKey) {
-	trimmed := strings.TrimPrefix(k.original, tk)
-	if len(trimmed) == 0 {
-		return
-	}
-
-	if trimmed[0] == '.' {
-		trimmed = trimmed[1:]
-
-		if len(trimmed) == 0 {
-			return
-		}
-	}
-
-	// Array.
-	if trimmed[0] == '[' {
-		pos := strings.Index(trimmed, "]")
-		idx := trimmed[1:pos]
-
-		i, err := strconv.Atoi(idx)
-		if err != nil {
-			panic("BUG: failed to parse idx " + idx + ": " + err.Error())
-		}
-
-		trimmed = trimmed[pos+1:]
-		k.transposeKey = intOrString{t: TypeInt, i: i}
-	} else {
-		if pos := strings.Index(trimmed, "."); pos > 0 {
-			k.transposeKey = intOrString{t: TypeString, s: trimmed[0:pos]}
-			trimmed = trimmed[pos:]
-		} else {
-			k.transposeKey = intOrString{t: TypeString, s: trimmed}
-			trimmed = ""
-		}
-	}
-
-	if trimmed == "" {
-		trimmed = "._value"
-	}
-
-	k.transposeDst = dst
-	k.transposeTrimmed = trimmed
 }
 
 type hasher struct {

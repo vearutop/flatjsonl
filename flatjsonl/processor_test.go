@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -709,6 +710,55 @@ func TestNewProcessor_transpose(t *testing.T) {
 2,bar,3,4
 3,foo,15,12
 3,baz,5,6
+`)
+}
+
+func TestNewProcessor_transpose_highCardinalityRootStaysTransposed(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.ReplaceKeys = true
+	f.Concurrency = 1
+	f.ChildrenLimitObject = 2
+
+	dir := t.TempDir()
+	f.Input = filepath.Join(dir, "input.jsonl")
+	f.CSV = filepath.Join(dir, "out.csv")
+	f.PrepareOutput()
+
+	var b strings.Builder
+	b.WriteString(`{"name":"a","flatMap":{`)
+	for i := 0; i < 5; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+
+		_, _ = fmt.Fprintf(&b, `"k%d":"v%d"`, i, i)
+	}
+	b.WriteString("}}\n")
+
+	require.NoError(t, os.WriteFile(f.Input, []byte(b.String()), 0o600))
+
+	cfg := flatjsonl.Config{
+		Transpose: map[string]string{
+			".flatMap": "flat_map",
+		},
+	}
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Process())
+
+	assertFileEquals(t, f.CSV, `sequence,name
+1,a
+`)
+
+	assertFileEquals(t, filepath.Join(dir, "out_flat_map.csv"), `sequence,index,value
+1,k0,v0
+1,k1,v1
+1,k2,v2
+1,k3,v3
+1,k4,v4
 `)
 }
 
