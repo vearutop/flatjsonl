@@ -14,6 +14,8 @@ type transposeSpec struct {
 
 type transposeMatcher struct {
 	byRoot map[string][]transposeSpec
+	bySrc  map[string]transposeSpec
+	byDst  map[string]string
 }
 
 type transposeMatch struct {
@@ -63,13 +65,70 @@ func compileTransposeSpecs(cfg map[string]string) transposeMatcher {
 
 	m := transposeMatcher{
 		byRoot: make(map[string][]transposeSpec),
+		bySrc:  make(map[string]transposeSpec),
+		byDst:  make(map[string]string),
 	}
 
 	for _, ts := range specs {
 		m.byRoot[ts.path[0]] = append(m.byRoot[ts.path[0]], ts)
+		m.bySrc[ts.src] = ts
+		m.byDst[ts.dst] = ts.src
 	}
 
 	return m
+}
+
+func (m *transposeMatcher) add(src string, dst string) transposeSpec {
+	ts := transposeSpec{
+		src:  src,
+		dst:  dst,
+		path: strings.Split(strings.TrimPrefix(src, "."), "."),
+	}
+
+	root := ts.path[0]
+	specs := append(m.byRoot[root], ts)
+	sort.Slice(specs, func(i, j int) bool {
+		if len(specs[i].path) != len(specs[j].path) {
+			return len(specs[i].path) > len(specs[j].path)
+		}
+
+		return specs[i].src < specs[j].src
+	})
+
+	m.byRoot[root] = specs
+	m.bySrc[src] = ts
+	m.byDst[dst] = src
+
+	return ts
+}
+
+func (p *Processor) autoTransposeDst(parentKey string) string {
+	seg := parentKey
+	if i := strings.LastIndex(seg, "."); i >= 0 {
+		seg = seg[i+1:]
+	}
+
+	seg = strings.Trim(seg, "[]")
+	dst := toSnakeCase(seg)
+	if dst == "" {
+		dst = "transpose"
+	}
+
+	if src, ok := p.transpose.byDst[dst]; !ok || src == parentKey {
+		return dst
+	}
+
+	base := dst + "_transpose"
+	if src, ok := p.transpose.byDst[base]; !ok || src == parentKey {
+		return base
+	}
+
+	for i := 2; ; i++ {
+		candidate := base + "_" + strconv.Itoa(i)
+		if src, ok := p.transpose.byDst[candidate]; !ok || src == parentKey {
+			return candidate
+		}
+	}
 }
 
 func (ts transposeSpec) match(path []string) (transposeMatch, bool) {

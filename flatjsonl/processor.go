@@ -54,6 +54,7 @@ type Processor struct {
 	parentCardinality     map[uint64]int
 	parentChildren        map[uint64]map[string]struct{}
 	parentHighCardinality *xsync.Map[uint64, bool]
+	promotedTranspose     map[uint64]bool
 
 	mu            sync.Mutex
 	flKeysList    []string
@@ -148,6 +149,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		parentHighCardinality: xsync.NewMap[uint64, bool](),
 		parentCardinality:     map[uint64]int{},
 		parentChildren:        map[uint64]map[string]struct{}{},
+		promotedTranspose:     map[uint64]bool{},
 	}
 
 	p.rd.Processor = p

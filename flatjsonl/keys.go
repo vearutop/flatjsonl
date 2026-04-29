@@ -118,6 +118,13 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		p.collectKeyCardinality(k)
 	}
 
+	if tm, ok := p.matchTransposePath(k.path); ok {
+		k.transposeSrc = tm.src
+		k.transposeDst = tm.dst
+		k.transposeKey = tm.rowKey
+		k.transposeTrimmed = tm.trimmed
+	}
+
 	if _, ok := p.canonicalKeys[k.canonical]; !ok {
 		p.flKeysList = append(p.flKeysList, k.original)
 		p.canonicalKeys[k.canonical] = k
@@ -168,6 +175,16 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 	childKey := k.original
 
 	limit := p.f.ChildrenLimitObject
+
+	if p.promotedTranspose[parentHash] {
+		if tm, ok := p.matchTransposePath(k.path); ok {
+			k.transposeSrc = tm.src
+			k.transposeDst = tm.dst
+			k.transposeKey = tm.rowKey
+			k.transposeTrimmed = tm.trimmed
+			childKey = k.transposeTrimmed
+		}
+	}
 
 	if k.transposeDst != "" {
 		parentHash = newHasher().hashBytes([]byte(k.transposeSrc))
@@ -233,6 +250,12 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 		}
 
 		if !allowCardinality {
+			if p.cfg.TransposeOverflow {
+				p.promoteHighCardinalityToTranspose(parentHash, parentKey)
+
+				return
+			}
+
 			grandParentKey := ""
 			if len(pp) > 1 {
 				grandParentKey = KeyFromPath(pp[:len(pp)-1])
@@ -252,6 +275,39 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 	} else {
 		p.parentCardinality[parentHash] = parentCardinality
 	}
+}
+
+func (p *Processor) promoteHighCardinalityToTranspose(parentHash uint64, parentKey string) {
+	if p.promotedTranspose[parentHash] {
+		return
+	}
+
+	dst := p.autoTransposeDst(parentKey)
+	if p.cfg.Transpose == nil {
+		p.cfg.Transpose = map[string]string{}
+	}
+
+	p.cfg.Transpose[parentKey] = dst
+	p.transpose.add(parentKey, dst)
+	p.promotedTranspose[parentHash] = true
+
+	normalizedChildren := map[string]struct{}{}
+
+	p.flKeys.Range(func(key uint64, value flKey) bool {
+		if tm, ok := p.matchTransposePath(value.path); ok {
+			value.transposeSrc = tm.src
+			value.transposeDst = tm.dst
+			value.transposeKey = tm.rowKey
+			value.transposeTrimmed = tm.trimmed
+			p.flKeys.Store(key, value)
+			normalizedChildren[value.transposeTrimmed] = struct{}{}
+		}
+
+		return true
+	})
+
+	p.parentChildren[parentHash] = normalizedChildren
+	p.parentCardinality[parentHash] = len(normalizedChildren)
 }
 
 type hasher struct {
