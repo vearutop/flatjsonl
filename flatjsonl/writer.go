@@ -19,8 +19,8 @@ const NopFile = "<nop>"
 
 // WriteReceiver can receive a row for processing.
 type WriteReceiver interface {
-	SetupKeys(keys []flKey) error
-	ReceiveRow(seq int64, values []Value) error
+	SetupKeys(keys []flKey, transposed map[string]transposeSchema) error
+	ReceiveRow(seq int64, values []Value, transposed map[string][][]Value) error
 	Close() error
 }
 
@@ -63,11 +63,11 @@ func (v Value) Format() string {
 }
 
 // SetupKeys configures writers.
-func (w *Writer) SetupKeys(keys []flKey) error {
+func (w *Writer) SetupKeys(keys []flKey, transposed map[string]transposeSchema) error {
 	var errs []string
 
 	for _, r := range w.receivers {
-		if err := r.SetupKeys(keys); err != nil {
+		if err := r.SetupKeys(keys, transposed); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
@@ -80,11 +80,11 @@ func (w *Writer) SetupKeys(keys []flKey) error {
 }
 
 // ReceiveRow passes row to all receivers.
-func (w *Writer) ReceiveRow(seq int64, values []Value) error {
+func (w *Writer) ReceiveRow(seq int64, values []Value, transposed map[string][][]Value) error {
 	var errs []string
 
 	for _, r := range w.receivers {
-		if err := r.ReceiveRow(seq, values); err != nil {
+		if err := r.ReceiveRow(seq, values, transposed); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
@@ -229,6 +229,10 @@ func cloneTransposeTrimmedKeys(src map[string]idxKey) map[string]idxKey {
 }
 
 func (b *baseWriter) transposedFileName(base string, dst string) string {
+	return transposedFileName(base, dst)
+}
+
+func transposedFileName(base string, dst string) string {
 	dir, fn := path.Split(base)
 	ext := path.Ext(fn)
 	fn = fn[0 : len(fn)-len(ext)]

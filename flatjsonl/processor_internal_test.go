@@ -46,11 +46,11 @@ func (t *testInputReader) Compression() string {
 	return ""
 }
 
-func (b *blockingReceiver) SetupKeys(_ []flKey) error {
+func (b *blockingReceiver) SetupKeys(_ []flKey, _ map[string]transposeSchema) error {
 	return nil
 }
 
-func (b *blockingReceiver) ReceiveRow(seq int64, _ []Value) error {
+func (b *blockingReceiver) ReceiveRow(seq int64, _ []Value, _ map[string][][]Value) error {
 	b.calls <- seq
 
 	if seq == 1 {

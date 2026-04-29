@@ -29,7 +29,6 @@ type PGDumpWriter struct {
 
 	linesTx int
 
-	b          *baseWriter
 	csvCopiers map[string]csvCopier
 
 	sortedTransposed []string
@@ -80,27 +79,19 @@ func NewPGDumpWriter(fn string, tableName string, p *Processor) (*PGDumpWriter, 
 }
 
 // SetupKeys creates tables.
-func (c *PGDumpWriter) SetupKeys(keys []flKey) error {
-	c.b = &baseWriter{}
-	c.b.p = c.p
-	c.b.setupKeys(keys)
-
-	if err := c.createTable(c.tableName, c.b.filteredKeys, false); err != nil {
+func (c *PGDumpWriter) SetupKeys(keys []flKey, transposed map[string]transposeSchema) error {
+	if err := c.createTable(c.tableName, keys, false); err != nil {
 		return err
 	}
 
-	for dst := range c.b.transposed {
+	for dst := range transposed {
 		c.sortedTransposed = append(c.sortedTransposed, dst)
 	}
 
 	sort.Strings(c.sortedTransposed)
 
 	for _, dst := range c.sortedTransposed {
-		tw := c.b.transposed[dst]
-		tw.extName = c.table(dst)
-		tw.p = c.p
-
-		if err := c.createTable(c.table(dst), tw.filteredKeys, true); err != nil {
+		if err := c.createTable(c.table(dst), transposed[dst].filteredKeys, true); err != nil {
 			return err
 		}
 	}
@@ -123,22 +114,17 @@ func (c *PGDumpWriter) table(dst string) string {
 }
 
 // ReceiveRow receives rows.
-func (c *PGDumpWriter) ReceiveRow(seq int64, values []Value) error {
+func (c *PGDumpWriter) ReceiveRow(seq int64, values []Value, transposed map[string][][]Value) error {
 	c.linesTx++
 	c.linesReceived++
 
-	c.b.receiveRow(seq, values)
-
-	if err := c.insert(seq, c.tableName, c.b.row); err != nil {
+	if err := c.insert(seq, c.tableName, renderRawValues(values)); err != nil {
 		return fmt.Errorf("writing SQLite row: %w", err)
 	}
 
 	for _, dst := range c.sortedTransposed {
-		tw := c.b.transposed[dst]
-		transposedRows := tw.receiveRow(seq, values)
-
-		for _, r := range transposedRows {
-			if err := c.insert(seq, tw.extName, r); err != nil {
+		for _, r := range transposed[dst] {
+			if err := c.insert(seq, c.table(dst), renderRawValues(r)); err != nil {
 				return fmt.Errorf("transposed rows for %s: %w", dst, err)
 			}
 		}

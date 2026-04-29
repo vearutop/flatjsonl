@@ -786,6 +786,26 @@ func (p *Processor) prepareKeys() {
 
 	p.keys = keys
 	p.prepareTransposeSchemas()
+	p.prepareMainKeys()
+}
+
+func (p *Processor) prepareMainKeys() {
+	p.mainKeys = p.mainKeys[:0]
+	p.mainConstVals = map[int]string{}
+
+	mainIndex := 0
+	for i, key := range p.keys {
+		if key.transposeDst != "" {
+			continue
+		}
+
+		p.mainKeys = append(p.mainKeys, key)
+		if v, ok := p.constVals[i]; ok {
+			p.mainConstVals[mainIndex] = v
+		}
+
+		mainIndex++
+	}
 }
 
 func (p *Processor) prepareKey(origKey string) (kk string) {
