@@ -6,10 +6,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCSVWriter_renderValueRow(t *testing.T) {
+func TestCSVWriter_receiveRow(t *testing.T) {
 	cw := &CSVWriter{nullValue: "\\N"}
+	cw.b = &baseWriter{
+		keys:       []flKey{{replaced: "a"}, {replaced: "b"}, {replaced: "c"}, {replaced: "d"}, {replaced: "e"}, {replaced: "f"}},
+		keyIndexes: []int{0, 1, 2, 3, 4, 5},
+	}
 
-	row := cw.renderValueRow([]Value{
+	cw.receiveRow(1, []Value{
 		{Type: TypeString, String: ""},
 		{Type: TypeNull},
 		{Type: TypeAbsent},
@@ -18,5 +22,5 @@ func TestCSVWriter_renderValueRow(t *testing.T) {
 		{Type: TypeFloat, RawNumber: "12.34"},
 	})
 
-	assert.Equal(t, []string{"", "\\N", "\\N", "value", "true", "12.34"}, row)
+	assert.Equal(t, []string{"", "\\N", "\\N", "value", "true", "12.34"}, cw.b.row)
 }

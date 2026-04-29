@@ -98,10 +98,10 @@ func (c *CSVWriter) writeHead() error {
 // ReceiveRow receives rows.
 func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 	if c.b.isTransposed {
-		transposedRows := c.b.receiveTransposedRowValues(seq, values)
+		transposedRows := c.receiveRow(seq, values)
 
 		for _, row := range transposedRows {
-			if err := c.w.Write(c.renderValueRow(row)); err != nil {
+			if err := c.w.Write(row); err != nil {
 				return fmt.Errorf("writing transposed CSV row: %w", err)
 			}
 		}
@@ -109,10 +109,10 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 		return nil
 	}
 
-	row := c.b.receiveRowValues(values)
+	c.receiveRow(seq, values)
 
-	if len(row) > 0 {
-		if err := c.w.Write(c.renderValueRow(row)); err != nil {
+	if len(c.b.row) > 0 {
+		if err := c.w.Write(c.b.row); err != nil {
 			return fmt.Errorf("writing CSV row: %w", err)
 		}
 	}
@@ -126,20 +126,50 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 	return nil
 }
 
-func (c *CSVWriter) renderValueRow(row []Value) []string {
-	res := make([]string, len(row))
+func (c *CSVWriter) receiveRow(seq int64, values []Value) (transposedRows [][]string) {
+	if len(c.b.keys) != len(values) {
+		panic(fmt.Sprintf("BUG: keys and values mismatch:\nKeys:\n%v\nValues:\n%v\n", c.b.keys, values))
+	}
 
-	for i, v := range row {
-		if v.Type == TypeNull || v.Type == TypeAbsent {
-			res[i] = c.nullValue
+	c.b.row = c.b.row[:0]
+
+	transposedRowsIdx := map[string][]string{}
+
+	for _, i := range c.b.keyIndexes {
+		v := values[i]
+
+		f := c.nullValue
+		if v.Type != TypeNull && v.Type != TypeAbsent {
+			f = v.Format()
+		}
+
+		if c.b.isTransposed {
+			if v.Type == TypeAbsent {
+				continue
+			}
+
+			k := c.b.keys[i]
+
+			transposeKey := k.transposeKey.String()
+			row := transposedRowsIdx[transposeKey]
+
+			if row == nil {
+				row = make([]string, len(c.b.trimmedKeys))
+				row[0] = Format(float64(seq)) // Add sequence.
+				row[1] = transposeKey         // Add array idx/object property.
+				transposedRowsIdx[transposeKey] = row
+				transposedRows = append(transposedRows, row)
+			}
+
+			row[c.b.transposedMapping[i]] = f
 
 			continue
 		}
 
-		res[i] = v.Format()
+		c.b.row = append(c.b.row, f)
 	}
 
-	return res
+	return transposedRows
 }
 
 // Close flushes rows and closes file.
