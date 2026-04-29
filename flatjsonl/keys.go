@@ -73,7 +73,7 @@ func (is intOrString) String() string {
 	return strconv.Itoa(is.i)
 }
 
-func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero bool) flKey {
+func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero bool, tm *transposeMatch) flKey {
 	k, ok := p.flKeys.Load(pk)
 	if ok {
 		return k
@@ -91,7 +91,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 	k.canonical = p.ck(key)
 	k.parent = parent
 
-	if tm, ok := p.matchTransposePath(path); ok {
+	if tm != nil {
 		k.transposeSrc = tm.src
 		k.transposeDst = tm.dst
 		k.transposeKey = tm.rowKey
@@ -118,13 +118,6 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		p.collectKeyCardinality(k)
 	}
 
-	if tm, ok := p.matchTransposePath(k.path); ok {
-		k.transposeSrc = tm.src
-		k.transposeDst = tm.dst
-		k.transposeKey = tm.rowKey
-		k.transposeTrimmed = tm.trimmed
-	}
-
 	if _, ok := p.canonicalKeys[k.canonical]; !ok {
 		p.flKeysList = append(p.flKeysList, k.original)
 		p.canonicalKeys[k.canonical] = k
@@ -137,6 +130,22 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 }
 
 func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero bool) (_ []extractor, stop bool) {
+	var tm *transposeMatch
+	if m, ok := p.matchTransposePath(path); ok {
+		tm = &m
+		normalizedPath := m.normalizedPath()
+		nk := m.normalizedKey()
+		pk = newHasher().hashBytes([]byte(nk))
+
+		if len(normalizedPath) > 1 {
+			parent = newHasher().hashBytes([]byte(KeyFromPath(normalizedPath[:len(normalizedPath)-1])))
+		} else {
+			parent = 0
+		}
+
+		path = normalizedPath
+	}
+
 	if _, phc := p.parentHighCardinality.Load(parent); phc {
 		return nil, true
 	}
@@ -144,7 +153,7 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
-		k = p.initKey(pk, parent, path, t, isZero)
+		k = p.initKey(pk, parent, path, t, isZero, tm)
 	}
 
 	updType := false
@@ -264,7 +273,7 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 			ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
 
 			p.mu.Unlock()
-			p.initKey(ppk, gpk, pp, TypeJSON, false)
+			p.initKey(ppk, gpk, pp, TypeJSON, false, nil)
 			p.mu.Lock()
 
 			p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
@@ -295,12 +304,17 @@ func (p *Processor) promoteHighCardinalityToTranspose(parentHash uint64, parentK
 
 	p.flKeys.Range(func(key uint64, value flKey) bool {
 		if tm, ok := p.matchTransposePath(value.path); ok {
-			value.transposeSrc = tm.src
-			value.transposeDst = tm.dst
-			value.transposeKey = tm.rowKey
-			value.transposeTrimmed = tm.trimmed
-			p.flKeys.Store(key, value)
-			normalizedChildren[value.transposeTrimmed] = struct{}{}
+			nk, np, nv := p.normalizeTransposeKey(value, tm)
+			p.flKeys.Delete(key)
+			if existing, ok := p.flKeys.Load(nk); ok {
+				existing.UpdateType(nv.t)
+				existing.isZero = existing.isZero && nv.isZero
+				p.flKeys.Store(nk, existing)
+			} else {
+				nv.parent = np
+				p.flKeys.Store(nk, nv)
+			}
+			normalizedChildren[tm.trimmed] = struct{}{}
 		}
 
 		return true
@@ -308,6 +322,25 @@ func (p *Processor) promoteHighCardinalityToTranspose(parentHash uint64, parentK
 
 	p.parentChildren[parentHash] = normalizedChildren
 	p.parentCardinality[parentHash] = len(normalizedChildren)
+}
+
+func (p *Processor) normalizeTransposeKey(value flKey, tm transposeMatch) (uint64, uint64, flKey) {
+	value.transposeSrc = tm.src
+	value.transposeDst = tm.dst
+	value.transposeKey = tm.rowKey
+	value.transposeTrimmed = tm.trimmed
+	value.path = tm.normalizedPath()
+	value.original = tm.normalizedKey()
+	value.canonical = p.ck(value.original)
+
+	h := newHasher()
+	pk := h.hashBytes([]byte(value.original))
+	parent := uint64(0)
+	if len(value.path) > 1 {
+		parent = h.hashBytes([]byte(KeyFromPath(value.path[:len(value.path)-1])))
+	}
+
+	return pk, parent, value
 }
 
 type hasher struct {
@@ -544,7 +577,41 @@ func (p *Processor) prepareScannedKeys() {
 		}
 	}
 
+	seen := map[string]bool{}
+	for _, key := range newFlKeys {
+		seen[key] = true
+	}
+
+	p.flKeys.Range(func(_ uint64, k flKey) bool {
+		if k.t == TypeObject || k.t == TypeArray {
+			return true
+		}
+
+		if !seen[k.original] {
+			newFlKeys = append(newFlKeys, k.original)
+			seen[k.original] = true
+		}
+
+		return true
+	})
+
 	p.flKeysList = newFlKeys
+	p.canonicalKeys = map[string]flKey{}
+	p.flKeys.Range(func(_ uint64, value flKey) bool {
+		if value.t == TypeObject || value.t == TypeArray {
+			return true
+		}
+
+		if existing, ok := p.canonicalKeys[value.canonical]; ok {
+			existing.isZero = existing.isZero && value.isZero
+			existing.t = existing.t.Update(value.t)
+			p.canonicalKeys[value.canonical] = existing
+		} else {
+			p.canonicalKeys[value.canonical] = value
+		}
+
+		return true
+	})
 }
 
 func (p *Processor) flKeysInit() {
@@ -641,6 +708,10 @@ func (p *Processor) iterateIncludeKeys() {
 	canonicalIncludes := make(map[string]bool)
 
 	for _, k := range p.flKeysList {
+		if tm, ok := p.matchTransposePath(strings.Split(strings.TrimPrefix(k, "."), ".")); ok && tm.normalizedKey() != k {
+			continue
+		}
+
 		if _, ok := p.includeKeys[k]; ok {
 			continue
 		}

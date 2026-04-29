@@ -23,6 +23,7 @@ type transposeMatch struct {
 	dst     string
 	rowKey  intOrString
 	trimmed string
+	trimmedSeg []string
 }
 
 func (p *Processor) matchTransposePath(path []string) (transposeMatch, bool) {
@@ -144,6 +145,9 @@ func (ts transposeSpec) match(path []string) (transposeMatch, bool) {
 
 	remainder := path[len(ts.path):]
 	rowSeg := remainder[0]
+	if rowSeg == "*" || rowSeg == "[*]" {
+		return transposeMatch{}, false
+	}
 	fieldSegs := remainder[1:]
 
 	m := transposeMatch{
@@ -167,6 +171,37 @@ func (ts transposeSpec) match(path []string) (transposeMatch, bool) {
 	} else {
 		m.trimmed = "." + strings.Join(fieldSegs, ".")
 	}
+	m.trimmedSeg = fieldSegs
 
 	return m, true
+}
+
+func (tm transposeMatch) wildcardSegment() string {
+	if tm.rowKey.t == TypeInt {
+		return "[*]"
+	}
+
+	return "*"
+}
+
+func (tm transposeMatch) normalizedPath() []string {
+	if len(tm.trimmedSeg) == 0 {
+		path := make([]string, 0, len(strings.Split(strings.TrimPrefix(tm.src, "."), "."))+1)
+		path = append(path, strings.Split(strings.TrimPrefix(tm.src, "."), ".")...)
+		path = append(path, tm.wildcardSegment())
+
+		return path
+	}
+
+	base := strings.Split(strings.TrimPrefix(tm.src, "."), ".")
+	path := make([]string, 0, len(base)+1+len(tm.trimmedSeg))
+	path = append(path, base...)
+	path = append(path, tm.wildcardSegment())
+	path = append(path, tm.trimmedSeg...)
+
+	return path
+}
+
+func (tm transposeMatch) normalizedKey() string {
+	return KeyFromPath(tm.normalizedPath())
 }

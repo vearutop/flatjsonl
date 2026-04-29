@@ -169,7 +169,7 @@ func (c *PGDumpWriter) flush() error {
 		status = fmt.Sprintf("%d lines completed", c.linesReceived)
 	}
 
-	if _, err := c.f.Write([]byte("SELECT '" + status + "' AS status;\n\n")); err != nil {
+	if _, err := c.f.Write([]byte("SELECT '" + status + "' AS status;\n")); err != nil {
 		return err
 	}
 

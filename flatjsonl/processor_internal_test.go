@@ -80,7 +80,7 @@ func TestWriteIterator_lineFinishedBackpressuresWhenThrottled(t *testing.T) {
 
 	atomic.StoreInt64(&p.throttle, 1)
 
-	wi := newWriteIterator(p, nil, nil, nil)
+	wi := newWriteIterator(p, nil, nil)
 
 	require.NoError(t, wi.lineStarted(1))
 
@@ -154,7 +154,7 @@ func TestReaderRead_stallsWhenAllWorkersWaitBehindBlockedExpectedWrite(t *testin
 		Buf:         make([]byte, 0, 1024),
 	}
 
-	wi := newWriteIterator(p, nil, nil, nil)
+	wi := newWriteIterator(p, nil, nil)
 
 	sess, err := rd.session(Input{
 		Reader: newTestInputReader("{}\n{}\n{}\n{}\n{}\n{}\n"),

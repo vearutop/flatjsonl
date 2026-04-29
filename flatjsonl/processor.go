@@ -523,7 +523,6 @@ func (p *Processor) iterateForWriters() error {
 	}
 
 	pkIndex := make(map[uint64]int)
-	pkTransposed := make(map[uint64]transposedMeta)
 	pkTimeFmt := make(map[uint64]string)
 
 	mainIndexByKey := make(map[int]int)
@@ -539,19 +538,10 @@ func (p *Processor) iterateForWriters() error {
 
 	p.flKeys.Range(func(key uint64, value flKey) bool {
 		if i, ok := includeKeys[value.canonical]; ok {
-			if value.transposeDst != "" {
-				s := p.transposeSchemas[value.transposeDst]
-				ik := s.trimmedKeys[value.transposeTrimmed]
-				pkTransposed[key] = transposedMeta{
-					dst:      value.transposeDst,
-					rowKey:   value.transposeKey.String(),
-					indexVal: value.transposeKey.Value(),
-					colIdx:   ik.idx,
-					rowLen:   len(s.filteredKeys),
-					order:    i,
+			if value.transposeDst == "" {
+				if j, ok := mainIndexByKey[i]; ok {
+					pkIndex[key] = j
 				}
-			} else if j, ok := mainIndexByKey[i]; ok {
-				pkIndex[key] = j
 			}
 		}
 
@@ -562,7 +552,7 @@ func (p *Processor) iterateForWriters() error {
 		return true
 	})
 
-	wi := newWriteIterator(p, pkIndex, pkTransposed, pkTimeFmt)
+	wi := newWriteIterator(p, pkIndex, pkTimeFmt)
 
 	if err := p.w.SetupKeys(p.mainKeys, p.transposeSchemas); err != nil {
 		return err
@@ -619,9 +609,10 @@ type transposedMeta struct {
 type transposedRowsBuf struct {
 	rows  map[string][]Value
 	order map[string]int
+	next  int
 }
 
-func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkTransposed map[uint64]transposedMeta, pkTimeFmt map[uint64]string) *writeIterator {
+func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := &writeIterator{}
 	wi.pending = xsync.NewMap[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
@@ -644,7 +635,6 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkTransposed map[uin
 	}
 	wi.seqExpected = 1
 	wi.pkIndex = pkIndex
-	wi.pkTransposed = pkTransposed
 	wi.pkTimeFmt = pkTimeFmt
 	wi.p = p
 	wi.fieldLimit = p.f.FieldLimit
@@ -712,13 +702,12 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkTransposed map[uin
 
 type writeIterator struct {
 	// Read-only under concurrency.
-	pkIndex      map[uint64]int
-	pkTransposed map[uint64]transposedMeta
-	pkTimeFmt    map[uint64]string
-	p            *Processor
-	fieldLimit   int
-	outTimeFmt   string
-	outputTZ     *time.Location
+	pkIndex    map[uint64]int
+	pkTimeFmt  map[uint64]string
+	p          *Processor
+	fieldLimit int
+	outTimeFmt string
+	outputTZ   *time.Location
 
 	// Read-write under concurrency.
 	lineBufPool sync.Pool
@@ -739,26 +728,27 @@ type writeIterator struct {
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.configure(wi.p)
+	w.WantPath = len(wi.p.transpose.byRoot) > 0
 
 	w.FnObjectStop = nil
 	w.FnArrayStop = nil
-	w.FnString = func(seq int64, flatPath []byte, pl int, _ []string, value []byte) []extractor {
+	w.FnString = func(seq int64, flatPath []byte, pl int, path []string, value []byte) []extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
 
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
-		k, _ := wi.p.flKeys.Load(pk)
+		k, _ := wi.lookupKey(pk, path)
 
 		wi.setValue(Value{
 			Type:   TypeString,
 			String: string(value),
-		}, pk, l)
+		}, pk, path, l)
 
 		return k.extractors
 	}
-	w.FnNumber = func(seq int64, flatPath []byte, pl int, _ []string, value float64, raw []byte) {
+	w.FnNumber = func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
@@ -766,28 +756,41 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			Type:      TypeFloat,
 			Number:    value,
 			RawNumber: string(raw),
-		}, pk, l)
+		}, pk, path, l)
 	}
-	w.FnBool = func(seq int64, flatPath []byte, pl int, _ []string, value bool) {
+	w.FnBool = func(seq int64, flatPath []byte, pl int, path []string, value bool) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
 		wi.setValue(Value{
 			Type: TypeBool,
 			Bool: value,
-		}, pk, l)
+		}, pk, path, l)
 	}
-	w.FnNull = func(seq int64, flatPath []byte, pl int, _ []string) {
+	w.FnNull = func(seq int64, flatPath []byte, pl int, path []string) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
 		wi.setValue(Value{
 			Type: TypeNull,
-		}, pk, l)
+		}, pk, path, l)
 	}
 }
 
-func (wi *writeIterator) setValue(v Value, pk uint64, l *lineBuf) {
+func (wi *writeIterator) lookupKey(pk uint64, path []string) (flKey, bool) {
+	if k, ok := wi.p.flKeys.Load(pk); ok {
+		return k, true
+	}
+
+	if tm, ok := wi.p.matchTransposePath(path); ok {
+		npk := newHasher().hashBytes([]byte(tm.normalizedKey()))
+		return wi.p.flKeys.Load(npk)
+	}
+
+	return flKey{}, false
+}
+
+func (wi *writeIterator) setValue(v Value, pk uint64, path []string, l *lineBuf) {
 	if wi.singleKeyHash != 0 && pk != wi.singleKeyHash {
 		return
 	}
@@ -815,10 +818,22 @@ func (wi *writeIterator) setValue(v Value, pk uint64, l *lineBuf) {
 		}
 	}
 
-	if tm, ok := wi.pkTransposed[pk]; ok {
-		wi.setTransposedValue(v, tm, l)
+	if tm, ok := wi.p.matchTransposePath(path); ok {
+		if schema, ok := wi.p.transposeSchemas[tm.dst]; ok {
+			if ik, ok := schema.trimmedKeys[tm.trimmed]; ok {
+				wi.setTransposedValue(v, transposedMeta{
+					dst:      tm.dst,
+					rowKey:   tm.rowKey.String(),
+					indexVal: tm.rowKey.Value(),
+					colIdx:   ik.idx,
+					rowLen:   len(schema.filteredKeys),
+					order:    ik.idx,
+				}, l)
 
-		return
+				return
+			}
+		}
+
 	}
 
 	i, ok := wi.pkIndex[pk]
@@ -858,9 +873,8 @@ func (wi *writeIterator) setTransposedValue(v Value, tm transposedMeta, l *lineB
 		row[0] = Value{Type: TypeFloat, Number: float64(l.seq)}
 		row[1] = tm.indexVal
 		buf.rows[tm.rowKey] = row
-		buf.order[tm.rowKey] = tm.order
-	} else if prev, ok := buf.order[tm.rowKey]; !ok || tm.order < prev {
-		buf.order[tm.rowKey] = tm.order
+		buf.order[tm.rowKey] = buf.next
+		buf.next++
 	}
 
 	ev := row[tm.colIdx]
@@ -954,6 +968,7 @@ func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
 	}
 
 	for _, buf := range l.transposed {
+		buf.next = 0
 		for k, row := range buf.rows {
 			for i := range row {
 				row[i] = Value{}

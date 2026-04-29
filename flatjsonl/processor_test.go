@@ -702,14 +702,14 @@ func TestNewProcessor_transpose(t *testing.T) {
 		`sequence,index,a,b
 1,foo,1,2
 2,bar,3,4
-3,foo,15,12
 3,baz,5,6
+3,foo,15,12
 `)
 	assertFileEquals(t, "testdata/transpose_tokens.raw",
 		`1,foo,1,2
 2,bar,3,4
-3,foo,15,12
 3,baz,5,6
+3,foo,15,12
 `)
 }
 
