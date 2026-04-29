@@ -43,9 +43,10 @@ type Processor struct {
 	extractRegex map[*regexp.Regexp][]extractor
 	constVals    map[int]string
 
-	replaceKeys  map[string]string
-	replaceByKey map[string]string
-	transpose    transposeMatcher
+	replaceKeys      map[string]string
+	replaceByKey     map[string]string
+	transpose        transposeMatcher
+	transposeSchemas map[string]transposeSchema
 
 	// keys are ordered by replaced column names, indexes match values of includeKeys.
 	keys []flKey

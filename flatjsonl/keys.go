@@ -785,6 +785,7 @@ func (p *Processor) prepareKeys() {
 	}
 
 	p.keys = keys
+	p.prepareTransposeSchemas()
 }
 
 func (p *Processor) prepareKey(origKey string) (kk string) {
