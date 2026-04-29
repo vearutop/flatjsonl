@@ -21,7 +21,8 @@ type Flags struct {
 	Input            string
 	Output           string
 
-	CSV string
+	CSV     string
+	CSVNull string
 
 	Parquet            string
 	ParquetCompression string
@@ -75,6 +76,7 @@ func (f *Flags) Register() {
 	flag.StringVar(&f.Input, "input", "", "Input from JSONL files, comma-separated.")
 	flag.StringVar(&f.Output, "output", "", "Output to a file (default <input>.csv).")
 	flag.StringVar(&f.CSV, "csv", "", "Output to CSV file (gzip encoded if ends with .gz).")
+	flag.StringVar(&f.CSVNull, "csv-null", "", "Render NULL/ABSENT values as this string in CSV output and DuckDB CLI CSV import; empty keeps blank fields.")
 	flag.StringVar(&f.Parquet, "parquet", "", "Output to Parquet file.")
 	flag.StringVar(&f.ParquetCompression, "parquet-compression", "snappy",
 		"Parquet column compression: snappy, zstd, gzip, none.")

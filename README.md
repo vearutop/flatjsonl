@@ -139,6 +139,8 @@ Usage of flatjsonl:
         Configuration JSON value, path to JSON5 or YAML file.
   -csv string
         Output to CSV file (gzip encoded if ends with .gz).
+  -csv-null string
+        Render NULL/ABSENT values as this string in CSV output and DuckDB CLI CSV import; empty keeps blank fields.
   -dbg-cpu-prof string
         Write CPU profile to file.
   -dbg-loop-input-size int
@@ -210,6 +212,7 @@ Usage of flatjsonl:
 ### DuckDB Export
 
 DuckDB export requires the `duckdb` CLI to be available in `PATH`.
+If `-csv-null` is set, the same token is used for the CSV stream and configured as DuckDB `read_csv(..., nullstr=...)`.
 
 ```bash
 ./flatjsonl -duck-db events.duckdb -sql-table events events.log
