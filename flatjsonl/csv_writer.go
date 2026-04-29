@@ -132,6 +132,7 @@ func (c *CSVWriter) renderValueRow(row []Value) []string {
 	for i, v := range row {
 		if v.Type == TypeNull || v.Type == TypeAbsent {
 			res[i] = c.nullValue
+
 			continue
 		}
 

@@ -61,6 +61,7 @@ linters:
     generated: lax
     rules:
       - linters:
+          - unqueryvet
           - gosec
           - dupl
           - funlen
