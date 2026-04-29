@@ -21,6 +21,7 @@ type flKey struct {
 	original         string
 	canonical        string
 	replaced         string
+	transposeSrc     string
 	transposeDst     string
 	transposeKey     intOrString
 	transposeTrimmed string
@@ -72,7 +73,7 @@ func (is intOrString) String() string {
 	return strconv.Itoa(is.i)
 }
 
-func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero bool) flKey {
+func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero bool, tm *transposeMatch) flKey {
 	k, ok := p.flKeys.Load(pk)
 	if ok {
 		return k
@@ -90,12 +91,11 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 	k.canonical = p.ck(key)
 	k.parent = parent
 
-	for tk, dst := range p.cfg.Transpose {
-		if len(k.original) > len(tk) && strings.HasPrefix(k.original, tk) {
-			scanTransposedKey(dst, tk, &k)
-
-			break
-		}
+	if tm != nil {
+		k.transposeSrc = tm.src
+		k.transposeDst = tm.dst
+		k.transposeKey = tm.rowKey
+		k.transposeTrimmed = tm.trimmedKey()
 	}
 
 	for r, x := range p.extractRegex {
@@ -114,7 +114,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		return existing
 	}
 
-	if p.f.ChildrenLimitObject > 0 && len(k.path) > 1 {
+	if (p.f.ChildrenLimitObject > 0 || p.f.ChildrenLimitArray > 0) && len(k.path) > 1 {
 		p.collectKeyCardinality(k)
 	}
 
@@ -129,7 +129,17 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 	return k
 }
 
-func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero bool) (_ []extractor, stop bool) {
+func (p *Processor) scanKey(h *hasher, pk, parent uint64, path []string, t Type, isZero bool) (_ []extractor, stop bool) {
+	var tm *transposeMatch
+	if m, ok := p.matchTransposePath(path); ok {
+		tm = &m
+		normalizedPath := m.normalizedPath()
+		pk = h.hashPath(normalizedPath)
+		parent = h.hashParentPath(normalizedPath)
+
+		path = normalizedPath
+	}
+
 	if _, phc := p.parentHighCardinality.Load(parent); phc {
 		return nil, true
 	}
@@ -137,7 +147,7 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 	k, ok := p.flKeys.Load(pk)
 
 	if !ok {
-		k = p.initKey(pk, parent, path, t, isZero)
+		k = p.initKey(pk, parent, path, t, isZero, tm)
 	}
 
 	updType := false
@@ -164,12 +174,29 @@ func (p *Processor) scanKey(pk, parent uint64, path []string, t Type, isZero boo
 }
 
 func (p *Processor) collectKeyCardinality(k flKey) {
-	parentCardinality := p.parentCardinality[k.parent]
-	parentCardinality++
+	parentHash := k.parent
+	childKey := k.original
 
 	limit := p.f.ChildrenLimitObject
 
-	if p.f.ChildrenLimitArray != 0 && len(k.path) > 1 {
+	if p.promotedTranspose[parentHash] {
+		if tm, ok := p.matchTransposePath(k.path); ok {
+			k.transposeSrc = tm.src
+			k.transposeDst = tm.dst
+			k.transposeKey = tm.rowKey
+			k.transposeTrimmed = tm.trimmedKey()
+			childKey = k.transposeTrimmed
+		}
+	}
+
+	if k.transposeDst != "" {
+		parentHash = newHasher().hashBytes([]byte(k.transposeSrc))
+		childKey = k.transposeTrimmed
+
+		if k.transposeKey.t == TypeInt && p.f.ChildrenLimitArray != 0 {
+			limit = p.f.ChildrenLimitArray
+		}
+	} else if p.f.ChildrenLimitArray != 0 && len(k.path) > 1 {
 		// Check if last path item has a form of "[123]".
 		l := k.path[len(k.path)-1]
 		if len(l) > 2 && l[0] == '[' && l[len(l)-1] == ']' {
@@ -189,9 +216,34 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 		}
 	}
 
+	children := p.parentChildren[parentHash]
+	if children == nil {
+		children = map[string]struct{}{}
+		p.parentChildren[parentHash] = children
+	}
+
+	if _, exists := children[childKey]; exists {
+		return
+	}
+
+	children[childKey] = struct{}{}
+
+	parentCardinality := len(children)
+
 	if parentCardinality > limit {
-		pp := k.path[0 : len(k.path)-1]
-		parentKey := KeyFromPath(pp)
+		var (
+			pp        []string
+			parentKey string
+		)
+
+		if k.transposeDst != "" {
+			pp = strings.Split(strings.TrimPrefix(k.transposeSrc, "."), ".")
+			parentKey = k.transposeSrc
+		} else {
+			pp = k.path[0 : len(k.path)-1]
+			parentKey = KeyFromPath(pp)
+		}
+
 		allowCardinality := false
 
 		for _, ac := range p.cfg.AllowCardinality {
@@ -201,65 +253,85 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 		}
 
 		if !allowCardinality {
-			grandParentKey := KeyFromPath(pp[:len(pp)-1])
+			if p.cfg.TransposeOverflow {
+				p.promoteHighCardinalityToTranspose(parentHash, parentKey)
+
+				return
+			}
+
+			grandParentKey := ""
+			if len(pp) > 1 {
+				grandParentKey = KeyFromPath(pp[:len(pp)-1])
+			}
+
 			ppk, gpk := newHasher().hashParentBytes([]byte(parentKey), len(grandParentKey))
 
 			p.mu.Unlock()
-			p.initKey(ppk, gpk, pp, TypeJSON, false)
+			p.initKey(ppk, gpk, pp, TypeJSON, false, nil)
 			p.mu.Lock()
 
 			p.cfg.KeepJSON = append(p.cfg.KeepJSON, parentKey)
-			p.parentHighCardinality.Store(k.parent, true)
+			p.parentHighCardinality.Store(parentHash, true)
 		} else {
-			p.parentCardinality[k.parent] = parentCardinality
+			p.parentCardinality[parentHash] = parentCardinality
 		}
 	} else {
-		p.parentCardinality[k.parent] = parentCardinality
+		p.parentCardinality[parentHash] = parentCardinality
 	}
 }
 
-func scanTransposedKey(dst string, tk string, k *flKey) {
-	trimmed := strings.TrimPrefix(k.original, tk)
-	if len(trimmed) == 0 {
+func (p *Processor) promoteHighCardinalityToTranspose(parentHash uint64, parentKey string) {
+	if p.promotedTranspose[parentHash] {
 		return
 	}
 
-	if trimmed[0] == '.' {
-		trimmed = trimmed[1:]
-
-		if len(trimmed) == 0 {
-			return
-		}
+	dst := p.autoTransposeDst(parentKey)
+	if p.cfg.Transpose == nil {
+		p.cfg.Transpose = map[string]string{}
 	}
 
-	// Array.
-	if trimmed[0] == '[' {
-		pos := strings.Index(trimmed, "]")
-		idx := trimmed[1:pos]
+	p.cfg.Transpose[parentKey] = dst
+	p.transpose.add(parentKey, dst)
+	p.promotedTranspose[parentHash] = true
 
-		i, err := strconv.Atoi(idx)
-		if err != nil {
-			panic("BUG: failed to parse idx " + idx + ": " + err.Error())
+	normalizedChildren := map[string]struct{}{}
+
+	p.flKeys.Range(func(key uint64, value flKey) bool {
+		if tm, ok := p.matchTransposePath(value.path); ok {
+			nk, np, nv := p.normalizeTransposeKey(value, tm)
+			p.flKeys.Delete(key)
+			if existing, ok := p.flKeys.Load(nk); ok {
+				existing.UpdateType(nv.t)
+				existing.isZero = existing.isZero && nv.isZero
+				p.flKeys.Store(nk, existing)
+			} else {
+				nv.parent = np
+				p.flKeys.Store(nk, nv)
+			}
+			normalizedChildren[tm.trimmedKey()] = struct{}{}
 		}
 
-		trimmed = trimmed[pos+1:]
-		k.transposeKey = intOrString{t: TypeInt, i: i}
-	} else {
-		if pos := strings.Index(trimmed, "."); pos > 0 {
-			k.transposeKey = intOrString{t: TypeString, s: trimmed[0:pos]}
-			trimmed = trimmed[pos:]
-		} else {
-			k.transposeKey = intOrString{t: TypeString, s: trimmed}
-			trimmed = ""
-		}
-	}
+		return true
+	})
 
-	if trimmed == "" {
-		trimmed = "._value"
-	}
+	p.parentChildren[parentHash] = normalizedChildren
+	p.parentCardinality[parentHash] = len(normalizedChildren)
+}
 
-	k.transposeDst = dst
-	k.transposeTrimmed = trimmed
+func (p *Processor) normalizeTransposeKey(value flKey, tm transposeMatch) (uint64, uint64, flKey) {
+	value.transposeSrc = tm.src
+	value.transposeDst = tm.dst
+	value.transposeKey = tm.rowKey
+	value.transposeTrimmed = tm.trimmedKey()
+	value.path = tm.normalizedPath()
+	value.original = KeyFromPath(value.path)
+	value.canonical = p.ck(value.original)
+
+	h := newHasher()
+	pk := h.hashPath(value.path)
+	parent := h.hashParentPath(value.path)
+
+	return pk, parent, value
 }
 
 type hasher struct {
@@ -285,6 +357,43 @@ func (h hasher) hashBytes(flatPath []byte) uint64 {
 	}
 
 	return h.digest.Sum64()
+}
+
+func (h hasher) hashPath(path []string) uint64 {
+	if len(path) == 0 {
+		return 0
+	}
+
+	h.digest.Reset()
+
+	_, err := h.digest.WriteString(".")
+	if err != nil {
+		panic("hashing failed: " + err.Error())
+	}
+
+	for i, s := range path {
+		if i > 0 {
+			_, err = h.digest.WriteString(".")
+			if err != nil {
+				panic("hashing failed: " + err.Error())
+			}
+		}
+
+		_, err = h.digest.WriteString(s)
+		if err != nil {
+			panic("hashing failed: " + err.Error())
+		}
+	}
+
+	return h.digest.Sum64()
+}
+
+func (h hasher) hashParentPath(path []string) uint64 {
+	if len(path) <= 1 {
+		return 0
+	}
+
+	return h.hashPath(path[:len(path)-1])
 }
 
 // hashParentBytes takes flat path to element as a parent path and last segment.
@@ -363,7 +472,7 @@ func (p *Processor) scanAvailableKeys() error {
 
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
-					_, stop = p.scanKey(pk, parent, path, TypeObject, false)
+					_, stop = p.scanKey(h, pk, parent, path, TypeObject, false)
 
 					return stop
 				}
@@ -375,14 +484,14 @@ func (p *Processor) scanAvailableKeys() error {
 
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
-					_, stop = p.scanKey(pk, parent, path, TypeArray, false)
+					_, stop = p.scanKey(h, pk, parent, path, TypeArray, false)
 
 					return stop
 				}
 				w.FnString = func(_ int64, flatPath []byte, pl int, path []string, value []byte) []extractor {
 					pk, parent := h.hashParentBytes(flatPath, pl)
 
-					x, _ := p.scanKey(pk, parent, path, TypeString, len(value) == 0)
+					x, _ := p.scanKey(h, pk, parent, path, TypeString, len(value) == 0)
 
 					return x
 				}
@@ -391,18 +500,18 @@ func (p *Processor) scanAvailableKeys() error {
 					isInt := float64(int(value)) == value
 
 					if isInt {
-						p.scanKey(pk, parent, path, TypeInt, value == 0)
+						p.scanKey(h, pk, parent, path, TypeInt, value == 0)
 					} else {
-						p.scanKey(pk, parent, path, TypeFloat, value == 0)
+						p.scanKey(h, pk, parent, path, TypeFloat, value == 0)
 					}
 				}
 				w.FnBool = func(_ int64, flatPath []byte, pl int, path []string, value bool) {
 					pk, parent := h.hashParentBytes(flatPath, pl)
-					p.scanKey(pk, parent, path, TypeBool, !value)
+					p.scanKey(h, pk, parent, path, TypeBool, !value)
 				}
 				w.FnNull = func(_ int64, flatPath []byte, pl int, path []string) {
 					pk, parent := h.hashParentBytes(flatPath, pl)
-					p.scanKey(pk, parent, path, TypeNull, true)
+					p.scanKey(h, pk, parent, path, TypeNull, true)
 				}
 			}
 
@@ -496,7 +605,47 @@ func (p *Processor) prepareScannedKeys() {
 		}
 	}
 
+	if len(p.promotedTranspose) == 0 {
+		p.flKeysList = newFlKeys
+
+		return
+	}
+
+	seen := map[string]bool{}
+	for _, key := range newFlKeys {
+		seen[key] = true
+	}
+
+	p.flKeys.Range(func(_ uint64, k flKey) bool {
+		if k.t == TypeObject || k.t == TypeArray {
+			return true
+		}
+
+		if !seen[k.original] {
+			newFlKeys = append(newFlKeys, k.original)
+			seen[k.original] = true
+		}
+
+		return true
+	})
+
 	p.flKeysList = newFlKeys
+	p.canonicalKeys = map[string]flKey{}
+	p.flKeys.Range(func(_ uint64, value flKey) bool {
+		if value.t == TypeObject || value.t == TypeArray {
+			return true
+		}
+
+		if existing, ok := p.canonicalKeys[value.canonical]; ok {
+			existing.isZero = existing.isZero && value.isZero
+			existing.t = existing.t.Update(value.t)
+			p.canonicalKeys[value.canonical] = existing
+		} else {
+			p.canonicalKeys[value.canonical] = value
+		}
+
+		return true
+	})
 }
 
 func (p *Processor) flKeysInit() {
@@ -591,8 +740,15 @@ func (p *Processor) iterateIncludeKeys() {
 	p.flKeysInit()
 
 	canonicalIncludes := make(map[string]bool)
+	checkTransposeNormalization := len(p.transpose.byRoot) > 0
 
 	for _, k := range p.flKeysList {
+		if checkTransposeNormalization {
+			if tm, ok := p.matchTransposePath(strings.Split(strings.TrimPrefix(k, "."), ".")); ok && tm.normalizedKey() != k {
+				continue
+			}
+		}
+
 		if _, ok := p.includeKeys[k]; ok {
 			continue
 		}
@@ -737,6 +893,27 @@ func (p *Processor) prepareKeys() {
 	}
 
 	p.keys = keys
+	p.prepareTransposeSchemas()
+	p.prepareMainKeys()
+}
+
+func (p *Processor) prepareMainKeys() {
+	p.mainKeys = p.mainKeys[:0]
+	p.mainConstVals = map[int]string{}
+
+	mainIndex := 0
+	for i, key := range p.keys {
+		if key.transposeDst != "" {
+			continue
+		}
+
+		p.mainKeys = append(p.mainKeys, key)
+		if v, ok := p.constVals[i]; ok {
+			p.mainConstVals[mainIndex] = v
+		}
+
+		mainIndex++
+	}
 }
 
 func (p *Processor) prepareKey(origKey string) (kk string) {

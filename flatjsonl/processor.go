@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,15 +44,21 @@ type Processor struct {
 	extractRegex map[*regexp.Regexp][]extractor
 	constVals    map[int]string
 
-	replaceKeys  map[string]string
-	replaceByKey map[string]string
+	replaceKeys      map[string]string
+	replaceByKey     map[string]string
+	transpose        transposeMatcher
+	transposeSchemas map[string]transposeSchema
+	mainKeys         []flKey
+	mainConstVals    map[int]string
 
 	// keys are ordered by replaced column names, indexes match values of includeKeys.
 	keys []flKey
 
 	flKeys                *xsync.Map[uint64, flKey]
 	parentCardinality     map[uint64]int
+	parentChildren        map[uint64]map[string]struct{}
 	parentHighCardinality *xsync.Map[uint64, bool]
+	promotedTranspose     map[uint64]bool
 
 	mu            sync.Mutex
 	flKeysList    []string
@@ -145,6 +152,8 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		flKeys:                xsync.NewMap[uint64, flKey](),
 		parentHighCardinality: xsync.NewMap[uint64, bool](),
 		parentCardinality:     map[uint64]int{},
+		parentChildren:        map[uint64]map[string]struct{}{},
+		promotedTranspose:     map[uint64]bool{},
 	}
 
 	p.rd.Processor = p
@@ -183,6 +192,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 
 	p.replaceRegex = map[*regexp.Regexp]string{}
 	p.extractRegex = map[*regexp.Regexp][]extractor{}
+	p.transpose = compileTransposeSpecs(cfg.Transpose)
 
 	for _, reg := range p.cfg.ExcludeKeysRegex {
 		r, err := regex(reg)
@@ -421,7 +431,6 @@ func (p *Processor) setupWriters() error {
 			return fmt.Errorf("failed to create CSV file: %w", err)
 		}
 
-		cw.b.p = p
 		p.w.Add(cw)
 	}
 
@@ -476,8 +485,6 @@ func (p *Processor) setupWriters() error {
 			return fmt.Errorf("failed to setup raw writer: %w", err)
 		}
 
-		rw.b.p = p
-
 		p.w.Add(rw)
 	}
 
@@ -516,15 +523,25 @@ func (p *Processor) iterateForWriters() error {
 	}
 
 	pkIndex := make(map[uint64]int)
-	pkDst := make(map[uint64]string)
 	pkTimeFmt := make(map[uint64]string)
+
+	mainIndexByKey := make(map[int]int)
+	mainIdx := 0
+	for i, key := range p.keys {
+		if key.transposeDst != "" {
+			continue
+		}
+
+		mainIndexByKey[i] = mainIdx
+		mainIdx++
+	}
 
 	p.flKeys.Range(func(key uint64, value flKey) bool {
 		if i, ok := includeKeys[value.canonical]; ok {
-			pkIndex[key] = i
-
-			if value.transposeDst != "" {
-				pkDst[key] = value.transposeDst
+			if value.transposeDst == "" {
+				if j, ok := mainIndexByKey[i]; ok {
+					pkIndex[key] = j
+				}
 			}
 		}
 
@@ -535,9 +552,9 @@ func (p *Processor) iterateForWriters() error {
 		return true
 	})
 
-	wi := newWriteIterator(p, pkIndex, pkDst, pkTimeFmt)
+	wi := newWriteIterator(p, pkIndex, pkTimeFmt)
 
-	if err := p.w.SetupKeys(p.keys); err != nil {
+	if err := p.w.SetupKeys(p.mainKeys, p.transposeSchemas); err != nil {
 		return err
 	}
 
@@ -574,11 +591,28 @@ func (p *Processor) iterateForWriters() error {
 }
 
 type lineBuf struct {
-	h      *hasher
-	values []Value
+	seq        int64
+	h          *hasher
+	values     []Value
+	transposed map[string]*transposedRowsBuf
 }
 
-func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]string, pkTimeFmt map[uint64]string) *writeIterator {
+type transposedMeta struct {
+	dst      string
+	rowKey   string
+	indexVal Value
+	colIdx   int
+	rowLen   int
+	order    int
+}
+
+type transposedRowsBuf struct {
+	rows  map[string][]Value
+	order map[string]int
+	next  int
+}
+
+func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkTimeFmt map[uint64]string) *writeIterator {
 	wi := &writeIterator{}
 	wi.pending = xsync.NewMap[int64, *lineBuf]()
 	wi.finished = &sync.Map{}
@@ -593,14 +627,14 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 	wi.lineBufPool = sync.Pool{
 		New: func() interface{} {
 			return &lineBuf{
-				h:      newHasher(),
-				values: make([]Value, len(p.keys)),
+				h:          newHasher(),
+				values:     make([]Value, len(p.mainKeys)),
+				transposed: map[string]*transposedRowsBuf{},
 			}
 		},
 	}
 	wi.seqExpected = 1
 	wi.pkIndex = pkIndex
-	wi.pkDst = pkDst
 	wi.pkTimeFmt = pkTimeFmt
 	wi.p = p
 	wi.fieldLimit = p.f.FieldLimit
@@ -669,7 +703,6 @@ func newWriteIterator(p *Processor, pkIndex map[uint64]int, pkDst map[uint64]str
 type writeIterator struct {
 	// Read-only under concurrency.
 	pkIndex    map[uint64]int
-	pkDst      map[uint64]string
 	pkTimeFmt  map[uint64]string
 	p          *Processor
 	fieldLimit int
@@ -695,26 +728,27 @@ type writeIterator struct {
 
 func (wi *writeIterator) setupWalker(w *FastWalker) {
 	w.configure(wi.p)
+	w.WantPath = len(wi.p.transpose.byRoot) > 0
 
 	w.FnObjectStop = nil
 	w.FnArrayStop = nil
-	w.FnString = func(seq int64, flatPath []byte, pl int, _ []string, value []byte) []extractor {
+	w.FnString = func(seq int64, flatPath []byte, pl int, path []string, value []byte) []extractor {
 		if wi.fieldLimit != 0 && len(value) > wi.fieldLimit {
 			value = value[0:wi.fieldLimit]
 		}
 
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
-		k, _ := wi.p.flKeys.Load(pk)
+		k, _ := wi.lookupKey(l.h, pk, path)
 
 		wi.setValue(Value{
 			Type:   TypeString,
 			String: string(value),
-		}, pk, l)
+		}, pk, path, l)
 
 		return k.extractors
 	}
-	w.FnNumber = func(seq int64, flatPath []byte, pl int, _ []string, value float64, raw []byte) {
+	w.FnNumber = func(seq int64, flatPath []byte, pl int, path []string, value float64, raw []byte) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
@@ -722,34 +756,42 @@ func (wi *writeIterator) setupWalker(w *FastWalker) {
 			Type:      TypeFloat,
 			Number:    value,
 			RawNumber: string(raw),
-		}, pk, l)
+		}, pk, path, l)
 	}
-	w.FnBool = func(seq int64, flatPath []byte, pl int, _ []string, value bool) {
+	w.FnBool = func(seq int64, flatPath []byte, pl int, path []string, value bool) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
 		wi.setValue(Value{
 			Type: TypeBool,
 			Bool: value,
-		}, pk, l)
+		}, pk, path, l)
 	}
-	w.FnNull = func(seq int64, flatPath []byte, pl int, _ []string) {
+	w.FnNull = func(seq int64, flatPath []byte, pl int, path []string) {
 		l, _ := wi.pending.Load(seq)
 		pk := l.h.hashBytes(flatPath)
 
 		wi.setValue(Value{
 			Type: TypeNull,
-		}, pk, l)
+		}, pk, path, l)
 	}
 }
 
-func (wi *writeIterator) setValue(v Value, pk uint64, l *lineBuf) {
-	if wi.singleKeyHash != 0 && pk != wi.singleKeyHash {
-		return
+func (wi *writeIterator) lookupKey(h *hasher, pk uint64, path []string) (flKey, bool) {
+	if k, ok := wi.p.flKeys.Load(pk); ok {
+		return k, true
 	}
 
-	i, ok := wi.pkIndex[pk]
-	if !ok {
+	if tm, ok := wi.p.matchTransposePath(path); ok {
+		npk := h.hashPath(tm.normalizedPath())
+		return wi.p.flKeys.Load(npk)
+	}
+
+	return flKey{}, false
+}
+
+func (wi *writeIterator) setValue(v Value, pk uint64, path []string, l *lineBuf) {
+	if wi.singleKeyHash != 0 && pk != wi.singleKeyHash {
 		return
 	}
 
@@ -776,7 +818,28 @@ func (wi *writeIterator) setValue(v Value, pk uint64, l *lineBuf) {
 		}
 	}
 
-	v.Dst = wi.pkDst[pk]
+	if tm, ok := wi.p.matchTransposePath(path); ok {
+		if schema, ok := wi.p.transposeSchemas[tm.dst]; ok {
+			if ik, ok := schema.trimmedKeys[tm.trimmedKey()]; ok {
+				wi.setTransposedValue(v, transposedMeta{
+					dst:      tm.dst,
+					rowKey:   tm.rowKey.String(),
+					indexVal: tm.rowKey.Value(),
+					colIdx:   ik.idx,
+					rowLen:   len(schema.filteredKeys),
+					order:    ik.idx,
+				}, l)
+
+				return
+			}
+		}
+
+	}
+
+	i, ok := wi.pkIndex[pk]
+	if !ok {
+		return
+	}
 
 	ev := l.values[i]
 	t := ev.Type
@@ -794,6 +857,38 @@ func (wi *writeIterator) setValue(v Value, pk uint64, l *lineBuf) {
 		}
 
 		l.values[i] = cv
+	}
+}
+
+func (wi *writeIterator) setTransposedValue(v Value, tm transposedMeta, l *lineBuf) {
+	buf := l.transposed[tm.dst]
+	if buf == nil {
+		buf = &transposedRowsBuf{rows: map[string][]Value{}, order: map[string]int{}}
+		l.transposed[tm.dst] = buf
+	}
+
+	row := buf.rows[tm.rowKey]
+	if row == nil {
+		row = make([]Value, tm.rowLen)
+		row[0] = Value{Type: TypeFloat, Number: float64(l.seq)}
+		row[1] = tm.indexVal
+		buf.rows[tm.rowKey] = row
+		buf.order[tm.rowKey] = buf.next
+		buf.next++
+	}
+
+	ev := row[tm.colIdx]
+	if ev.Type == TypeAbsent {
+		row[tm.colIdx] = v
+
+		return
+	}
+
+	if wi.p.cfg.ConcatDelimiter != nil && v.Type != TypeAbsent {
+		row[tm.colIdx] = Value{
+			Type:   TypeString,
+			String: ev.Format() + *wi.p.cfg.ConcatDelimiter + v.Format(),
+		}
 	}
 }
 
@@ -819,6 +914,7 @@ func (wi *writeIterator) lineStarted(seq int64) error {
 	atomic.AddInt64(&wi.inProgress, 1)
 
 	l := wi.lineBufPool.Get().(*lineBuf) //nolint: errcheck
+	l.seq = seq
 	wi.pending.Store(seq, l)
 
 	return nil
@@ -854,7 +950,7 @@ func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
 		atomic.AddInt64(&wi.inProgress, -1)
 	}()
 
-	for i, v := range wi.p.constVals {
+	for i, v := range wi.p.mainConstVals {
 		val := Value{
 			Type:   TypeString,
 			String: v,
@@ -863,7 +959,7 @@ func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
 		l.values[i] = val
 	}
 
-	err := wi.p.w.ReceiveRow(seq, l.values)
+	err := wi.p.w.ReceiveRow(seq, l.values, l.materializeTransposed())
 
 	atomic.AddInt64(&wi.seqExpected, 1)
 
@@ -871,9 +967,54 @@ func (wi *writeIterator) complete(seq int64, l *lineBuf) error {
 		l.values[i] = Value{}
 	}
 
+	for _, buf := range l.transposed {
+		buf.next = 0
+		for k, row := range buf.rows {
+			for i := range row {
+				row[i] = Value{}
+			}
+
+			delete(buf.rows, k)
+			delete(buf.order, k)
+		}
+	}
+
 	wi.lineBufPool.Put(l)
 
 	return err
+}
+
+func (l *lineBuf) materializeTransposed() map[string][][]Value {
+	if len(l.transposed) == 0 {
+		return nil
+	}
+
+	res := make(map[string][][]Value, len(l.transposed))
+	for dst, buf := range l.transposed {
+		keys := make([]string, 0, len(buf.order))
+		for key := range buf.order {
+			keys = append(keys, key)
+		}
+
+		sort.Slice(keys, func(i, j int) bool {
+			oi := buf.order[keys[i]]
+			oj := buf.order[keys[j]]
+			if oi != oj {
+				return oi < oj
+			}
+
+			return keys[i] < keys[j]
+		})
+
+		rows := make([][]Value, 0, len(keys))
+		for _, key := range keys {
+			rows = append(rows, buf.rows[key])
+		}
+
+		res[dst] = rows
+	}
+
+	return res
 }
 
 func (wi *writeIterator) checkCompleted() error {

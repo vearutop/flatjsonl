@@ -46,11 +46,11 @@ func (t *testInputReader) Compression() string {
 	return ""
 }
 
-func (b *blockingReceiver) SetupKeys(_ []flKey) error {
+func (b *blockingReceiver) SetupKeys(_ []flKey, _ map[string]transposeSchema) error {
 	return nil
 }
 
-func (b *blockingReceiver) ReceiveRow(seq int64, _ []Value) error {
+func (b *blockingReceiver) ReceiveRow(seq int64, _ []Value, _ map[string][][]Value) error {
 	b.calls <- seq
 
 	if seq == 1 {
@@ -80,7 +80,7 @@ func TestWriteIterator_lineFinishedBackpressuresWhenThrottled(t *testing.T) {
 
 	atomic.StoreInt64(&p.throttle, 1)
 
-	wi := newWriteIterator(p, nil, nil, nil)
+	wi := newWriteIterator(p, nil, nil)
 
 	require.NoError(t, wi.lineStarted(1))
 
@@ -154,7 +154,7 @@ func TestReaderRead_stallsWhenAllWorkersWaitBehindBlockedExpectedWrite(t *testin
 		Buf:         make([]byte, 0, 1024),
 	}
 
-	wi := newWriteIterator(p, nil, nil, nil)
+	wi := newWriteIterator(p, nil, nil)
 
 	sess, err := rd.session(Input{
 		Reader: newTestInputReader("{}\n{}\n{}\n{}\n{}\n{}\n"),
