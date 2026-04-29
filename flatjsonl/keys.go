@@ -114,7 +114,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		return existing
 	}
 
-	if p.f.ChildrenLimitObject > 0 && len(k.path) > 1 {
+	if (p.f.ChildrenLimitObject > 0 || p.f.ChildrenLimitArray > 0) && len(k.path) > 1 {
 		p.collectKeyCardinality(k)
 	}
 

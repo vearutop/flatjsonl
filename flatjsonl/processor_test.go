@@ -809,6 +809,42 @@ func TestNewProcessor_highCardinalityOverflowToTranspose(t *testing.T) {
 `)
 }
 
+func TestNewProcessor_highCardinalityArrayOverflowToTranspose(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.AddSequence = true
+	f.ReplaceKeys = true
+	f.Concurrency = 1
+	f.ChildrenLimitArray = 2
+
+	dir := t.TempDir()
+	f.Input = filepath.Join(dir, "input.jsonl")
+	f.CSV = filepath.Join(dir, "out.csv")
+	f.PrepareOutput()
+
+	require.NoError(t, os.WriteFile(f.Input, []byte(`{"name":"a","values":[1,2,3,4,5]}`+"\n"), 0o600))
+
+	cfg := flatjsonl.Config{
+		TransposeOverflow: true,
+	}
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Process())
+
+	assertFileEquals(t, f.CSV, `sequence,name
+1,a
+`)
+
+	assertFileEquals(t, filepath.Join(dir, "out_values.csv"), `sequence,index,value
+1,0,1
+1,1,2
+1,2,3
+1,3,4
+1,4,5
+`)
+}
+
 func TestNewProcessor_transpose_sqlite(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true
