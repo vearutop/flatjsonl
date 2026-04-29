@@ -23,7 +23,6 @@ type transposeMatch struct {
 	dst        string
 	srcPath    []string
 	rowKey     intOrString
-	trimmed    string
 	trimmedSeg []string
 }
 
@@ -168,11 +167,6 @@ func (ts transposeSpec) match(path []string) (transposeMatch, bool) {
 		m.rowKey = intOrString{t: TypeString, s: rowSeg}
 	}
 
-	if len(fieldSegs) == 0 {
-		m.trimmed = "._value"
-	} else {
-		m.trimmed = "." + strings.Join(fieldSegs, ".")
-	}
 	m.trimmedSeg = fieldSegs
 
 	return m, true
@@ -204,6 +198,20 @@ func (tm transposeMatch) normalizedKey() string {
 	b.WriteByte('.')
 	b.WriteString(tm.wildcardSegment())
 
+	for _, seg := range tm.trimmedSeg {
+		b.WriteByte('.')
+		b.WriteString(seg)
+	}
+
+	return b.String()
+}
+
+func (tm transposeMatch) trimmedKey() string {
+	if len(tm.trimmedSeg) == 0 {
+		return "._value"
+	}
+
+	var b strings.Builder
 	for _, seg := range tm.trimmedSeg {
 		b.WriteByte('.')
 		b.WriteString(seg)

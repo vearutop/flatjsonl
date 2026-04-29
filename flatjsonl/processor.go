@@ -820,7 +820,7 @@ func (wi *writeIterator) setValue(v Value, pk uint64, path []string, l *lineBuf)
 
 	if tm, ok := wi.p.matchTransposePath(path); ok {
 		if schema, ok := wi.p.transposeSchemas[tm.dst]; ok {
-			if ik, ok := schema.trimmedKeys[tm.trimmed]; ok {
+			if ik, ok := schema.trimmedKeys[tm.trimmedKey()]; ok {
 				wi.setTransposedValue(v, transposedMeta{
 					dst:      tm.dst,
 					rowKey:   tm.rowKey.String(),

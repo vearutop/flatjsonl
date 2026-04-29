@@ -18,7 +18,7 @@ func BenchmarkTransposeMatch(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			tm, ok := p.matchTransposePath(path)
-			if !ok || tm.dst != "tokens" || tm.trimmed != ".a" || tm.rowKey.s != "foo" {
+			if !ok || tm.dst != "tokens" || tm.trimmedKey() != ".a" || tm.rowKey.s != "foo" {
 				b.Fatal("unexpected transpose match")
 			}
 		}
@@ -30,7 +30,7 @@ func BenchmarkTransposeMatch(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			tm, ok := p.matchTransposePath(path)
-			if !ok || tm.dst != "deep_arr" || tm.trimmed != ".foo.a" || tm.rowKey.i != 12 {
+			if !ok || tm.dst != "deep_arr" || tm.trimmedKey() != ".foo.a" || tm.rowKey.i != 12 {
 				b.Fatal("unexpected transpose match")
 			}
 		}

@@ -95,7 +95,7 @@ func (p *Processor) initKey(pk, parent uint64, path []string, t Type, isZero boo
 		k.transposeSrc = tm.src
 		k.transposeDst = tm.dst
 		k.transposeKey = tm.rowKey
-		k.transposeTrimmed = tm.trimmed
+		k.transposeTrimmed = tm.trimmedKey()
 	}
 
 	for r, x := range p.extractRegex {
@@ -184,7 +184,7 @@ func (p *Processor) collectKeyCardinality(k flKey) {
 			k.transposeSrc = tm.src
 			k.transposeDst = tm.dst
 			k.transposeKey = tm.rowKey
-			k.transposeTrimmed = tm.trimmed
+			k.transposeTrimmed = tm.trimmedKey()
 			childKey = k.transposeTrimmed
 		}
 	}
@@ -308,7 +308,7 @@ func (p *Processor) promoteHighCardinalityToTranspose(parentHash uint64, parentK
 				nv.parent = np
 				p.flKeys.Store(nk, nv)
 			}
-			normalizedChildren[tm.trimmed] = struct{}{}
+			normalizedChildren[tm.trimmedKey()] = struct{}{}
 		}
 
 		return true
@@ -322,7 +322,7 @@ func (p *Processor) normalizeTransposeKey(value flKey, tm transposeMatch) (uint6
 	value.transposeSrc = tm.src
 	value.transposeDst = tm.dst
 	value.transposeKey = tm.rowKey
-	value.transposeTrimmed = tm.trimmed
+	value.transposeTrimmed = tm.trimmedKey()
 	value.path = tm.normalizedPath()
 	value.original = KeyFromPath(value.path)
 	value.canonical = p.ck(value.original)
