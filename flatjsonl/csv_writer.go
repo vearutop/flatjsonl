@@ -7,8 +7,9 @@ import (
 
 // CSVWriter writes rows to CSV file.
 type CSVWriter struct {
-	fn string
-	w  *csv.Writer
+	fn        string
+	nullValue string
+	w         *csv.Writer
 
 	transposed map[string]*CSVWriter
 
@@ -17,11 +18,12 @@ type CSVWriter struct {
 }
 
 // NewCSVWriter creates an instance of CSVWriter.
-func NewCSVWriter(fn string) (*CSVWriter, error) {
+func NewCSVWriter(fn string, nullValue string) (*CSVWriter, error) {
 	var err error
 
 	c := &CSVWriter{
-		fn: fn,
+		fn:        fn,
+		nullValue: nullValue,
 	}
 
 	c.fileWriter, err = newFileWriter(fn)
@@ -53,7 +55,7 @@ func (c *CSVWriter) SetupKeys(keys []flKey) (err error) {
 			fn = c.fn
 		}
 
-		ctw, err := NewCSVWriter(fn)
+		ctw, err := NewCSVWriter(fn, c.nullValue)
 		if err != nil {
 			return fmt.Errorf("failed to init transposed CSV writer for %s: %w", dst, err)
 		}
@@ -96,10 +98,10 @@ func (c *CSVWriter) writeHead() error {
 // ReceiveRow receives rows.
 func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 	if c.b.isTransposed {
-		transposedRows := c.b.receiveRow(seq, values)
+		transposedRows := c.b.receiveTransposedRowValues(seq, values)
 
 		for _, row := range transposedRows {
-			if err := c.w.Write(row); err != nil {
+			if err := c.w.Write(c.renderValueRow(row)); err != nil {
 				return fmt.Errorf("writing transposed CSV row: %w", err)
 			}
 		}
@@ -107,10 +109,10 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 		return nil
 	}
 
-	c.b.receiveRow(seq, values)
+	row := c.b.receiveRowValues(values)
 
-	if len(c.b.row) > 0 {
-		if err := c.w.Write(c.b.row); err != nil {
+	if len(row) > 0 {
+		if err := c.w.Write(c.renderValueRow(row)); err != nil {
 			return fmt.Errorf("writing CSV row: %w", err)
 		}
 	}
@@ -122,6 +124,21 @@ func (c *CSVWriter) ReceiveRow(seq int64, values []Value) error {
 	}
 
 	return nil
+}
+
+func (c *CSVWriter) renderValueRow(row []Value) []string {
+	res := make([]string, len(row))
+
+	for i, v := range row {
+		if v.Type == TypeNull || v.Type == TypeAbsent {
+			res[i] = c.nullValue
+			continue
+		}
+
+		res[i] = v.Format()
+	}
+
+	return res
 }
 
 // Close flushes rows and closes file.

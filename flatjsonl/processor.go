@@ -416,7 +416,7 @@ func (p *Processor) showKeysInfo() {
 
 func (p *Processor) setupWriters() error {
 	if p.f.CSV != "" {
-		cw, err := NewCSVWriter(p.f.CSV)
+		cw, err := NewCSVWriter(p.f.CSV, p.f.CSVNull)
 		if err != nil {
 			return fmt.Errorf("failed to create CSV file: %w", err)
 		}
@@ -435,7 +435,7 @@ func (p *Processor) setupWriters() error {
 	}
 
 	if p.f.DuckDB != "" {
-		w, err := NewDuckDBCLIWriter(p.f.DuckDB, p.f.SQLTable)
+		w, err := NewDuckDBCLIWriter(p.f.DuckDB, p.f.SQLTable, p.f.CSVNull)
 		if err != nil {
 			return fmt.Errorf("failed to open DuckDB CLI writer: %w", err)
 		}
@@ -445,7 +445,7 @@ func (p *Processor) setupWriters() error {
 
 	if p.f.SQLite != "" {
 		if p.f.SQLiteCLI {
-			cw, err := NewSQLite3CLIWriter(p.f.SQLite, p.f.SQLTable)
+			cw, err := NewSQLite3CLIWriter(p.f.SQLite, p.f.SQLTable, p.f.CSVNull)
 			if err != nil {
 				return fmt.Errorf("failed to open SQLite file: %w", err)
 			}

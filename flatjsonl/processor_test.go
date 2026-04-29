@@ -234,6 +234,42 @@ func TestNewProcessor_parquet(t *testing.T) {
 	assert.Equal(t, `{"foo":1, "bar": 2}`, rows[2]["nested_literal"])
 }
 
+func TestNewProcessor_csvNull(t *testing.T) {
+	f := flatjsonl.Flags{}
+	f.ExtractStrings = true
+	f.AddSequence = true
+	f.Input = "testdata/test.log"
+	f.CSV = "testdata/test-null.csv"
+	f.CSVNull = `\N`
+	f.MatchLinePrefix = `([\w\d-]+) [\w\d]+ ([\d/]+\s[\d:\.]+)`
+	f.MaxLines = 3
+	f.ReplaceKeys = true
+	f.SkipZeroCols = true
+	f.Concurrency = 1
+
+	cj, err := os.ReadFile("testdata/config.json")
+	require.NoError(t, err)
+
+	var cfg flatjsonl.Config
+
+	require.NoError(t, json.Unmarshal(cj, &cfg))
+	t.Cleanup(func() { require.NoError(t, os.Remove(f.CSV)) })
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, f.Inputs()...)
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Process())
+
+	b, err := os.ReadFile(f.CSV)
+	require.NoError(t, err)
+
+	assert.Equal(t, `sequence,host,timestamp,name,wins_0_0,wins_0_1,wins_1_0,wins_1_1,f00_bar VARCHAR(255),f00_qux_baz VARCHAR(255),nested_literal,foo,bar
+1,host-13,2022-06-24 14:13:36,Gilbert,straight,7♣,one pair,10♥,1,abc,\N,\N,\N
+2,host-14,2022-06-24 14:13:37,"""'Alexa'""",two pair,4♠,two pair,9♠,\N,\N,\N,\N,\N
+3,host-13,2022-06-24 14:13:38,May,\N,\N,\N,\N,\N,\N,"{""foo"":1, ""bar"": 2}",1,2
+`, string(b))
+}
+
 func TestNewProcessor_transpose_parquet(t *testing.T) {
 	f := flatjsonl.Flags{}
 	f.AddSequence = true

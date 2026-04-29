@@ -16,11 +16,12 @@ type SQLite3CLIWriter struct {
 }
 
 // NewSQLite3CLIWriter creates SQLite3 CLI writer.
-func NewSQLite3CLIWriter(fn string, tableName string) (*SQLite3CLIWriter, error) {
+func NewSQLite3CLIWriter(fn string, tableName string, nullValue string) (*SQLite3CLIWriter, error) {
 	sw := &SQLite3CLIWriter{}
 
 	c := &CSVWriter{
-		fn: NopFile,
+		fn:        NopFile,
+		nullValue: nullValue,
 	}
 
 	// Pipe provides io.Reader to attach as stdin of sqlite3 process

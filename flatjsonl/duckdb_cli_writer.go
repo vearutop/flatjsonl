@@ -17,11 +17,12 @@ type DuckDBCLIWriter struct {
 }
 
 // NewDuckDBCLIWriter creates DuckDB CLI writer.
-func NewDuckDBCLIWriter(fn string, tableName string) (*DuckDBCLIWriter, error) {
+func NewDuckDBCLIWriter(fn string, tableName string, nullValue string) (*DuckDBCLIWriter, error) {
 	dw := &DuckDBCLIWriter{}
 
 	c := &CSVWriter{
-		fn: NopFile,
+		fn:        NopFile,
+		nullValue: nullValue,
 	}
 
 	r, w := io.Pipe()
@@ -37,8 +38,7 @@ func NewDuckDBCLIWriter(fn string, tableName string) (*DuckDBCLIWriter, error) {
 		return nil, errors.New("duckdb CLI is not available in PATH")
 	}
 
-	query := "CREATE TABLE " + quoteDuckDBIdent(tableName) + //nolint: unqueryvet
-		" AS SELECT * FROM read_csv('/dev/stdin', header=true, auto_detect=true)"
+	query := duckDBReadCSVQuery(tableName, c.nullValue)
 
 	dw.cmd = exec.Command(cliPath, fn, "-c", query)
 	dw.cmd.Stdin = r
@@ -81,4 +81,21 @@ func (w *DuckDBCLIWriter) Close() error {
 
 func quoteDuckDBIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
+
+func quoteDuckDBString(s string) string {
+	return `'` + strings.ReplaceAll(s, `'`, `''`) + `'`
+}
+
+func duckDBReadCSVQuery(tableName string, nullValue string) string {
+	query := "CREATE TABLE " + quoteDuckDBIdent(tableName) + //nolint: unqueryvet
+		" AS SELECT * FROM read_csv('/dev/stdin', header=true, auto_detect=true"
+
+	if nullValue != "" {
+		query += ", nullstr=" + quoteDuckDBString(nullValue)
+	}
+
+	query += ")"
+
+	return query
 }
