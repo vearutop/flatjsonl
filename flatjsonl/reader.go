@@ -232,14 +232,12 @@ func (rd *Reader) Read(sess *readSession) error {
 	var n int64
 
 	for sess.scanner.Scan() {
-		for {
-			if atomic.LoadInt64(&rd.Processor.throttle) != 0 {
-				atomic.StoreInt64(&rd.Processor.throttle, 0)
-				runtime.GC()
-				time.Sleep(110 * time.Millisecond)
-			} else {
-				break
-			}
+		// Apply at most one throttle penalty per line. The memory watcher may keep
+		// reasserting throttle while heap stays above the limit, and looping until
+		// it clears can livelock the reader completely.
+		if atomic.SwapInt64(&rd.Processor.throttle, 0) != 0 {
+			runtime.GC()
+			time.Sleep(110 * time.Millisecond)
 		}
 
 		if err := sess.scanner.Err(); err != nil {
