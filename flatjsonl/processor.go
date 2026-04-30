@@ -59,6 +59,10 @@ type Processor struct {
 	jsonSchema    jsonSchema
 	canonicalKeys map[string]flKey
 
+	statusMu           sync.RWMutex
+	lastProgressStatus string
+	lastProgressAt     time.Time
+
 	totalLines int
 	totalKeys  int64
 	errors     int64
@@ -151,9 +155,10 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 
 	switch f.Verbosity {
 	case 0:
-		pr.Print = func(_ progress.Status) {}
+		pr.Print = p.setProgressStatus
 	case 1:
 		pr.Print = func(status progress.Status) {
+			p.setProgressStatus(status)
 			p.Log(progress.DefaultStatus(status))
 		}
 	default:
@@ -162,6 +167,8 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 		}
 
 		pr.Print = func(status progress.Status) {
+			p.setProgressStatus(status)
+
 			s := progress.DefaultStatus(status)
 			m := progress.MetricsStatus(status)
 
@@ -235,6 +242,28 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 	return p, nil
 }
 
+func (p *Processor) setProgressStatus(status progress.Status) {
+	s := progress.DefaultStatus(status)
+	m := progress.MetricsStatus(status)
+
+	if m != "" {
+		s += "\n" + m
+	}
+
+	p.statusMu.Lock()
+	p.lastProgressStatus = s
+	p.lastProgressAt = time.Now()
+	p.statusMu.Unlock()
+}
+
+// ProgressStatus returns the latest progress status string and the time it was updated.
+func (p *Processor) ProgressStatus() (string, time.Time) {
+	p.statusMu.RLock()
+	defer p.statusMu.RUnlock()
+
+	return p.lastProgressStatus, p.lastProgressAt
+}
+
 // Process dispatches data from Reader to Writer.
 func (p *Processor) Process() error {
 	for _, i := range p.inputs {
@@ -285,6 +314,11 @@ func (p *Processor) PrepareKeys() error {
 		p.pr.AddMetrics(progress.Metric{
 			Name: "errors", Type: progress.Gauge,
 			Value: func() int64 { return atomic.LoadInt64(&p.errors) },
+		})
+
+		p.pr.AddMetrics(progress.Metric{
+			Name: "throttling", Type: progress.Gauge,
+			Value: func() int64 { return atomic.LoadInt64(&p.throttle) },
 		})
 
 		atomic.StoreInt64(&p.errors, 0)
@@ -500,6 +534,11 @@ func (p *Processor) iterateForWriters() error {
 	p.pr.AddMetrics(progress.Metric{
 		Name: "errors", Type: progress.Gauge,
 		Value: func() int64 { return atomic.LoadInt64(&p.errors) },
+	})
+
+	p.pr.AddMetrics(progress.Metric{
+		Name: "throttling", Type: progress.Gauge,
+		Value: func() int64 { return atomic.LoadInt64(&p.throttle) },
 	})
 
 	p.rd.MaxLines = 0

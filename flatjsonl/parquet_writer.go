@@ -163,26 +163,26 @@ func parquetNode(t Type) parquet.Node {
 func parquetFlushSize(numCols int) int {
 	switch {
 	case numCols >= 1500:
-		return 500
+		return 5000
 	case numCols >= 1000:
-		return 1000
-	case numCols >= 500:
-		return 2500
-	default:
 		return 10000
+	case numCols >= 500:
+		return 25000
+	default:
+		return 100000
 	}
 }
 
 func parquetBatchSize(numCols int) int {
 	switch {
 	case numCols >= 1500:
-		return 64
-	case numCols >= 1000:
 		return 128
-	case numCols >= 500:
+	case numCols >= 1000:
 		return 256
-	default:
+	case numCols >= 500:
 		return 512
+	default:
+		return 1024
 	}
 }
 
