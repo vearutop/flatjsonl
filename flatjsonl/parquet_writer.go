@@ -27,10 +27,10 @@ type ParquetWriter struct {
 	rowsBatch      []parquet.Row
 	batchSize      int
 
+	keys       []flKey
 	transposed map[string]*ParquetWriter
 
 	*fileWriter
-	b *baseWriter
 }
 
 type parquetColumn struct {
@@ -55,24 +55,21 @@ func NewParquetWriter(fn string, compression string, p *Processor) (*ParquetWrit
 		return nil, err
 	}
 
-	c.b = &baseWriter{p: p}
-
 	return c, nil
 }
 
 // SetupKeys initializes writer.
-func (c *ParquetWriter) SetupKeys(keys []flKey) (err error) {
-	c.b.setupKeys(keys)
+func (c *ParquetWriter) SetupKeys(keys []flKey, transposed map[string]transposeSchema) (err error) {
+	c.keys = keys
 
-	if err := c.setupParquetWriter(); err != nil {
+	if err := c.setupParquetWriter(keys); err != nil {
 		return err
 	}
 
 	c.transposed = map[string]*ParquetWriter{}
 
-	for dst, tw := range c.b.transposed {
-		fn := c.b.transposedFileName(c.fn, dst)
-		tw.extName = fn
+	for dst, ts := range transposed {
+		fn := transposedFileName(c.fn, dst)
 
 		if c.fn == NopFile {
 			fn = c.fn
@@ -83,11 +80,10 @@ func (c *ParquetWriter) SetupKeys(keys []flKey) (err error) {
 			return fmt.Errorf("failed to init transposed Parquet writer for %s: %w", dst, err)
 		}
 
-		ctw.b = tw
-		ctw.b.p = c.p
+		ctw.keys = ts.filteredKeys
 		c.transposed[dst] = ctw
 
-		if err := ctw.setupParquetWriter(); err != nil {
+		if err := ctw.setupParquetWriter(ts.filteredKeys); err != nil {
 			return fmt.Errorf("failed to setup transposed Parquet writer for %s: %w", dst, err)
 		}
 	}
@@ -95,7 +91,7 @@ func (c *ParquetWriter) SetupKeys(keys []flKey) (err error) {
 	return nil
 }
 
-func (c *ParquetWriter) setupParquetWriter() error {
+func (c *ParquetWriter) setupParquetWriter(keys []flKey) error {
 	group := parquet.Group{}
 
 	codec, err := parquetCompressionCodec(c.compression)
@@ -103,7 +99,7 @@ func (c *ParquetWriter) setupParquetWriter() error {
 		return err
 	}
 
-	for _, k := range c.b.filteredKeys {
+	for _, k := range keys {
 		group[k.replaced] = parquet.Optional(parquetNode(k.t))
 	}
 
@@ -113,8 +109,8 @@ func (c *ParquetWriter) setupParquetWriter() error {
 		Compression: codec,
 	})
 
-	c.flushSize = parquetFlushSize(len(c.b.filteredKeys))
-	c.batchSize = parquetBatchSize(len(c.b.filteredKeys))
+	c.flushSize = parquetFlushSize(len(keys))
+	c.batchSize = parquetBatchSize(len(keys))
 
 	for _, colPath := range schema.Columns() {
 		leaf, ok := schema.Lookup(colPath...)
@@ -125,7 +121,7 @@ func (c *ParquetWriter) setupParquetWriter() error {
 		name := colPath[len(colPath)-1]
 		found := false
 
-		for i, k := range c.b.filteredKeys {
+		for i, k := range keys {
 			if k.replaced == name {
 				c.orderedColumns = append(c.orderedColumns, parquetColumn{
 					valueIndex:  i,
@@ -202,26 +198,17 @@ func parquetCompressionCodec(name string) (compress.Codec, error) {
 }
 
 // ReceiveRow receives rows.
-func (c *ParquetWriter) ReceiveRow(seq int64, values []Value) error {
-	if c.b.isTransposed {
-		transposedRows := c.b.receiveTransposedRowValues(seq, values)
-
-		for _, row := range transposedRows {
-			if err := c.writeRow(row); err != nil {
-				return fmt.Errorf("writing transposed Parquet row: %w", err)
-			}
-		}
-
-		return nil
-	}
-
-	if err := c.writeRow(c.b.receiveRowValues(values)); err != nil {
+func (c *ParquetWriter) ReceiveRow(_ int64, values []Value, transposed map[string][][]Value) error {
+	if err := c.writeRow(values); err != nil {
 		return fmt.Errorf("writing Parquet row: %w", err)
 	}
 
-	for dst, tw := range c.transposed {
-		if err := tw.ReceiveRow(seq, values); err != nil {
-			return fmt.Errorf("transposed rows for %s: %w", dst, err)
+	for dst, rows := range transposed {
+		tw := c.transposed[dst]
+		for _, row := range rows {
+			if err := tw.writeRow(row); err != nil {
+				return fmt.Errorf("transposed rows for %s: %w", dst, err)
+			}
 		}
 	}
 

@@ -71,9 +71,8 @@ COPY "whatever_tags" ("_seq_id","sequence","index","value") FROM stdin WITH (FOR
 COPY "whatever_tokens" ("_seq_id","sequence","index","a","b") FROM stdin WITH (FORMAT csv);
 1,1,foo,1,2
 2,2,bar,3,4
-3,3,foo,15,12
 3,3,baz,5,6
+3,3,foo,15,12
 \.
 
 SELECT '3/3 lines completed, 100.0%' AS status;
-

@@ -12,10 +12,10 @@ type RawWriter struct {
 
 	delim []byte
 
+	keys       []flKey
 	transposed map[string]*RawWriter
 
 	*fileWriter
-	b *baseWriter
 }
 
 // NewRawWriter creates an instance of RawWriter.
@@ -32,20 +32,18 @@ func NewRawWriter(fn string, delimiter string) (*RawWriter, error) {
 	}
 
 	c.w = bufio.NewWriter(c.uncompressed)
-	c.b = &baseWriter{}
 
 	return c, nil
 }
 
 // SetupKeys initializes writer.
-func (c *RawWriter) SetupKeys(keys []flKey) (err error) {
-	c.b.setupKeys(keys)
+func (c *RawWriter) SetupKeys(keys []flKey, transposed map[string]transposeSchema) (err error) {
+	c.keys = keys
 
 	c.transposed = map[string]*RawWriter{}
 
-	for dst, tw := range c.b.transposed {
-		fn := c.b.transposedFileName(c.fn, dst)
-		tw.extName = fn
+	for dst := range transposed {
+		fn := transposedFileName(c.fn, dst)
 
 		if c.fn == NopFile {
 			fn = c.fn
@@ -56,7 +54,6 @@ func (c *RawWriter) SetupKeys(keys []flKey) (err error) {
 			return fmt.Errorf("failed to init transposed RAW writer for %s: %w", dst, err)
 		}
 
-		ctw.b = tw
 		c.transposed[dst] = ctw
 	}
 
@@ -64,34 +61,34 @@ func (c *RawWriter) SetupKeys(keys []flKey) (err error) {
 }
 
 // ReceiveRow receives rows.
-func (c *RawWriter) ReceiveRow(seq int64, values []Value) error {
-	if c.b.isTransposed {
-		transposedRows := c.b.receiveRow(seq, values)
-
-		for _, row := range transposedRows {
-			if err := c.writeRow(row); err != nil {
-				return fmt.Errorf("writing transposed RAW row: %w", err)
-			}
-		}
-
-		return nil
-	}
-
-	c.b.receiveRow(seq, values)
-
-	if len(c.b.row) > 0 {
-		if err := c.writeRow(c.b.row); err != nil {
+func (c *RawWriter) ReceiveRow(_ int64, values []Value, transposed map[string][][]Value) error {
+	if len(values) > 0 {
+		if err := c.writeRow(renderRawValues(values)); err != nil {
 			return fmt.Errorf("writing RAW row: %w", err)
 		}
 	}
 
-	for dst, tw := range c.transposed {
-		if err := tw.ReceiveRow(seq, values); err != nil {
-			return fmt.Errorf("transposed rows for %s: %w", dst, err)
+	for dst, rows := range transposed {
+		tw := c.transposed[dst]
+		for _, row := range rows {
+			if err := tw.writeRow(renderRawValues(row)); err != nil {
+				return fmt.Errorf("transposed rows for %s: %w", dst, err)
+			}
 		}
 	}
 
 	return nil
+}
+
+func renderRawValues(values []Value) []string {
+	row := make([]string, len(values))
+	for i, v := range values {
+		if v.Type != TypeNull && v.Type != TypeAbsent {
+			row[i] = v.Format()
+		}
+	}
+
+	return row
 }
 
 func (c *RawWriter) writeRow(row []string) error {

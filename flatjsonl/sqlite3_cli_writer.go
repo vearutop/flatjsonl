@@ -34,7 +34,6 @@ func NewSQLite3CLIWriter(fn string, tableName string, nullValue string) (*SQLite
 	// and creates separate files for transposed data.
 	// Transposed files are to be imported separately after mainCSV completion.
 	c.w = csv.NewWriter(w)
-	c.b = &baseWriter{}
 
 	sw.mainCSV = c
 
@@ -59,13 +58,13 @@ func NewSQLite3CLIWriter(fn string, tableName string, nullValue string) (*SQLite
 }
 
 // SetupKeys inits writer with list of known keys.
-func (w *SQLite3CLIWriter) SetupKeys(keys []flKey) error {
-	return w.mainCSV.SetupKeys(keys)
+func (w *SQLite3CLIWriter) SetupKeys(keys []flKey, transposed map[string]transposeSchema) error {
+	return w.mainCSV.SetupKeys(keys, transposed)
 }
 
 // ReceiveRow collects data values.
-func (w *SQLite3CLIWriter) ReceiveRow(seq int64, values []Value) error {
-	return w.mainCSV.ReceiveRow(seq, values)
+func (w *SQLite3CLIWriter) ReceiveRow(seq int64, values []Value, transposed map[string][][]Value) error {
+	return w.mainCSV.ReceiveRow(seq, values, transposed)
 }
 
 // Close flushes all the remainders and closes resources.
