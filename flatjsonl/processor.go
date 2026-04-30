@@ -256,6 +256,7 @@ func (p *Processor) setProgressStatus(status progress.Status) {
 	p.statusMu.Unlock()
 }
 
+// ProgressStatus returns the latest progress status string and the time it was updated.
 func (p *Processor) ProgressStatus() (string, time.Time) {
 	p.statusMu.RLock()
 	defer p.statusMu.RUnlock()

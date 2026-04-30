@@ -17,6 +17,7 @@ func startHTTPStatusServer(addr string, proc *Processor) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		m := runtime.MemStats{}
 		runtime.ReadMemStats(&m)
+
 		progressStatus := "idle"
 		progressUpdated := ""
 
@@ -77,12 +78,14 @@ td { padding: 0.2rem 0.8rem 0.2rem 0; vertical-align: top; }
 	mux.HandleFunc("/debug/pprof/profile", httppprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", httppprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", httppprof.Trace)
+
 	for _, name := range []string{"allocs", "block", "goroutine", "heap", "mutex", "threadcreate"} {
 		mux.Handle("/debug/pprof/"+name, httppprof.Handler(name))
 	}
 
 	go func() {
 		log.Printf("http status listening on %s", addr)
+
 		if err := http.ListenAndServe(addr, mux); err != nil {
 			log.Printf("http status server stopped: %v", err)
 		}
