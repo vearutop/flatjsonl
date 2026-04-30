@@ -21,6 +21,7 @@ func run() error {
 	var (
 		showVersion   bool
 		cpuProfile    string
+		httpStatus    string
 		memProfile    string
 		loopInputSize int
 	)
@@ -30,6 +31,7 @@ func run() error {
 	f.Register()
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit.")
 	flag.StringVar(&cpuProfile, "dbg-cpu-prof", "", "Write CPU profile to file.")
+	flag.StringVar(&httpStatus, "http-status", "", "Serve status page and pprof endpoints on this address, for example :6060.")
 	flag.StringVar(&memProfile, "dbg-mem-prof", "", "Write mem profile to file.")
 	flag.IntVar(&loopInputSize, "dbg-loop-input-size", 0,
 		"(benchmark) Repeat input until total target size reached, bytes.")
@@ -75,6 +77,10 @@ func run() error {
 	proc, err := New(f)
 	if err != nil {
 		return err
+	}
+
+	if httpStatus != "" {
+		startHTTPStatusServer(httpStatus, proc)
 	}
 
 	if err := proc.Process(); err != nil {
