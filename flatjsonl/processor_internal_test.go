@@ -209,3 +209,58 @@ func TestReaderRead_stallsWhenAllWorkersWaitBehindBlockedExpectedWrite(t *testin
 	require.NoError(t, <-readDone)
 	require.Equal(t, int64(7), atomic.LoadInt64(&wi.seqExpected))
 }
+
+func TestReaderRead_continuesWhenThrottleIsContinuouslyReasserted(t *testing.T) {
+	p := &Processor{
+		pr: &progress.Progress{},
+		w:  &Writer{},
+	}
+
+	rd := &Reader{
+		Concurrency: 1,
+		Processor:   p,
+		Progress:    &progress.Progress{},
+		Buf:         make([]byte, 0, 1024),
+	}
+
+	wi := newWriteIterator(p, nil, nil, nil)
+
+	sess, err := rd.session(Input{
+		Reader: newTestInputReader("{}\n"),
+	}, "test")
+	require.NoError(t, err)
+	defer sess.Close()
+
+	sess.setupWalker = wi.setupWalker
+	sess.lineStarted = wi.lineStarted
+	sess.lineFinished = wi.lineFinished
+
+	stopThrottle := make(chan struct{})
+	defer close(stopThrottle)
+
+	go func() {
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stopThrottle:
+				return
+			case <-ticker.C:
+				atomic.StoreInt64(&p.throttle, 1)
+			}
+		}
+	}()
+
+	readDone := make(chan error, 1)
+	go func() {
+		readDone <- rd.Read(sess)
+	}()
+
+	select {
+	case err := <-readDone:
+		require.NoError(t, err)
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("read stalled while throttle was continuously reasserted")
+	}
+}
