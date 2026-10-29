@@ -12,8 +12,8 @@ github.com/andybalholm/brotli v1.2.0 h1:ukwgCxwYrmACq68yiUqwIWnGY0cTPox/M94sVwTo
 github.com/andybalholm/brotli v1.2.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/bool64/ctxd v1.2.1 h1:hARFteq0zdn4bwfmxLhak3fXFuvtJVKDH2X29VV/2ls=
 github.com/bool64/ctxd v1.2.1/go.mod h1:ZG6QkeGVLTiUl2mxPpyHmFhDzFZCyocr9hluBV3LYuc=
-github.com/bool64/dev v0.2.45 h1:3nLKhAS/6Oklk3Mt2lHYSN/Cb4tdAD77KLwzeP+6eYE=
-github.com/bool64/dev v0.2.45/go.mod h1:iJbh1y/HkunEPhgebWRNcs8wfGq7sjvJ6W5iabL8ACg=
+github.com/bool64/dev v0.2.46 h1:oOM68buCVIZBJscLMEHfalYW/SOPfABr5grztbwBa3w=
+github.com/bool64/dev v0.2.46/go.mod h1:iJbh1y/HkunEPhgebWRNcs8wfGq7sjvJ6W5iabL8ACg=
 github.com/bool64/progress v0.3.27 h1:O4DMsVOGn+t4GHqyfF5+NbrdJ4byAD5NS+pP4e5EKYI=
 github.com/bool64/progress v0.3.27/go.mod h1:uEdHrtYy6X1UwAIk0Uok/ZAT3mkfZv+/NaXaG9bGiN4=
 github.com/bool64/shared v0.1.6 h1:1u1IfTU84pZU285Mf1kQC5wX/VzSRE5E/+4KgFRGQ6o=

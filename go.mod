@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/bool64/ctxd v1.2.1
-	github.com/bool64/dev v0.2.45
+	github.com/bool64/dev v0.2.46
 	github.com/bool64/progress v0.3.27
 	github.com/bool64/sqluct v0.2.8
 	github.com/cespare/xxhash/v2 v2.3.0
