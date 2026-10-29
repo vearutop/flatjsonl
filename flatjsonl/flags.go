@@ -18,6 +18,7 @@ import (
 type Flags struct {
 	Verbosity        int
 	ProgressInterval time.Duration
+	InPlace          bool
 	Input            string
 	Output           string
 
@@ -93,6 +94,8 @@ func (f *Flags) Register() {
 
 	flag.IntVar(&f.Verbosity, "verbosity", 1, "Show progress in STDERR, 0 disables status, 2 adds more metrics.")
 	flag.DurationVar(&f.ProgressInterval, "progress-interval", 5*time.Second, "Progress update interval.")
+
+	flag.BoolVar(&f.InPlace, "i", false, "Print progress in place (rewrite status line), only effective if STDERR is a terminal.")
 
 	flag.BoolVar(&f.ReplaceKeys, "replace-keys", false, "Use unique tail segment converted to snake_case as key.")
 	flag.BoolVar(&f.StripKeys, "strip-keys", false, "Trim leading whitespaces from the key, then cut key after the next whitespace.")
