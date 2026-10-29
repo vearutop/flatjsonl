@@ -112,6 +112,7 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 	pr := &progress.Progress{
 		Interval:         f.ProgressInterval,
 		IncrementalSpeed: true,
+		InPlace:          f.InPlace,
 	}
 
 	if f.GetKey != "" {
@@ -159,6 +160,13 @@ func NewProcessor(f Flags, cfg Config, inputs ...Input) (*Processor, error) { //
 	case 1:
 		pr.Print = func(status progress.Status) {
 			p.setProgressStatus(status)
+
+			if f.InPlace {
+				pr.Println(progress.DefaultStatus(status))
+
+				return
+			}
+
 			p.Log(progress.DefaultStatus(status))
 		}
 	default:
