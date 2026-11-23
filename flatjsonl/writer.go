@@ -6,12 +6,13 @@ import (
 	"io"
 	"os"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/bool64/progress"
-	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
+	"github.com/vearutop/zstd-go"
 )
 
 // NopFile indicates a no op file.
@@ -387,10 +388,7 @@ func newFileWriter(fn string) (*fileWriter, error) {
 		case strings.HasSuffix(fn, ".zst"):
 			c.compressed = progress.NewCountingWriter(c.f)
 
-			c.f, err = zstd.NewWriter(c.compressed, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
-			if err != nil {
-				return nil, err
-			}
+			c.f = newZstdWriter(c.compressed)
 		}
 	}
 
@@ -420,4 +418,14 @@ func (c *fileWriter) Metrics() []progress.Metric {
 	}
 
 	return res
+}
+
+// newZstdWriter makes a seekable, parallel zstd writer.
+func newZstdWriter(w io.Writer) io.WriteCloser {
+	z := zstd.NewWriter(w, zstd.ProfileFastest())
+	z.FrameSize = 1 << 20
+	z.Seekable = true
+	z.Concurrency = runtime.GOMAXPROCS(0)
+
+	return z
 }

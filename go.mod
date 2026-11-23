@@ -8,7 +8,6 @@ require (
 	github.com/bool64/progress v0.3.27
 	github.com/bool64/sqluct v0.2.8
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/klauspost/compress v1.20.3
 	github.com/klauspost/pgzip v1.3.0
 	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/parquet-go/parquet-go v0.29.0
@@ -17,6 +16,7 @@ require (
 	github.com/swaggest/assertjson v1.10.0
 	github.com/vearutop/fastjson v1.0.0
 	github.com/vearutop/netrie v0.0.2
+	github.com/vearutop/zstd-go v0.0.4
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.61.0
 )
@@ -30,6 +30,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/iancoleman/orderedmap v0.3.0 // indirect
 	github.com/jmoiron/sqlx v1.4.0 // indirect
+	github.com/klauspost/compress v1.20.4 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

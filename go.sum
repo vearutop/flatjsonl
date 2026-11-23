@@ -44,8 +44,8 @@ github.com/iancoleman/orderedmap v0.3.0 h1:5cbR2grmZR/DiVt+VJopEhtVs9YGInGIxAoMJ
 github.com/iancoleman/orderedmap v0.3.0/go.mod h1:XuLcCUkdL5owUCQeF2Ue9uuw1EptkJDkXXS7VoV7XGE=
 github.com/jmoiron/sqlx v1.4.0 h1:1PLqN7S1UYp5t4SrVVnt4nUVNemrDAtxlulVe+Qgm3o=
 github.com/jmoiron/sqlx v1.4.0/go.mod h1:ZrZ7UsYB/weZdl2Bxg6jCRO9c3YHl8r3ahlKmRT4JLY=
-github.com/klauspost/compress v1.20.3 h1:zWNoFqq/lSuYQRim3dUXlXeA0IqwuZGicdG5ZTfY5j4=
-github.com/klauspost/compress v1.20.3/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
+github.com/klauspost/compress v1.20.4 h1:dD0v/bvxtjCBqQu6sx1TNWkalEY5lNTIe+HY9w8TeNI=
+github.com/klauspost/compress v1.20.4/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/klauspost/pgzip v1.3.0 h1:8t+KjjzD/0n/8vNlJGGZmTeK4njuwffOQvJm8tOSc8o=
 github.com/klauspost/pgzip v1.3.0/go.mod h1:Xx7tAv5DH8ObLHUDQKXoE/nd8i/FYdNDTVMvi3SLTKI=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
@@ -99,6 +99,8 @@ github.com/vearutop/fastjson v1.0.0 h1:4yn7BZj9R52INMqMj1q90gG206Qm9XY54aKfj3ZPC
 github.com/vearutop/fastjson v1.0.0/go.mod h1:H1NX3WgvfAI1gJf9Pk3IKegysfqZOotwqiihA+txgMQ=
 github.com/vearutop/netrie v0.0.2 h1:JDbN2I+4yW40Sz87SEyzDI5ZCOmV+K15jmKP4NIlCeo=
 github.com/vearutop/netrie v0.0.2/go.mod h1:J2/fxyIiZ/rv2+INCwS8heWXX+DpdvFR1z1+RvwWeT8=
+github.com/vearutop/zstd-go v0.0.4 h1:zrOEyqX4EcpivgpdaR69SSPGXcmUHWKvD2V/zEuGZ24=
+github.com/vearutop/zstd-go v0.0.4/go.mod h1:1Gji1pmd5yWRZ+pSBC6E0/RJtJMh/afR4f8S4zFA/2E=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=
 github.com/xyproto/randomstring v1.0.5/go.mod h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3iGxZ18UQApw/E=
 github.com/yosuke-furukawa/json5 v0.1.2-0.20201207051438-cf7bb3f354ff h1:7YqG491bE4vstXRz1lD38rbSgbXnirvROz1lZiOnPO8=

@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/bool64/sqluct"
-	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
 )
 
@@ -69,10 +68,7 @@ func NewPGDumpWriter(fn string, tableName string, p *Processor) (*PGDumpWriter, 
 		case strings.HasSuffix(fn, ".gz"):
 			c.f = gzip.NewWriter(c.f)
 		case strings.HasSuffix(fn, ".zst"):
-			c.f, err = zstd.NewWriter(c.f, zstd.WithEncoderLevel(zstd.SpeedFastest), zstd.WithLowerEncoderMem(true))
-			if err != nil {
-				return nil, err
-			}
+			c.f = newZstdWriter(c.f)
 		}
 	}
 

@@ -18,9 +18,9 @@ import (
 
 	"github.com/bool64/ctxd"
 	"github.com/bool64/progress"
-	"github.com/klauspost/compress/zstd"
 	gzip "github.com/klauspost/pgzip"
 	"github.com/vearutop/fastjson"
+	"github.com/vearutop/zstd-go"
 )
 
 const errEmptyFile = ctxd.SentinelError("empty file")
@@ -143,9 +143,9 @@ func (rd *Reader) session(in Input, task string) (sess *readSession, err error) 
 	case "zst":
 		cr.SetLines(nil)
 
-		if r, err = zstd.NewReader(sess.r); err != nil {
-			return nil, fmt.Errorf("failed to init zstd reader: %w", err)
-		}
+		zr := zstd.NewReader(sess.r)
+		zr.Concurrency = runtime.GOMAXPROCS(0)
+		r = zr
 
 		lines = progress.NewCountingReader(r)
 		sess.r = lines
