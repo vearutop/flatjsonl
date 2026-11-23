@@ -2,8 +2,11 @@ package flatjsonl_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -106,4 +109,56 @@ func Test_loopReader_scan(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, proc.Process())
+}
+
+func BenchmarkNewProcessorTransposeOverflow(b *testing.B) {
+	dir := b.TempDir()
+	input := filepath.Join(dir, "overflow.jsonl")
+
+	var sb strings.Builder
+	for row := 0; row < 16; row++ {
+		sb.WriteString(`{"name":"a","flatMap":{`)
+		for i := 0; i < 16; i++ {
+			if i > 0 {
+				sb.WriteByte(',')
+			}
+
+			_, _ = fmt.Fprintf(&sb, `"k%d":"v%d"`, i, i)
+		}
+		sb.WriteString("}}\n")
+	}
+
+	require.NoError(b, os.WriteFile(input, []byte(sb.String()), 0o600))
+
+	f := flatjsonl.Flags{
+		AddSequence:         true,
+		Input:               input,
+		CSV:                 "<nop>",
+		ReplaceKeys:         true,
+		ChildrenLimitObject: 4,
+	}
+	f.PrepareOutput()
+
+	cfg := flatjsonl.Config{
+		TransposeOverflow: true,
+	}
+
+	lr, err := flatjsonl.LoopReaderFromFile(input, b.N)
+	require.NoError(b, err)
+
+	proc, err := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{Reader: lr})
+	require.NoError(b, err)
+	proc.Log = func(_ ...any) {}
+
+	b.Run("scanKeys", func(b *testing.B) {
+		b.ReportAllocs()
+		lr.BytesLimit = b.N
+		require.NoError(b, proc.PrepareKeys())
+	})
+
+	b.Run("writeOutput", func(b *testing.B) {
+		b.ReportAllocs()
+		lr.BytesLimit = b.N
+		require.NoError(b, proc.WriteOutput())
+	})
 }

@@ -21,8 +21,7 @@ type SQLiteWriter struct {
 	p         *Processor
 	maxCols   int
 
-	transposed map[string]*baseWriter
-	b          *baseWriter
+	transposed map[string]transposeSchema
 }
 
 // NewSQLiteWriter creates an instance of SQLiteWriter.
@@ -59,24 +58,17 @@ func NewSQLiteWriter(fn string, tableName string, p *Processor) (*SQLiteWriter, 
 }
 
 // SetupKeys creates tables.
-func (c *SQLiteWriter) SetupKeys(keys []flKey) error {
-	c.b = &baseWriter{}
-	c.b.p = c.p
-	c.b.setupKeys(keys)
-	c.transposed = map[string]*baseWriter{}
+func (c *SQLiteWriter) SetupKeys(keys []flKey, transposed map[string]transposeSchema) error {
+	c.transposed = transposed
 
-	if err := c.createTable(c.tableName, c.b.filteredKeys, false); err != nil {
+	if err := c.createTable(c.tableName, keys, false); err != nil {
 		return err
 	}
 
-	for dst, tw := range c.b.transposed {
-		tw.extName = c.table(dst)
-
-		if err := c.createTable(c.table(dst), tw.filteredKeys, true); err != nil {
+	for dst, ts := range transposed {
+		if err := c.createTable(c.table(dst), ts.filteredKeys, true); err != nil {
 			return err
 		}
-
-		c.transposed[dst] = tw
 	}
 
 	switch {
@@ -100,10 +92,8 @@ func (c *SQLiteWriter) table(dst string) string {
 }
 
 // ReceiveRow receives rows.
-func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
-	vv := c.b.receiveRowValues(values)
-
-	if err := c.insert(seq, c.tableName, vv); err != nil {
+func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value, transposed map[string][][]Value) error {
+	if err := c.insert(seq, c.tableName, values); err != nil {
 		return fmt.Errorf("writing SQLite row: %w", err)
 	}
 
@@ -113,11 +103,9 @@ func (c *SQLiteWriter) ReceiveRow(seq int64, values []Value) error {
 		}
 	}
 
-	for dst, tw := range c.transposed {
-		vv := tw.receiveTransposedRowValues(seq, values)
-
-		for _, r := range vv {
-			if err := c.insert(seq, tw.extName, r); err != nil {
+	for dst, rows := range transposed {
+		for _, r := range rows {
+			if err := c.insert(seq, c.table(dst), r); err != nil {
 				return fmt.Errorf("transposed rows for %s: %w", dst, err)
 			}
 

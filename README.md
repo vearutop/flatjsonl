@@ -251,6 +251,8 @@ keepJSON:
 # Use keepJSONRegex to list key patterns with arrays and objects of highly cardinal data.
 keepJSONRegex:
   - ".data.*.values"
+# When children-limit is exceeded, transpose overflowing parents into side tables instead of keeping JSON.
+transposeOverflow: true
 ```
 
 Parse time is a map of original key to time pattern. See https://pkg.go.dev/time#pkg-constants for pattern rules.
@@ -298,6 +300,10 @@ columns of main table.
 This is possible with `transpose` configuration file field ([example](./flatjsonl/testdata/transpose_cfg.json)), 
 it accepts a map of key prefixes to transposed table name. During processing, values found in the prefixed keys would
 be moved as multiple rows in transposed table.
+
+If `transposeOverflow: true` is enabled, parents that exceed `children-limit` are automatically promoted to transposed
+side tables instead of being added to `keepJSON`. This is useful for wide maps or arrays with unpredictable keys where
+row-oriented output is preferable to a single JSON literal column.
 
 ### Extracting data from strings
 

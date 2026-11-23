@@ -29,7 +29,6 @@ func NewDuckDBCLIWriter(fn string, tableName string, nullValue string) (*DuckDBC
 	dw.w = w
 
 	c.w = csv.NewWriter(w)
-	c.b = &baseWriter{}
 
 	dw.mainCSV = c
 
@@ -53,13 +52,13 @@ func NewDuckDBCLIWriter(fn string, tableName string, nullValue string) (*DuckDBC
 }
 
 // SetupKeys inits writer with list of known keys.
-func (w *DuckDBCLIWriter) SetupKeys(keys []flKey) error {
-	return w.mainCSV.SetupKeys(keys)
+func (w *DuckDBCLIWriter) SetupKeys(keys []flKey, transposed map[string]transposeSchema) error {
+	return w.mainCSV.SetupKeys(keys, transposed)
 }
 
 // ReceiveRow collects data values.
-func (w *DuckDBCLIWriter) ReceiveRow(seq int64, values []Value) error {
-	return w.mainCSV.ReceiveRow(seq, values)
+func (w *DuckDBCLIWriter) ReceiveRow(seq int64, values []Value, transposed map[string][][]Value) error {
+	return w.mainCSV.ReceiveRow(seq, values, transposed)
 }
 
 // Close flushes all the remainders and closes resources.

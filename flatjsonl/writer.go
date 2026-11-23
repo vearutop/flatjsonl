@@ -20,8 +20,8 @@ const NopFile = "<nop>"
 
 // WriteReceiver can receive a row for processing.
 type WriteReceiver interface {
-	SetupKeys(keys []flKey) error
-	ReceiveRow(seq int64, values []Value) error
+	SetupKeys(keys []flKey, transposed map[string]transposeSchema) error
+	ReceiveRow(seq int64, values []Value, transposed map[string][][]Value) error
 	Close() error
 }
 
@@ -64,11 +64,11 @@ func (v Value) Format() string {
 }
 
 // SetupKeys configures writers.
-func (w *Writer) SetupKeys(keys []flKey) error {
+func (w *Writer) SetupKeys(keys []flKey, transposed map[string]transposeSchema) error {
 	var errs []string
 
 	for _, r := range w.receivers {
-		if err := r.SetupKeys(keys); err != nil {
+		if err := r.SetupKeys(keys, transposed); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
@@ -81,11 +81,11 @@ func (w *Writer) SetupKeys(keys []flKey) error {
 }
 
 // ReceiveRow passes row to all receivers.
-func (w *Writer) ReceiveRow(seq int64, values []Value) error {
+func (w *Writer) ReceiveRow(seq int64, values []Value, transposed map[string][][]Value) error {
 	var errs []string
 
 	for _, r := range w.receivers {
-		if err := r.ReceiveRow(seq, values); err != nil {
+		if err := r.ReceiveRow(seq, values, transposed); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
@@ -165,14 +165,9 @@ func (b *baseWriter) setupKeys(keys []flKey) {
 		tw := b.transposedWriter(key.transposeDst, keys)
 
 		tw.keyIndexes = append(tw.keyIndexes, i)
-		tw.indexType = key.transposeKey.t
-
 		ik, ok := tw.trimmedKeys[key.transposeTrimmed]
 		if !ok {
-			ik.idx = len(tw.trimmedKeys)
-			key.replaced = b.p.prepareKey(key.transposeTrimmed)
-			ik.k = key
-			tw.trimmedKeys[key.transposeTrimmed] = ik
+			panic(fmt.Sprintf("BUG: transposed key %s missing from schema %s", key.transposeTrimmed, key.transposeDst))
 		}
 
 		tw.transposedMapping[i] = ik.idx
@@ -195,20 +190,6 @@ func (b *baseWriter) initFilteredKeys() {
 
 		return
 	}
-
-	b.filteredKeys = make([]flKey, len(b.trimmedKeys))
-	for _, i := range b.trimmedKeys {
-		b.filteredKeys[i.idx] = i.k
-	}
-
-	b.filteredKeys[0].t = TypeInt     // .sequence
-	b.filteredKeys[1].t = b.indexType // .index
-
-	for o, t := range b.transposedMapping {
-		k := b.filteredKeys[t]
-		k.UpdateType(b.keys[o].t)
-		b.filteredKeys[t] = k
-	}
 }
 
 func (b *baseWriter) transposedWriter(dst string, keys []flKey) *baseWriter {
@@ -225,15 +206,12 @@ func (b *baseWriter) transposedWriter(dst string, keys []flKey) *baseWriter {
 
 	tw.isTransposed = true
 	tw.keys = keys
-	tw.trimmedKeys = map[string]idxKey{
-		"._sequence": {idx: 0, k: flKey{
-			original: "._sequence",
-			replaced: b.p.prepareKey("._sequence"),
-		}},
-		"._index": {idx: 1, k: flKey{
-			original: "._index",
-			replaced: b.p.prepareKey("._index"),
-		}},
+	if ts, ok := b.p.transposeSchemas[dst]; ok {
+		tw.indexType = ts.indexType
+		tw.trimmedKeys = cloneTransposeTrimmedKeys(ts.trimmedKeys)
+		tw.filteredKeys = append(tw.filteredKeys, ts.filteredKeys...)
+	} else {
+		panic(fmt.Sprintf("BUG: transpose schema %s not found", dst))
 	}
 	tw.transposedMapping = map[int]int{}
 
@@ -242,7 +220,20 @@ func (b *baseWriter) transposedWriter(dst string, keys []flKey) *baseWriter {
 	return tw
 }
 
+func cloneTransposeTrimmedKeys(src map[string]idxKey) map[string]idxKey {
+	dst := make(map[string]idxKey, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+
+	return dst
+}
+
 func (b *baseWriter) transposedFileName(base string, dst string) string {
+	return transposedFileName(base, dst)
+}
+
+func transposedFileName(base string, dst string) string {
 	dir, fn := path.Split(base)
 	ext := path.Ext(fn)
 	fn = fn[0 : len(fn)-len(ext)]
